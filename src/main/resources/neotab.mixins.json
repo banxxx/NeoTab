@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "com.poso.neotab.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "client.GuiMixin",
+    "client.PlayerTabOverlayMixin",
+    "client.PlayerTabOverlayAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

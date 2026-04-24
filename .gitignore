@@ -1,0 +1,140 @@
+# ===================================
+# NeoTab Project .gitignore
+# ===================================
+
+# ===================================
+# 项目特定排除
+# ===================================
+# 排除文档文件夹（根据用户要求）
+docs/
+
+# ===================================
+# Gradle 构建系统
+# ===================================
+.gradle/
+build/
+out/
+bin/
+
+# Gradle Wrapper（保留 wrapper 文件，但排除下载的内容）
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ===================================
+# IntelliJ IDEA
+# ===================================
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# ===================================
+# Eclipse
+# ===================================
+.classpath
+.project
+.settings/
+*.launch
+
+# ===================================
+# Visual Studio Code
+# ===================================
+.vscode/
+*.code-workspace
+
+# ===================================
+# Minecraft 开发
+# ===================================
+# 运行时文件夹
+run/
+
+# Minecraft 缓存和日志
+logs/
+crash-reports/
+screenshots/
+saves/
+resourcepacks/
+shaderpacks/
+config/
+
+# NeoForge/Forge 生成的文件
+src/generated/
+
+# ===================================
+# Java
+# ===================================
+# 编译输出
+*.class
+*.jar
+*.war
+*.ear
+
+# 日志文件
+*.log
+
+# BlueJ 文件
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs
+hs_err_pid*
+replay_pid*
+
+# ===================================
+# 操作系统
+# ===================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ===================================
+# 临时文件
+# ===================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.*.swp
+
+# ===================================
+# 备份文件
+# ===================================
+*.bak
+*.backup
+*.old
+
+# ===================================
+# 其他
+# ===================================
+# 本地配置文件
+local.properties
+
+# 测试覆盖率报告
+*.coverage
+.nyc_output/
+
+# 依赖目录
+node_modules/
