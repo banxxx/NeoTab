@@ -5,6 +5,8 @@
   "message.neotab.no_permission": "你没有配置 NeoTab 的权限。",
   "message.neotab.saved": "NeoTab 配置已保存。",
   "screen.neotab.title": "NeoTab 服务端配置",
+  "screen.neotab.tab.page_config": "页面配置",
+  "screen.neotab.tab.theme": "主题样式",
   "screen.neotab.section.top": "顶部信息",
   "screen.neotab.section.list": "玩家列表",
   "screen.neotab.section.footer": "底部信息",

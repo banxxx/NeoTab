@@ -5,6 +5,8 @@
   "message.neotab.no_permission": "You do not have permission to configure NeoTab.",
   "message.neotab.saved": "NeoTab config saved.",
   "screen.neotab.title": "NeoTab Server Config",
+  "screen.neotab.tab.page_config": "Page Config",
+  "screen.neotab.tab.theme": "Theme",
   "screen.neotab.section.top": "Top Information",
   "screen.neotab.section.list": "Player List",
   "screen.neotab.section.footer": "Bottom Information",
