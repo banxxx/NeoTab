@@ -16,8 +16,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.UUID;
-
 /**
  * 在启用"更好的延迟显示"或"在线时长显示"时，处理右对齐显示和列宽度调整。
  */
@@ -27,75 +25,18 @@ public class PlayerTabOverlayMixin {
     
     /** 与用户名称之间的固定间距 */
     private static final int NAME_TO_INFO_SPACING = 8;
-    
-    /** 测试模式：启用后会模拟不同的延迟和在线时长 */
-    private static final boolean TEST_MODE = false;  // 性能优化：禁用测试模式
-    
+
     /**
      * 缓存的列宽度计算结果。
-     * 
-     * <p>性能优化：缓存计算结果，避免每帧重复计算所有玩家的文本宽度。</p>
      */
     private int cachedRequiredSpace = -1;
-    
-    /**
-     * 上一次计算宽度时的玩家数量。
-     * 
-     * <p>性能优化：用于检测玩家列表是否变化，只在变化时重新计算。</p>
-     */
+
+    /** 上一次计算宽度时的玩家数量。 */
     private int lastPlayerCount = -1;
-    
-    /**
-     * 上一次计算宽度时的配置状态。
-     * 
-     * <p>性能优化：用于检测配置是否变化，只在变化时重新计算。</p>
-     */
+
+    /** 上一次计算宽度时的配置状态。 */
     private boolean lastBetterPingEnabled = false;
     private boolean lastOnlineDurationEnabled = false;
-    
-    /**
-     * 测试模式：根据玩家名称返回模拟的延迟值
-     */
-    private int getTestLatency(PlayerInfo playerInfo) {
-        if (!TEST_MODE) {
-            return playerInfo.getLatency();
-        }
-        
-        String name = playerInfo.getProfile().getName();
-        // 根据名称长度模拟不同的延迟
-        int nameLength = name.length();
-        if (nameLength <= 5) {
-            return 50;  // 短名称：低延迟
-        } else if (nameLength <= 10) {
-            return 150; // 中等名称：中等延迟
-        } else if (nameLength <= 15) {
-            return 350; // 较长名称：较高延迟
-        } else {
-            return 1000; // 很长名称：高延迟
-        }
-    }
-    
-    /**
-     * 测试模式：根据玩家名称返回模拟的在线时长
-     */
-    private String getTestOnlineDuration(UUID playerId, PlayerInfo playerInfo) {
-        if (!TEST_MODE) {
-            return NeoTabClientState.getOnlineDuration(playerId);
-        }
-        
-        String name = playerInfo.getProfile().getName();
-        // 根据名称长度模拟不同的在线时长
-        int nameLength = name.length();
-        if (nameLength <= 5) {
-            return "1h";     // 短名称：1小时
-        } else if (nameLength <= 10) {
-            return "5h";     // 中等名称：5小时
-        } else if (nameLength <= 15) {
-            return "1d12h";  // 较长名称：1天12小时
-        } else {
-            return "100d5h"; // 很长名称：100天5小时
-        }
-    }
 
     /**
      * 处理延迟图标位置的渲染，实现延迟信息和在线时长的右对齐。
@@ -111,8 +52,8 @@ public class PlayerTabOverlayMixin {
         boolean hasDuration = config.onlineDurationEnabled();
         
         if (hasPing) {
-            // 使用测试延迟或真实延迟
-            int latency = getTestLatency(playerInfo);
+            // 获取真实延迟
+            int latency = playerInfo.getLatency();
             textBuilder.append(latency).append("ms");
         }
         
@@ -120,8 +61,7 @@ public class PlayerTabOverlayMixin {
             if (hasPing) {
                 textBuilder.append(" ");
             }
-            // 使用测试在线时长或真实在线时长
-            String onlineDuration = getTestOnlineDuration(playerInfo.getProfile().getId(), playerInfo);
+            String onlineDuration = NeoTabClientState.getOnlineDuration(playerInfo.getProfile().getId());
             textBuilder.append(onlineDuration);
         }
         
@@ -147,8 +87,7 @@ public class PlayerTabOverlayMixin {
             int currentX = rightAlignedX;
             
             if (hasPing) {
-                // 使用测试延迟或真实延迟
-                int latency = getTestLatency(playerInfo);
+                int latency = playerInfo.getLatency();
                 String pingText = latency + "ms";
                 int pingColor = getPingColor(latency);
                 guiGraphics.drawString(font, pingText, currentX, y, pingColor, false);
@@ -162,8 +101,7 @@ public class PlayerTabOverlayMixin {
             
             if (hasDuration) {
                 int durationColor = ChatFormatting.AQUA.getColor() != null ? ChatFormatting.AQUA.getColor() : 0x55FFFF;
-                // 使用测试在线时长或真实在线时长
-                String onlineDuration = getTestOnlineDuration(playerInfo.getProfile().getId(), playerInfo);
+                String onlineDuration = NeoTabClientState.getOnlineDuration(playerInfo.getProfile().getId());
                 guiGraphics.drawString(font, onlineDuration, currentX, y, durationColor, false);
             }
         }
@@ -228,8 +166,7 @@ public class PlayerTabOverlayMixin {
                 int currentWidth = 0;
                 
                 if (config.betterPingEnabled()) {
-                    // 使用测试延迟或真实延迟
-                    int latency = getTestLatency(playerInfo);
+                    int latency = playerInfo.getLatency();
                     String pingText = latency + "ms";
                     currentWidth += font.width(pingText);
                     
@@ -239,13 +176,10 @@ public class PlayerTabOverlayMixin {
                 }
                 
                 if (config.onlineDurationEnabled()) {
-                    // 如果只启用在线时长（没有启用更好的延迟），需要为原版延迟图标留出空间
                     if (!config.betterPingEnabled()) {
-                        currentWidth += 13; // 原版延迟图标宽度
+                        currentWidth += 13;
                     }
-                    
-                    // 使用测试在线时长或真实在线时长
-                    String onlineDuration = getTestOnlineDuration(playerInfo.getProfile().getId(), playerInfo);
+                    String onlineDuration = NeoTabClientState.getOnlineDuration(playerInfo.getProfile().getId());
                     currentWidth += font.width(onlineDuration);
                 }
                 

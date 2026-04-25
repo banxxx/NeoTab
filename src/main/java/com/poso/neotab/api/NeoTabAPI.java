@@ -1,6 +1,7 @@
 package com.poso.neotab.api;
 
 import com.poso.neotab.api.event.GetPlayerTitleEvent;
+import com.poso.neotab.NeoTab;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
@@ -138,8 +139,8 @@ public final class NeoTabAPI {
                     return title;
                 }
             } catch (Exception e) {
-                // 记录错误但继续尝试其他提供者
-                System.err.println("Error getting title from provider " + provider.getProviderId() + ": " + e.getMessage());
+                // 使用模组日志系统记录错误，而非 System.err
+                NeoTab.LOGGER.error("Error getting title from provider {}: {}", provider.getProviderId(), e.getMessage());
             }
         }
         

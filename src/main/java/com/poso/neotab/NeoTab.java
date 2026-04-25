@@ -39,23 +39,6 @@ public class NeoTab {
     public NeoTab(IEventBus modEventBus, ModContainer modContainer) {
         // 注册自定义网络包，客户端打开配置界面和保存配置都依赖这里。
         modEventBus.addListener(NeoTabPayloads::register);
-        
-        // 注册测试用的称号提供者（仅用于演示API使用）
-        registerTestTitleProvider();
-    }
-    
-    /**
-     * 注册测试用的称号提供者。
-     * 
-     * <p>此方法仅用于演示 API 使用，在实际部署时可以移除。</p>
-     */
-    private void registerTestTitleProvider() {
-        try {
-            com.poso.neotab.api.NeoTabAPI.registerTitleProvider(new com.poso.neotab.test.TestTitleProvider());
-            LOGGER.info("Registered test title provider");
-        } catch (Exception e) {
-            LOGGER.error("Failed to register test title provider", e);
-        }
     }
 
     /**

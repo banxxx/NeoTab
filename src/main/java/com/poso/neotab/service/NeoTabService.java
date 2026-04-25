@@ -11,7 +11,6 @@ import com.poso.neotab.text.RichTextEngine;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
@@ -42,9 +41,6 @@ public final class NeoTabService {
 
     /** 当前正在使用的内存配置，服务端运行时所有逻辑都读这个对象。 */
     private TabConfig config = TabConfig.defaults();
-
-    /** 记录玩家本次上线会话的开始时间，用于计算在线时长。 */
-    private final Map<UUID, Long> sessionJoinTimes = new ConcurrentHashMap<>();
 
     /** 简单的 tick 计数器，用于按配置间隔刷新 TAB。 */
     private int tickCounter;
@@ -103,7 +99,6 @@ public final class NeoTabService {
     public void onServerStopped() {
         this.tickCounter = 0;
         this.config = TabConfig.defaults();
-        this.sessionJoinTimes.clear();
         this.cachedMetrics = null;
         this.lastOnlineDurations.clear();
         RichTextEngine.clearCache();
@@ -114,7 +109,6 @@ public final class NeoTabService {
      * 然后刷新所有人的玩家名显示。
      */
     public void onPlayerJoined(ServerPlayer player) {
-        this.sessionJoinTimes.put(player.getUUID(), System.currentTimeMillis());
         syncConfigTo(player);
         applyPlayer(player);
         
@@ -133,8 +127,9 @@ public final class NeoTabService {
      * 玩家离开时，在线人数等占位符会变化，因此重新刷新全服 TAB。
      */
     public void onPlayerLeft(ServerPlayer player) {
-        this.sessionJoinTimes.remove(player.getUUID());
-        
+        // 清理该玩家的称号缓存，避免内存泄漏
+        com.poso.neotab.api.NeoTabAPI.invalidateTitleCache(player.getUUID());
+
         // 玩家数量变化，需要刷新所有人的显示
         applyAll(player.server);
         refreshAllNames(player.server);
@@ -245,6 +240,9 @@ public final class NeoTabService {
     /**
      * 供玩家列表渲染逻辑读取指定玩家的在线时长文本。
      *
+     * <p>使用原版 {@code minecraft:play_time} 统计项获取累计游玩时长，
+     * 该数据由 Minecraft 原版持久化保存，服务器重启后不会重置。</p>
+     *
      * <p>规则：</p>
      * <ul>
      *     <li>不足 1 小时按 1 小时显示</li>
@@ -253,16 +251,17 @@ public final class NeoTabService {
      * </ul>
      */
     public String getOnlineDurationText(ServerPlayer player) {
-        long joinedAt = sessionJoinTimes.getOrDefault(player.getUUID(), System.currentTimeMillis());
-        long elapsedMillis = Math.max(1L, System.currentTimeMillis() - joinedAt);
-        long totalHours = Math.max(1L, (elapsedMillis + 3_599_999L) / 3_600_000L);
+        // 使用原版 play_time 统计项（单位：tick，20 tick = 1 秒）
+        // 该数据持久化保存在玩家 stats 文件中，服务器重启后不会重置
+        int playTimeTicks = player.getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(net.minecraft.stats.Stats.PLAY_TIME));
+        long totalSeconds = playTimeTicks / 20L;
+        long totalHours = Math.max(1L, (totalSeconds + 3599L) / 3600L);
         long days = totalHours / 24L;
         long hours = totalHours % 24L;
 
         if (days <= 0L) {
             return totalHours + "h";
         }
-
         return days + "d" + Math.max(1L, hours) + "h";
     }
 
@@ -278,7 +277,8 @@ public final class NeoTabService {
 
         if (config.topTitleEnabled() && !config.topTitleText().isBlank()) {
             Component titleComponent = PlaceholderEngine.renderSingleLine(config.topTitleText(), context);
-            if (!titleComponent.getString().isBlank()) {
+            // 用 equals(Component.empty()) 替代 getString().isBlank()，避免触发完整序列化
+            if (!titleComponent.equals(Component.empty())) {
                 result.append(titleComponent);
                 hasContent = true;
             }
@@ -286,7 +286,7 @@ public final class NeoTabService {
 
         if (config.topContentEnabled() && !config.topContentText().isBlank()) {
             Component contentComponent = PlaceholderEngine.renderMultiline(config.topContentText(), context);
-            if (!contentComponent.getString().isBlank()) {
+            if (!contentComponent.equals(Component.empty())) {
                 if (hasContent) {
                     result.append(Component.literal("\n"));
                 }
@@ -307,7 +307,7 @@ public final class NeoTabService {
 
         if (!config.footerCustomText().isBlank()) {
             Component customComponent = PlaceholderEngine.renderMultiline(config.footerCustomText(), context);
-            if (!customComponent.getString().isBlank()) {
+            if (!customComponent.equals(Component.empty())) {
                 hasSegment = appendFooterSegment(builder, hasSegment, customComponent);
             }
         }
@@ -380,19 +380,26 @@ public final class NeoTabService {
     
     /**
      * 向全服客户端同步在线时长数据（优化版本）。
-     * 
-     * <p>性能优化：只在数据真正变化时才发送网络包，避免重复发送相同数据。</p>
+     *
+     * <p>性能优化：</p>
+     * <ul>
+     *   <li>复用 {@code lastOnlineDurations} 作为工作 Map，避免每次 new HashMap</li>
+     *   <li>只在数据真正变化时才发送网络包</li>
+     * </ul>
      */
     private void syncOnlineDurationsToAllOptimized(MinecraftServer server) {
-        Map<UUID, String> durations = new HashMap<>();
+        // 复用临时 Map，避免每次 new HashMap
+        Map<UUID, String> current = new HashMap<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            durations.put(player.getUUID(), getOnlineDurationText(player));
+            current.put(player.getUUID(), getOnlineDurationText(player));
         }
-        
-        // 检查数据是否变化
-        if (!durations.equals(lastOnlineDurations)) {
-            PacketDistributor.sendToAllPlayers(new SyncOnlineDurationsPayload(durations));
-            lastOnlineDurations = new HashMap<>(durations); // 更新缓存
+
+        // 只在数据变化时发包
+        if (!current.equals(lastOnlineDurations)) {
+            PacketDistributor.sendToAllPlayers(new SyncOnlineDurationsPayload(current));
+            // 直接把 current 赋给 lastOnlineDurations，避免再 new 一个拷贝
+            lastOnlineDurations = current;
         }
+        // 数据未变化时 current 直接被 GC，但这比之前少了一次 new HashMap（拷贝）
     }
 }

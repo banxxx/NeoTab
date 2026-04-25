@@ -69,8 +69,9 @@ public abstract class GuiMixin {
 
     /**
      * 判断 Component 是否包含可见文本内容。
+     * 使用 equals(Component.empty()) 替代 getString().isBlank()，避免触发完整序列化。
      */
     private boolean neotab$hasText(Component component) {
-        return component != null && !component.getString().isBlank();
+        return component != null && !component.equals(net.minecraft.network.chat.Component.empty());
     }
 }

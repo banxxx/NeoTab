@@ -18,7 +18,6 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent;
-
 /**
  * 服务端事件入口。
  *
@@ -123,72 +122,18 @@ public final class NeoTabServerEvents {
 
     /**
      * 获取玩家的称号文本。
-     * 
-     * <p>此方法通过 NeoTab API 系统获取称号数据。其他模组可以通过以下方式提供称号：</p>
+     *
+     * <p>通过 NeoTab API 系统获取称号数据。其他模组可以通过以下方式提供称号：</p>
      * <ul>
      *     <li>实现 {@link com.poso.neotab.api.TitleProvider} 接口并注册</li>
      *     <li>监听 {@link com.poso.neotab.api.event.GetPlayerTitleEvent} 事件</li>
      * </ul>
-     * 
+     *
      * @param player 玩家对象
-     * @return 称号文本，支持富文本标签，如果没有称号则返回null
+     * @return 称号文本，支持富文本标签，如果没有称号则返回 null
      */
     private static String getTitleForPlayer(ServerPlayer player) {
-        // 首先尝试通过API系统获取真实的称号数据
-        String title = com.poso.neotab.api.NeoTabAPI.getPlayerTitle(player);
-        if (title != null && !title.isEmpty()) {
-            return title;
-        }
-        
-        // 如果没有其他模组提供称号，使用模拟数据进行测试
-        // 在生产环境中，这部分代码可以移除
-        return getSimulatedTitle(player);
-    }
-    
-    /**
-     * 生成模拟称号数据用于测试。
-     * 
-     * <p>此方法仅用于测试目的，在实际部署时可以移除。</p>
-     * 
-     * @param player 玩家对象
-     * @return 模拟的称号文本
-     */
-    private static String getSimulatedTitle(ServerPlayer player) {
-        String playerName = player.getGameProfile().getName();
-        
-        // 根据玩家名称生成不同的测试称号
-        return switch (playerName.hashCode() % 6) {
-            case 0 -> "<color #FFD700>『黄金骑士』</color>";  // 金色称号
-            case 1 -> "<color #FF6B6B>『红莲战士』</color>";  // 红色称号
-            case 2 -> "<gradient #00FF00,#0080FF>『翡翠法师』</gradient>";  // 绿蓝渐变称号
-            case 3 -> "<color #9370DB>『紫晶学者』</color>";  // 紫色称号
-            case 4 -> "<gradient #FF1493,#FFD700>『彩虹英雄』</gradient>";  // 粉金渐变称号
-            case 5 -> null;  // 模拟没有称号的玩家
-            default -> "<color #87CEEB>『天空守护者』</color>";  // 天蓝色称号
-        };
+        return com.poso.neotab.api.NeoTabAPI.getPlayerTitle(player);
     }
 
-    /**
-     * 按延迟区间返回颜色。
-     *
-     * <p>暂定四档：</p>
-     * <ul>
-     *     <li>0 - 99ms：绿色</li>
-     *     <li>100 - 199ms：黄色</li>
-     *     <li>200 - 349ms：橙色（金色）</li>
-     *     <li>350ms 及以上：红色</li>
-     * </ul>
-     */
-    private static ChatFormatting colorForPing(int latency) {
-        if (latency < 100) {
-            return ChatFormatting.GREEN;
-        }
-        if (latency < 200) {
-            return ChatFormatting.YELLOW;
-        }
-        if (latency < 350) {
-            return ChatFormatting.GOLD;
-        }
-        return ChatFormatting.RED;
-    }
 }

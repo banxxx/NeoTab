@@ -1,8 +1,6 @@
 package com.poso.neotab.tab;
 
 import com.poso.neotab.text.RichTextEngine;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -33,90 +31,108 @@ public final class PlaceholderEngine {
         %world_time%  %world_day%  %loaded_chunks%
         """;
 
+    /**
+     * 所有占位符的 key，与 {@link #buildValues(PlaceholderContext)} 返回的 value 数组一一对应。
+     *
+     * <p>使用静态常量数组替代每次调用都 new 的 LinkedHashMap，
+     * 彻底消除 Map 和 Entry 对象的分配。</p>
+     */
+    private static final String[] KEYS = {
+        "%player_name%", "%player_ping%",
+        "%viewer_name%", "%viewer_ping%",
+        "%online%", "%max_players%",
+        "%tps%", "%mspt%",
+        "%memory_used%", "%memory_max%", "%memory_total%", "%memory_percent%",
+        "%uptime%", "%uptime_days%", "%uptime_hours%",
+        "%world_time%", "%world_day%", "%loaded_chunks%"
+    };
+
     private PlaceholderEngine() {
     }
 
     /** 渲染多行文本，主要用于 TAB 头部/底部。 */
     public static Component renderMultiline(String template, PlaceholderContext context) {
         String resolved = replacePlaceholders(template, context);
-        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseMultiline(resolved);
+        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseMultiline(template, resolved);
     }
 
     /** 渲染单行文本，主要用于玩家名，顺便把换行压平。 */
     public static Component renderSingleLine(String template, PlaceholderContext context) {
         String resolved = replacePlaceholders(template, context);
-        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseSingleLine(resolved);
+        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseSingleLine(template, resolved);
     }
 
     /**
      * 按当前上下文把模板中的占位符替换成真实值。
-     * 
-     * <p>性能优化：使用 StringBuilder 避免多次字符串拼接产生的临时对象。</p>
+     *
+     * <p>性能优化：</p>
+     * <ul>
+     *   <li>使用静态 KEYS 数组 + 按需构建 values 数组，避免每次 new LinkedHashMap</li>
+     *   <li>使用 StringBuilder 避免多次字符串拼接产生的临时对象</li>
+     *   <li>只在模板中实际出现某个占位符时才计算对应的值（懒求值）</li>
+     * </ul>
      */
     private static String replacePlaceholders(String template, PlaceholderContext context) {
         if (template == null || template.isEmpty()) {
             return "";
         }
-        
-        // 使用 StringBuilder 进行高效的字符串替换，避免多次创建中间 String 对象
+
         StringBuilder result = new StringBuilder(template);
-        Map<String, String> placeholders = values(context);
-        
-        // 遍历所有占位符进行替换
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            String placeholder = entry.getKey();
-            String value = entry.getValue();
-            
-            // 查找并替换所有出现的占位符
-            int index = 0;
-            while ((index = result.indexOf(placeholder, index)) != -1) {
-                result.replace(index, index + placeholder.length(), value);
-                index += value.length(); // 移动到替换后的位置，避免重复匹配
+        // 懒求值：只在模板中出现对应占位符时才计算值，避免无用的格式化调用
+        String[] values = null;
+
+        for (int k = 0; k < KEYS.length; k++) {
+            String placeholder = KEYS[k];
+            int index = result.indexOf(placeholder);
+            if (index == -1) {
+                continue; // 模板中没有此占位符，跳过
             }
+            // 首次需要值时才构建 values 数组（懒初始化）
+            if (values == null) {
+                values = buildValues(context);
+            }
+            String value = values[k];
+            // 替换所有出现的该占位符
+            do {
+                result.replace(index, index + placeholder.length(), value);
+                index += value.length();
+                index = result.indexOf(placeholder, index);
+            } while (index != -1);
         }
-        
+
         return result.toString();
     }
 
     /**
-     * 当前支持的占位符集合。
+     * 构建与 {@link #KEYS} 一一对应的值数组。
      *
-     * <p>这里故意使用 LinkedHashMap，便于保持替换顺序稳定，
-     * 后续调试打印时也更容易看清楚。</p>
-     * 
-     * <p>所有占位符都通过原版高效 API 获取，不会产生额外的性能开销。</p>
+     * <p>只在模板中确实存在占位符时才调用，避免无用的格式化开销。</p>
      */
-    private static Map<String, String> values(PlaceholderContext context) {
-        Map<String, String> values = new LinkedHashMap<>();
-        
-        // 玩家信息
-        values.put("%player_name%", context.subject().getGameProfile().getName());
-        values.put("%player_ping%", Integer.toString(context.playerPing()));
-        values.put("%viewer_name%", context.viewer().getGameProfile().getName());
-        values.put("%viewer_ping%", Integer.toString(context.viewerPing()));
-        
-        // 服务器状态
-        values.put("%online%", Integer.toString(context.metrics().onlinePlayers()));
-        values.put("%max_players%", Integer.toString(context.metrics().maxPlayers()));
-        values.put("%tps%", context.metrics().tpsText());
-        values.put("%mspt%", context.metrics().msptText());
-        
-        // 内存使用
-        values.put("%memory_used%", Long.toString(context.metrics().usedMemoryMB()));
-        values.put("%memory_max%", Long.toString(context.metrics().maxMemoryMB()));
-        values.put("%memory_total%", context.metrics().memoryText());
-        values.put("%memory_percent%", context.metrics().memoryPercentText());
-        
-        // 服务器运行时间
-        values.put("%uptime%", context.metrics().uptimeText());
-        values.put("%uptime_days%", context.metrics().uptimeDaysText());
-        values.put("%uptime_hours%", context.metrics().uptimeHoursText());
-        
-        // 世界信息
-        values.put("%world_time%", context.metrics().worldTimeText());
-        values.put("%world_day%", context.metrics().worldDayText());
-        values.put("%loaded_chunks%", context.metrics().loadedChunksText());
-        
-        return values;
+    private static String[] buildValues(PlaceholderContext context) {
+        return new String[] {
+            // 玩家信息
+            context.subject().getGameProfile().getName(),
+            Integer.toString(context.playerPing()),
+            context.viewer().getGameProfile().getName(),
+            Integer.toString(context.viewerPing()),
+            // 服务器状态
+            Integer.toString(context.metrics().onlinePlayers()),
+            Integer.toString(context.metrics().maxPlayers()),
+            context.metrics().tpsText(),
+            context.metrics().msptText(),
+            // 内存使用
+            Long.toString(context.metrics().usedMemoryMB()),
+            Long.toString(context.metrics().maxMemoryMB()),
+            context.metrics().memoryText(),
+            context.metrics().memoryPercentText(),
+            // 服务器运行时间
+            context.metrics().uptimeText(),
+            context.metrics().uptimeDaysText(),
+            context.metrics().uptimeHoursText(),
+            // 世界信息
+            context.metrics().worldTimeText(),
+            context.metrics().worldDayText(),
+            context.metrics().loadedChunksText()
+        };
     }
 }
