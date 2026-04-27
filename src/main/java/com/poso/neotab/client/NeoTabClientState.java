@@ -21,6 +21,8 @@ public final class NeoTabClientState {
     private static Map<UUID, String> onlineDurations = new HashMap<>();
     private static Map<UUID, Float> playerHealths    = new HashMap<>();
     private static Map<UUID, Float> playerMaxHealths = new HashMap<>();
+    /** TAB 列表是否被固定常显（Tab+右键触发）。 */
+    private static boolean tabPinned = false;
 
     private NeoTabClientState() {
     }
@@ -65,5 +67,20 @@ public final class NeoTabClientState {
         onlineDurations.clear();
         playerHealths.clear();
         playerMaxHealths.clear();
+        tabPinned = false;
+    }
+
+    public static boolean isTabPinned() {
+        return tabPinned;
+    }
+
+    public static void setTabPinned(boolean pinned) {
+        tabPinned = pinned;
+    }
+
+    /** 切换固定状态，返回切换后的值。 */
+    public static boolean toggleTabPinned() {
+        tabPinned = !tabPinned;
+        return tabPinned;
     }
 }

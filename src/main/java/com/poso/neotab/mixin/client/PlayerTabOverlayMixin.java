@@ -282,7 +282,7 @@ public class PlayerTabOverlayMixin {
             maxW = calcRowWidthFallback(font, config);
         }
 
-        // 血量显示开启时额外加 NAME_GAP，把列撑宽，让用户名和血量之间有足够间距
+        // 血量显示开启时额外加 NAME_GAP，这部分对应渲染时 rightEdge 扣掉的 NAME_GAP
         int extra = config.healthDisplayEnabled() ? NAME_GAP : 0;
         return maxW + extra + 10;
     }

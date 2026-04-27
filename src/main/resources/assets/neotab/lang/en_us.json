@@ -4,6 +4,8 @@
   "command.neotab.reloaded": "NeoTab config reloaded from disk.",
   "message.neotab.no_permission": "You do not have permission to configure NeoTab.",
   "message.neotab.saved": "NeoTab config saved.",
+  "message.neotab.tab_pinned": "Tab list pinned.",
+  "message.neotab.tab_unpinned": "Tab list unpinned.",
   "screen.neotab.title": "NeoTab Server Config",
   "screen.neotab.tab.page_config": "Page Config",
   "screen.neotab.tab.theme": "Theme",

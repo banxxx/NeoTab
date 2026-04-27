@@ -4,6 +4,8 @@
   "command.neotab.reloaded": "NeoTab 配置已从磁盘重新加载。",
   "message.neotab.no_permission": "你没有配置 NeoTab 的权限。",
   "message.neotab.saved": "NeoTab 配置已保存。",
+  "message.neotab.tab_pinned": "TAB 列表已固定。",
+  "message.neotab.tab_unpinned": "TAB 列表已取消固定。",
   "screen.neotab.title": "NeoTab 服务端配置",
   "screen.neotab.tab.page_config": "页面配置",
   "screen.neotab.tab.theme": "主题样式",

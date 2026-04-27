@@ -34,17 +34,41 @@ public abstract class GuiMixin {
     @Final
     private PlayerTabOverlay tabList;
 
+    /** 上一帧右键是否已按下，用于边沿检测防止连续触发。 */
+    private boolean neotab$wasRightClickDown = false;
+
     @Inject(method = "renderTabList", at = @At("HEAD"), cancellable = true)
     private void neotab$renderTabList(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo callbackInfo) {
         Scoreboard scoreboard = this.minecraft.level.getScoreboard();
         Objective objective = scoreboard.getDisplayObjective(DisplaySlot.LIST);
 
         boolean forcedVisibleByNeoTab = neotab$hasNeoTabContent();
+        
+        // 检测 Tab+右键 切换固定状态
+        if (this.minecraft.options.keyPlayerList.isDown() && this.minecraft.options.keyUse.isDown()) {
+            // 右键刚按下时切换固定状态（防止连续触发）
+            if (!neotab$wasRightClickDown) {
+                boolean pinned = com.poso.neotab.client.NeoTabClientState.toggleTabPinned();
+                neotab$wasRightClickDown = true;
+                // 在聊天栏显示提示（overlay=true 显示在动作栏，不污染聊天记录）
+                if (this.minecraft.player != null) {
+                    net.minecraft.network.chat.Component msg = pinned
+                        ? net.minecraft.network.chat.Component.translatable("message.neotab.tab_pinned")
+                        : net.minecraft.network.chat.Component.translatable("message.neotab.tab_unpinned");
+                    this.minecraft.player.displayClientMessage(msg, true);
+                }
+            }
+        } else {
+            neotab$wasRightClickDown = false;
+        }
+        
         boolean shouldHide = !this.minecraft.options.keyPlayerList.isDown()
+            && !com.poso.neotab.client.NeoTabClientState.isTabPinned()
             || this.minecraft.isLocalServer()
             && this.minecraft.player.connection.getListedOnlinePlayers().size() <= 1
             && objective == null
-            && !forcedVisibleByNeoTab;
+            && !forcedVisibleByNeoTab
+            && !com.poso.neotab.client.NeoTabClientState.isTabPinned();
 
         if (shouldHide) {
             this.tabList.setVisible(false);
