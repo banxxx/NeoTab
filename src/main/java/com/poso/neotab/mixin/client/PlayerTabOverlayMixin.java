@@ -93,6 +93,12 @@ public abstract class PlayerTabOverlayMixin {
     private boolean lastHealthDisplayEnabled  = false;
     private com.poso.neotab.config.HealthDisplayMode lastHealthDisplayMode = null;
 
+    // ── TAB 背景边界缓存（用于绘制边框） ──────────────────────────────────────
+    private int tabBackgroundLeft   = -1;
+    private int tabBackgroundTop    = -1;
+    private int tabBackgroundRight  = -1;
+    private int tabBackgroundBottom = -1;
+
     // ─────────────────────────────────────────────────────────────────────────
     // 主题背景注入
     // ─────────────────────────────────────────────────────────────────────────
@@ -144,6 +150,25 @@ public abstract class PlayerTabOverlayMixin {
         if (!theme.isVanilla() && color == Integer.MIN_VALUE && theme.backgroundColor() != 0) {
             color = theme.backgroundColor();
         }
+        
+        // 捕获 TAB 背景的实际边界（用于后续绘制边框）
+        // Integer.MIN_VALUE 是原版 TAB 背景的颜色标识
+        if (color == Integer.MIN_VALUE || (!theme.isVanilla() && theme.backgroundColor() != 0)) {
+            // 更新边界：取所有背景矩形的最大范围
+            if (tabBackgroundLeft == -1 || minX < tabBackgroundLeft) {
+                tabBackgroundLeft = minX;
+            }
+            if (tabBackgroundTop == -1 || minY < tabBackgroundTop) {
+                tabBackgroundTop = minY;
+            }
+            if (tabBackgroundRight == -1 || maxX > tabBackgroundRight) {
+                tabBackgroundRight = maxX;
+            }
+            if (tabBackgroundBottom == -1 || maxY > tabBackgroundBottom) {
+                tabBackgroundBottom = maxY;
+            }
+        }
+        
         guiGraphics.fill(minX, minY, maxX, maxY, color);
     }
 
@@ -158,10 +183,18 @@ public abstract class PlayerTabOverlayMixin {
         TabTheme theme = TabThemeRegistry.get(config.tabTheme());
         if (!"dark".equals(theme.id())) return;
 
-        BorderRect rect = neotab$computeTabRect(width, scoreboard, objective);
-        if (rect == null) return;
-
-        neotab$drawRainbowBorder(guiGraphics, rect.left(), rect.top(), rect.right(), rect.bottom());
+        // 使用捕获的实际背景边界绘制边框
+        if (tabBackgroundLeft != -1 && tabBackgroundTop != -1 && 
+            tabBackgroundRight != -1 && tabBackgroundBottom != -1) {
+            neotab$drawRainbowBorder(guiGraphics, tabBackgroundLeft, tabBackgroundTop, 
+                                     tabBackgroundRight, tabBackgroundBottom);
+        }
+        
+        // 重置边界缓存，为下一帧做准备
+        tabBackgroundLeft = -1;
+        tabBackgroundTop = -1;
+        tabBackgroundRight = -1;
+        tabBackgroundBottom = -1;
     }
 
     @Inject(method = "renderPingIcon", at = @At("HEAD"), cancellable = true)
@@ -516,81 +549,6 @@ public abstract class PlayerTabOverlayMixin {
         else                    return ChatFormatting.RED.getColor()    != null ? ChatFormatting.RED.getColor()    : 0xFF5555;
     }
 
-    @Nullable
-    private BorderRect neotab$computeTabRect(int width, @Nullable net.minecraft.world.scores.Scoreboard scoreboard,
-                                             @Nullable net.minecraft.world.scores.Objective objective) {
-        if (this.minecraft.player == null || this.minecraft.player.connection == null) {
-            return null;
-        }
-
-        List<PlayerInfo> list = this.minecraft.player.connection.getListedOnlinePlayers().stream()
-            .sorted(PLAYER_COMPARATOR)
-            .limit(80L)
-            .toList();
-
-        int spacerWidth = this.minecraft.font.width(" ");
-        int maxNameWidth = 0;
-        int maxScoreWidth = 0;
-
-        for (PlayerInfo playerInfo : list) {
-            maxNameWidth = Math.max(maxNameWidth, this.minecraft.font.width(this.getNameForDisplay(playerInfo)));
-            if (objective != null && scoreboard != null && objective.getRenderType() != net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType.HEARTS) {
-                ScoreHolder scoreHolder = ScoreHolder.fromGameProfile(playerInfo.getProfile());
-                ReadOnlyScoreInfo scoreInfo = scoreboard.getPlayerScoreInfo(scoreHolder, objective);
-                NumberFormat numberFormat = objective.numberFormatOrDefault(StyledFormat.PLAYER_LIST_DEFAULT);
-                Component formattedScore = ReadOnlyScoreInfo.safeFormatValue(scoreInfo, numberFormat);
-                int widthScore = this.minecraft.font.width(formattedScore);
-                maxScoreWidth = Math.max(maxScoreWidth, widthScore > 0 ? spacerWidth + widthScore : 0);
-            }
-        }
-
-        int playerCount = list.size();
-        int rows = playerCount;
-        int columns = 1;
-        while (rows > 20) {
-            columns++;
-            rows = (playerCount + columns - 1) / columns;
-        }
-
-        boolean showFace = this.minecraft.isLocalServer() || this.minecraft.getConnection().getConnection().isEncrypted();
-        int scoreAreaWidth;
-        if (objective != null) {
-            scoreAreaWidth = objective.getRenderType() == net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType.HEARTS ? 90 : maxScoreWidth;
-        } else {
-            scoreAreaWidth = 0;
-        }
-
-        int columnWidth = Math.min(columns * ((showFace ? 9 : 0) + maxNameWidth + scoreAreaWidth + 13), width - 50) / Math.max(columns, 1);
-        int contentWidth = columnWidth * columns + (columns - 1) * 5;
-        int panelTop = 9;
-        int panelLeft = width / 2 - contentWidth / 2 - 1;
-        int panelRight = width / 2 + contentWidth / 2 + 1;
-        int currentY = 10;
-        int widest = contentWidth;
-
-        if (this.header != null) {
-            List<FormattedCharSequence> headerLines = this.minecraft.font.split(this.header, width - 50);
-            for (FormattedCharSequence line : headerLines) {
-                widest = Math.max(widest, this.minecraft.font.width(line));
-            }
-            currentY += headerLines.size() * 9 + 1;
-        }
-
-        int panelBottom = currentY + rows * 9;
-
-        if (this.footer != null) {
-            List<FormattedCharSequence> footerLines = this.minecraft.font.split(this.footer, width - 50);
-            for (FormattedCharSequence line : footerLines) {
-                widest = Math.max(widest, this.minecraft.font.width(line));
-            }
-            panelBottom += 1 + footerLines.size() * 9;
-        }
-
-        int fullLeft = width / 2 - widest / 2 - 1;
-        int fullRight = width / 2 + widest / 2 + 1;
-        return new BorderRect(fullLeft, panelTop, fullRight, panelBottom);
-    }
-
     private void neotab$drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
         // 定义增强版莫奈色系（提高饱和度和亮度，让动画更明显）
         int[] rainbowColors = {
@@ -764,6 +722,4 @@ public abstract class PlayerTabOverlayMixin {
         
         return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
-
-    private record BorderRect(int left, int top, int right, int bottom) {}
 }
