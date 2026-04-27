@@ -3,7 +3,9 @@ package com.poso.neotab.client.screen;
 import com.poso.neotab.client.gui.AEStyleRenderer;
 import com.poso.neotab.client.widget.ImprovedRichTextEditBox;
 import com.poso.neotab.client.widget.ImprovedRichTextMultiLineEditBox;
+import com.poso.neotab.config.HealthDisplayMode;
 import com.poso.neotab.config.TabConfig;
+import com.poso.neotab.theme.TabThemeRegistry;
 import com.poso.neotab.network.payload.SaveConfigPayload;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -17,9 +19,12 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-/** NeoTab 配置界面，左侧 Tab 栏切换三个分区。 */
+import java.util.ArrayList;
+import java.util.List;
+
+/** NeoTab 闂佹澘绉堕悿鍡涙偩瀹€鍕〃闁挎稑鑻稊蹇旂瑹?Tab 闁哄秴绻愰崹蹇涘箲椤厾鐟忓☉鎿冧簻閸ㄥ酣宕犻幁鎺嗗亾?*/
 public class NeoTabConfigScreen extends Screen {
-    // Tab 枚举
+    // Tab 闁哄鐭俊?
     private enum ConfigTab {
         PAGE_CONFIG("screen.neotab.tab.page_config"),
         THEME("screen.neotab.tab.theme");
@@ -28,14 +33,19 @@ public class NeoTabConfigScreen extends Screen {
         Component label() { return Component.translatable(langKey); }
     }
 
-    // 布局常量
+    // 閻㈩垰鍟惇顒傛暜閹间礁锟?
     private static final int MAX_CONTENT_WIDTH      = 360;
     private static final int CONTENT_SIDE_PADDING   = 32;
     private static final int ROW_HEIGHT              = 24;
     private static final int INPUT_HEIGHT            = 20;
-    private static final int TITLE_INPUT_HEIGHT      = 60;   // 原 40，增加 1/2
-    private static final int MULTILINE_INPUT_HEIGHT  = 60;   // 原 40，增加 1/2
+    private static final int TITLE_INPUT_HEIGHT      = 60;   // 锟?40闁挎稑鑻·鍐礉?1/2
+    private static final int MULTILINE_INPUT_HEIGHT  = 60;   // 锟?40闁挎稑鑻·鍐礉?1/2
     private static final int TOGGLE_WIDTH            = 56;
+    private static final int THEME_OPTION_HEIGHT     = 20;
+    private static final int THEME_OPTION_GAP        = 4;
+    private static final int THEME_LIST_INSET        = 4;
+    private static final int THEME_LIST_TOP_GAP      = 4;
+    private static final int THEME_INDICATOR_SIZE    = 8;
     private static final int SECTION_HEADER_HEIGHT   = 18;
     private static final int SECTION_GAP             = 16;
     private static final int ROW_GAP                 = 10;
@@ -43,15 +53,15 @@ public class NeoTabConfigScreen extends Screen {
     private static final int VIEWPORT_TOP            = 34;
     private static final int VIEWPORT_BOTTOM_MARGIN  = 12;
     private static final int SCROLL_STEP             = 18;
-    /** 内容区顶部内边距，让"顶部信息"标题与上边框保持间距。 */
+    /** 闁告劕鎳庨鎰板礌濞差亗鈧﹪鏌堥妸銉ユ暥閺夊牏顢婄粣娑㈡晬瀹€鍐惧敤"濡炪倕鐖奸崕瀛樼┍閳╁啩锟?闁哄秴娲。鑺ョ▔鎼存繄鐟愰弶鍫ｎ潐椤㈠绌卞┑鍥х槷闂傚倻顥愮粣娑㈠Υ?*/
     private static final int CONTENT_TOP_PADDING     = 8;
-    // Tab 栏常量
+    // Tab 闁哄秴绻愰悥鍫曟煂?
     private static final int TAB_BAR_WIDTH           = 72;
-    private static final int TAB_CONTENT_GAP          = 8;   // Tab 栏与内容区的间距
+    private static final int TAB_CONTENT_GAP          = 8;   // Tab 闁哄秴绻嬬粭宀勫礃閸涱収鍟囬柛鏍濞堟垿姊荤壕瀣崺
     private static final int TAB_BUTTON_HEIGHT        = 24;
     private static final int TAB_BUTTON_GAP           = 4;
-    private static final int TAB_BUTTON_LEFT_PADDING  = 6;   // Tab 按钮与左边距的间距
-    // 颜色常量（保留用于兼容，实际渲染已迁移到 AEStyleRenderer）
+    private static final int TAB_BUTTON_LEFT_PADDING  = 6;   // Tab 闁圭顦甸幐铏▔鎼粹€茬閺夊牏顢婄粣娑㈡儍閸曨垱锛熼悹?
+    // 濡増绮忔竟濠勬暜閹间礁娅ら柨娑樼墔缁绘岸鎮惧▎鎴炴殢濞存粌楠搁崥瀣偓鍦缁辨繄鈧湱鍋ゅ顖氥€掗崣澶屽帬鐎规瓕灏缓鑲╃矓鐠囨彃锟?AEStyleRenderer锟?
     private static final int SECTION_LINE_COLOR   = 0x80FFFFFF;
     private static final int SECTION_TITLE_COLOR  = 0xFF2A2A2A;
     private static final int LABEL_COLOR          = 0xFF2A2A2A;
@@ -63,11 +73,11 @@ public class NeoTabConfigScreen extends Screen {
     private static final int TAB_ACTIVE_BG_COLOR  = 0xB0334466;
     private static final int TAB_HOVER_BG_COLOR   = 0x60505070;
     private static final int TAB_DIVIDER_COLOR    = 0x80AAAAAA;
-    // Tab 文字颜色（激活=浅色，非激活=深色）
-    private static final int TAB_TEXT_ACTIVE      = 0xFFE8ECF0;  // 激活：浅色
-    private static final int TAB_TEXT_INACTIVE    = 0xFF3A3A3A;  // 非激活：深色
+    // Tab 闁哄倸娲ら悺褎锛愬鍡楊棌闁挎稑鐗婄缓鍝勶拷?婵炴潙鎳撴竟濠囨晬瀹€鍕婵犵鍋撴繛?婵烇綀绮炬竟濠囨晬?
+    private static final int TAB_TEXT_ACTIVE      = 0xFFE8ECF0;  // 婵犵鍋撴繛韫串缁辨澘霉閸涙澘锟?
+    private static final int TAB_TEXT_INACTIVE    = 0xFF3A3A3A;  // 闂傚牏鍋炵缓鍝劽烘导娆戠獥婵烇綀绮炬竟?
 
-    // 状态字段
+    // 闁绘鍩栭埀顑跨閻⊙冣枔?
     private final Screen parent;
     private final TabConfig initialConfig;
     private ConfigTab activeTab = ConfigTab.PAGE_CONFIG;
@@ -79,6 +89,10 @@ public class NeoTabConfigScreen extends Screen {
     private CycleButton<Boolean> onlineDurationEnabled;
     private CycleButton<Boolean> titleEnabled;
     private CycleButton<Boolean> healthDisplayEnabled;
+    private CycleButton<HealthDisplayMode> healthDisplayMode;
+    private final List<Button> themeOptionButtons = new ArrayList<>();
+    private final List<String> themeOptionIds = new ArrayList<>();
+    private String selectedThemeId = "vanilla";
     private ImprovedRichTextMultiLineEditBox footerCustomInput;
     private CycleButton<Boolean> footerTpsEnabled;
     private CycleButton<Boolean> footerMsptEnabled;
@@ -99,6 +113,9 @@ public class NeoTabConfigScreen extends Screen {
     @Override
     protected void init() {
         clearWidgets();
+        this.themeOptionButtons.clear();
+        this.themeOptionIds.clear();
+        this.selectedThemeId = TabThemeRegistry.get(initialConfig.tabTheme()).id();
         Layout layout = buildLayout();
         this.topTitleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.topTitleEnabled()));
         this.topTitleInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), TITLE_INPUT_HEIGHT,
@@ -116,6 +133,16 @@ public class NeoTabConfigScreen extends Screen {
         this.onlineDurationEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.onlineDurationEnabled()));
         this.titleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.titleEnabled()));
         this.healthDisplayEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.healthDisplayEnabled()));
+        this.healthDisplayMode = addRenderableWidget(newHealthModeButton(layout.toggleX(), initialConfig.healthDisplayMode()));
+        for (String themeId : TabThemeRegistry.ids()) {
+            Button optionButton = addRenderableWidget(Button.builder(
+                    Component.translatable("screen.neotab.theme." + themeId),
+                    button -> this.selectedThemeId = themeId)
+                .bounds(layout.left(), 0, layout.themeSelectorWidth() - THEME_LIST_INSET * 2, THEME_OPTION_HEIGHT)
+                .build());
+            this.themeOptionButtons.add(optionButton);
+            this.themeOptionIds.add(themeId);
+        }
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
@@ -136,10 +163,10 @@ public class NeoTabConfigScreen extends Screen {
         syncTabWidgetVisibility();
     }
 
-    /** 根据当前激活 Tab 显示/隐藏对应控件。 */
+    /** 闁哄秷顫夊畵浣姐亹閹惧啿顤呮繝纰樺亾锟?Tab 闁哄嫬澧介妵?闂傚懏鍔樺Λ宀€鈧數鎳撶花鏌ュ箳瑜屽▎銏ゅΥ?*/
     private void syncTabWidgetVisibility() {
-        boolean page = activeTab == ConfigTab.PAGE_CONFIG;
-        // PAGE_CONFIG 显示全部原有控件，THEME 全部隐藏（暂无内容）
+        boolean page  = activeTab == ConfigTab.PAGE_CONFIG;
+        boolean theme = activeTab == ConfigTab.THEME;
         topTitleEnabled.visible       = page;
         topTitleInput.visible         = page;
         topContentEnabled.visible     = page;
@@ -152,9 +179,14 @@ public class NeoTabConfigScreen extends Screen {
         footerTpsEnabled.visible      = page;
         footerMsptEnabled.visible     = page;
         footerOnlineEnabled.visible   = page;
+        // Theme tab widgets
+        healthDisplayMode.visible     = theme;
+        for (Button button : this.themeOptionButtons) {
+            button.visible = theme;
+        }
     }
 
-    /** 切换到指定 Tab，重置滚动并刷新控件可见性。 */
+    /** 闁告帒娲﹀畷鏌ュ礆閻楀牆鐦归悗?Tab闁挎稑鐭傞崳鍝ョ磾椤旂晫娉婇柛鏂诲妼閼荤喖宕氶柨瀣厐闁硅矇鍌涱偨闁告瑯鍨甸～鍡涘箑瑜嬮埀?*/
     private void switchTab(ConfigTab tab) {
         if (activeTab == tab) return;
         activeTab = tab;
@@ -181,26 +213,26 @@ public class NeoTabConfigScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         Layout layout = buildLayout();
-        // CycleButton 悬浮时，由页面处理滚动（防止开关被误切换）
+        // CycleButton 闁诡噮鍓氱拠鐐哄籍鐠佸湱绀夐柣銏や憾閵嗗妫冮姀鐙€妲遍柣鐐叉缁挳宕濋…鎺旂闂傚啫寮堕娑橆嚕閳ь剟宕楃€圭媭娼堕悹鍥跺灠閸ㄥ繘骞戦～顔剧
         if (hoveredScrollableWidget(mouseX, mouseY) instanceof CycleButton<?>) {
             if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
             setScrollOffset(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
             return true;
         }
-        // 输入框悬浮时：只有鼠标在输入框内部滚动条区域才让输入框处理，
-        // 其余情况一律由页面处理，保证页面滚动流畅
+        // 閺夊牊鎸搁崣鍡楊浖閸℃ê浜炬繛鎼枟濡炲倿鏁嶅顒€娑ч柡鍫濐樀缁卞爼寮介崶褎韬弶鍫熸尭閸欏棗顩奸崱妤€鏁堕梺顔哄妽缁挳宕濋妸锔借拫闁告牕鎼悡娆撳箥瀹ュ牜鍞ㄩ弶鍫熸尭閸欏棗顩奸崱妤婃П闁荤偛妫寸槐?
+        // 闁稿繑婀圭紞鎴﹀箚閸涱厼鏋屽☉鎾亾鐎垫澘顑囬弫杈ㄣ亜閻㈠憡妗ㄥ璺哄閹﹪鏁嶇仦鑲╃閻犲洣绶氶妴澶愭閵忥紕娉婇柛鏂诲妽缁侊箓锟?
         AbstractWidget hovered = hoveredScrollableWidget(mouseX, mouseY);
         if (hovered instanceof ImprovedRichTextMultiLineEditBox input) {
-            // 输入框内部滚动条区域：getX()+getWidth() 到 getX()+getWidth()+8
+            // 閺夊牊鎸搁崣鍡楊浖閸℃鏁堕梺顔哄妽缁挳宕濋妸锔借拫闁告牕鎼悡娆撴晬濮濐摣tX()+getWidth() 锟?getX()+getWidth()+8
             boolean onInputScrollbar = mouseX >= input.getX() + input.getWidth()
                     && mouseX <= input.getX() + input.getWidth() + 8;
             if (onInputScrollbar) {
-                // 让输入框自己处理内部滚动
+                // 閻犱讲鏅炵欢顓㈠礂閵夛富鏀遍柤濂変簻缁讳焦寰勯崟顓熷€為柛鎰嚇閸庢潙顭ㄥ顒€袟
                 return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
             }
-            // 不在输入框滚动条上，交给页面滚动
+            // 濞戞挸绉村﹢顏呮綇閹惧啿寮虫俊妤€妫欑划鎾礉閵婏附钂嬪☉鎾愁煭缁辨繃绂嶉妶鍥╄埗濡炪倗鏁诲鏉款煥濮橆剙袟
         }
-        // 页面滚动
+        // 濡炪倗鏁诲鏉款煥濮橆剙袟
         if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
         setScrollOffset(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
         return true;
@@ -209,7 +241,7 @@ public class NeoTabConfigScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         Layout layout = buildLayout();
-        // 优先处理 Tab 栏点击（与 renderTabBar 中的按钮位置保持一致）
+        // 濞村吋锚閸樻稒寰勯崟顓燂拷?Tab 闁哄秴绻掗崑锝夊礄娴兼瑧绀勫☉?renderTabBar 濞戞搩鍘惧▓鎴﹀箰婢舵劖灏﹀ù锝呯Ф閻ゅ棙绌卞┑鍥х槷濞戞挴鍋撻柤鐤彧锟?
         if (button == 0 && mouseY >= VIEWPORT_TOP) {
             int tabBtnX = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;
             int tabBtnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;
@@ -224,7 +256,20 @@ public class NeoTabConfigScreen extends Screen {
                 }
             }
         }
-        // 拦截底部按钮栏
+        if (button == 0 && activeTab == ConfigTab.THEME) {
+            for (int i = 0; i < this.themeOptionButtons.size(); i++) {
+                Button option = this.themeOptionButtons.get(i);
+                if (!option.visible) continue;
+                int bx = option.getX();
+                int by = option.getY();
+                if (mouseX >= bx && mouseX <= bx + option.getWidth()
+                        && mouseY >= by && mouseY <= by + option.getHeight()) {
+                    this.selectedThemeId = this.themeOptionIds.get(i);
+                    return true;
+                }
+            }
+        }
+        // 闁瑰嚖闄勯崺鍛償閺囥垹鍔ラ柟绋款樀閹告娊锟?
         if (mouseY >= layout.buttonBarTop()) {
             if (this.doneButton != null) {
                 int bx = this.doneButton.getX(), by = this.doneButton.getY();
@@ -240,7 +285,7 @@ public class NeoTabConfigScreen extends Screen {
         }
         boolean handled = super.mouseClicked(mouseX, mouseY, button);
         if (handled) return true;
-        // 滚动条点击（坐标与 renderScrollbar 保持一致）
+        // 婵犲﹥鑹炬慨鈺呭级閿涘嫬浠柛鎴滅串缁辨瑩宕搁幇顓犲灱锟?renderScrollbar 濞ｅ洦绻冪€垫梹绋夐埀顒勬嚊鏉堝墽锟?
         if (button == 0 && layout.maxScroll() > 0) {
             int thumbX    = layout.right() + 8;
             int trackTop  = layout.viewportTop();
@@ -248,7 +293,7 @@ public class NeoTabConfigScreen extends Screen {
             int trackH    = trackBottom - trackTop;
             int thumbPad  = 2;
             int thumbW    = SCROLL_TRACK_W;
-            int thumbSize = thumbW + 6;  // 长方形滑块高度
+            int thumbSize = thumbW + 6;  // 闂傗偓閹稿孩鐓欑憸鑸灪缁箓宕稿Δ鍛蒋锟?
             if (mouseX >= thumbX && mouseX <= thumbX + thumbW
                     && mouseY >= trackTop && mouseY <= trackBottom) {
                 int travelH    = trackH - thumbSize - thumbPad * 2;
@@ -283,7 +328,7 @@ public class NeoTabConfigScreen extends Screen {
             Layout layout = buildLayout();
             int trackH    = layout.viewportBottom() - layout.viewportTop();
             int thumbW    = SCROLL_TRACK_W;
-            int thumbSize = thumbW + 6;  // 长方形滑块高度
+            int thumbSize = thumbW + 6;  // 闂傗偓閹稿孩鐓欑憸鑸灪缁箓宕稿Δ鍛蒋锟?
             int thumbPad  = 2;
             int travelH   = trackH - thumbSize - thumbPad * 2;
             if (travelH > 0) {
@@ -303,16 +348,16 @@ public class NeoTabConfigScreen extends Screen {
 
         this.renderBackground(g, mouseX, mouseY, partialTick);
 
-        // AE2 风格主面板：从标题区顶部开始，宽度与内容区对齐（含Tab栏+间距+内容区+滚动条）
+        // AE2 濡炲瀛╅悧鍛婄▔婵犳碍妗ㄩ柡澶婂皡缁辩増绂掓惔銏㈠灱濡増锚鐏忣垱銇勯崼鏇炲姤鐎殿喒鍋撳┑顔碱儜缁辨繄鈧妫勭€硅櫕绋夋惔鈥虫暥閻庡湱鎳撶亸顖溾偓闈涚秺缂嶅牓鏁嶉崼婵囧創Tab锟?闂傚倻顥愮粣?闁告劕鎳庨鎰板礌?婵犲﹥鑹炬慨鈺呭级閳藉懐锟?
         int scrollTrackW = 14;
         int panelX = layout.tabBarX() - 2;
-        int panelY = 8;  // 标题文字上方留少量空间
+        int panelY = 8;  // 闁哄秴娲。浠嬪棘閸パ呮憻濞戞挸锕ラ弻鐔兼偩濞嗗繒姣岄梺鎻掔箳閳规牠锟?
         int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
-        int panelBottomMargin = 8;  // 面板底部与游戏窗口的间距
+        int panelBottomMargin = 8;  // 闂傚牄鍨哄妯绘償閺囥垹鍔ュ☉鎾冲閻栧爼骞嬭箛鏇犲炊闁告瑱绲垮▓鎴︽⒒绾惧锟?
         int panelH = this.height - panelY - panelBottomMargin;
         AEStyleRenderer.drawMainPanel(g, panelX, panelY, panelW, panelH);
 
-        // 标题文字（在面板内，加粗，不带阴影，清晰显示）
+        // 闁哄秴娲。浠嬪棘閸パ呮憻闁挎稑鐗嗗﹢顏堟閵忊剝绶查柛鎰嫅缁辨繈宕濋悩鐢电厫闁挎稑濂旂粭澶屾暜閿曞倹鞋鐟滅増鍞荤槐婵嗐€掗崨顔界彴闁哄嫬澧介妵姘舵晬?
         net.minecraft.network.chat.Component boldTitle = this.title.copy()
                 .withStyle(net.minecraft.ChatFormatting.BOLD);
         int titleTextW = this.font.width(boldTitle);
@@ -327,10 +372,10 @@ public class NeoTabConfigScreen extends Screen {
         renderHoveredTooltip(g, mouseX, mouseY, layout);
     }
 
-    /** 绘制左侧 Tab 栏（AE2 风格）。 */
+    /** 缂備焦锚閸╂顔忛敂鎸庢珷 Tab 闁哄秴楠忕槐姗滶2 濡炲瀛╅悧鎼佹晬婢跺牃锟?*/
     private void renderTabBar(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
-        int x = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;  // 按钮左边距
-        int btnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;  // 按钮宽度（不超出 Tab 栏右边）
+        int x = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;  // 闁圭顦甸幐鍐差啅閿曚胶鐝堕悹?
+        int btnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;  // 闁圭顦甸幐宕団偓纭呮鐎规娊鏁嶉崼婊呯憹閻℃帒鎳庨崵?Tab 闁哄秴绻愯ぐ鍛婃綇閻у摜锟?
 
         ConfigTab[] tabs = ConfigTab.values();
         for (int i = 0; i < tabs.length; i++) {
@@ -353,14 +398,14 @@ public class NeoTabConfigScreen extends Screen {
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, Layout layout) {
-        // AE2 风格：绘制内容区凹陷背景（不包含滚动条区域，滚动条在外部）
+        // AE2 濡炲瀛╅悧鎼佹晬濮樿京甯涢柛鎺曟硾閸炲鈧湱鎳撶亸顖炲礄瑜版帗顏為柤鍐叉湰濞呮瑩鏁嶉崼婊呯憹闁告牕鎳庨幆鍫濐煥濮橆剙袟闁哄鈧啿闅橀柛鈺冨櫐缁辨繂顭ㄥ顒€袟闁哄鈧櫕韬鑸电墵閸庢挳锟?
         int contentAreaX = layout.left() - 4;
         int contentAreaY = layout.viewportTop() - 2;
         int contentAreaW = layout.right() - layout.left() + 8;
         int contentAreaH = layout.viewportBottom() - layout.viewportTop() + 4;
         AEStyleRenderer.drawContentArea(g, contentAreaX, contentAreaY, contentAreaW, contentAreaH);
 
-        // 开启 scissor，所有后续绘制（包括输入框背景）都受裁剪约束
+        // 鐎殿喒鍋撻柛?scissor闁挎稑鏈晶宥夊嫉婢跺﹥鍊电紓渚囧幘缁垶宕氱拋鍦闁告牕鎳忕€氼厽娼忛幘鍐插汲婵℃妫滈崕妤呭疾椤栥倗绀嗛梺顔挎瑜板牏鎲楁担绋款梾缂佹拝闄勫?
         g.enableScissor(layout.scissorLeft(), layout.viewportTop(), layout.scissorRight(), layout.viewportBottom());
 
         if (activeTab == ConfigTab.PAGE_CONFIG) {
@@ -382,8 +427,15 @@ public class NeoTabConfigScreen extends Screen {
                     Component.translatable("screen.neotab.section.footer"),
                     layout.left(), layout.toScreenY(layout.footerSectionHeaderY()), layout.right());
             drawSettingRow(g, Component.translatable("screen.neotab.footer.custom"), layout.footerCustomLabelBounds(), mouseX, mouseY);
+        } else if (activeTab == ConfigTab.THEME) {
+            AEStyleRenderer.drawSectionHeader(g, this.font,
+                    Component.translatable("screen.neotab.section.health"),
+                    layout.left(), layout.toScreenY(layout.themeSectionHeaderY()), layout.right());
+            drawSettingRow(g, Component.translatable("screen.neotab.theme.health_mode"), layout.healthModeLabelBounds(), mouseX, mouseY);
+            drawSettingRow(g, Component.translatable("screen.neotab.theme.tab_theme"),   layout.themeSelectLabelBounds(), mouseX, mouseY);
+            renderThemeSelectorBackground(g, layout);
         }
-        // 渲染控件（输入框背景在此方法内部、控件渲染之前绘制，受 scissor 裁剪）
+        // Render scrollable widgets inside the clipped viewport
         renderScrollableWidgets(g, mouseX, mouseY, partialTick);
         g.disableScissor();
         renderScrollbar(g, layout);
@@ -394,24 +446,41 @@ public class NeoTabConfigScreen extends Screen {
             if (r == this.doneButton || r == this.cancelButton) continue;
             if (r instanceof CycleButton<?> cb) {
                 renderAECycleButton(g, cb, mouseX, mouseY);
+            } else if (r instanceof Button button) {
+                int themeIndex = this.themeOptionButtons.indexOf(button);
+                if (themeIndex >= 0) {
+                    renderThemeOptionButton(g, button, this.themeOptionIds.get(themeIndex), mouseX, mouseY);
+                } else {
+                    r.render(g, mouseX, mouseY, partialTick);
+                }
             } else {
-                // 输入框背景已在 NoCountMultiLineEditBox.renderBackground() 中处理
+                // Input background is handled inside the multiline edit box renderer
                 r.render(g, mouseX, mouseY, partialTick);
             }
         }
     }
 
+    private void renderThemeSelectorBackground(GuiGraphics g, Layout layout) {
+        AEStyleRenderer.drawInputBackground(
+            g,
+            layout.left(),
+            layout.toScreenY(layout.themeSelectorY()),
+            layout.themeSelectorWidth(),
+            layout.themeSelectorHeight()
+        );
+    }
+
     /**
-     * 用 AE2 风格绘制 CycleButton。
-     * 背景用 AEStyleRenderer，文字颜色根据 ON/OFF 状态区分。
+     * 锟?AE2 濡炲瀛╅悧鍝ョ磼濡搫锟?CycleButton锟?
+     * 闁煎啿鏈▍娆撴偨?AEStyleRenderer闁挎稑鏈弸鍐偓娑欘殜椤や線鎳濋崣澶屽锟?ON/OFF 闁绘鍩栭埀顑跨鐏忣垶宕氶崱鎰ㄥ亾?
      */
     private void renderAECycleButton(GuiGraphics g, CycleButton<?> cb, int mouseX, int mouseY) {
         if (!cb.visible) return;
         boolean hovered = cb.isMouseOver(mouseX, mouseY);
         int bx = cb.getX(), by = cb.getY(), bw = cb.getWidth(), bh = cb.getHeight();
-        // AE2 风格背景
+        // AE2 濡炲瀛╅悧鎼佹嚄鐏炵偓锟?
         AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        // 文字：判断是否为 Boolean ON/OFF
+        // 闁哄倸娲ら悺褔鏁嶅顒€鐏查柡鍌ゅ幗濡叉悂宕ラ敂鑳 Boolean ON/OFF
         Component msg = cb.getMessage();
         String msgStr = msg.getString();
         int textColor;
@@ -420,31 +489,64 @@ public class NeoTabConfigScreen extends Screen {
         } else if (msgStr.equals("OFF") || msgStr.equals("off")) {
             textColor = AEStyleRenderer.COLOR_OFF;
         } else {
-            // 带标签的按钮（如 TPS ON）：整体用按钮文字色
+            // 閻㈩垽闄勯悥锝囩驳閸撗勭暠闁圭顦甸幐鎶芥晬閸繍锟?TPS ON闁挎稑顧€缁变即寮紙鐘电Ъ闁活潿鍔嶇€垫粓鏌﹂鑺ョ€悗娑欘殙锟?
             textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
         }
         g.drawCenteredString(this.font, msg, bx + bw / 2, by + (bh - this.font.lineHeight) / 2, textColor);
     }
 
     private void renderFixedWidgets(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // AE2 风格绘制 Done/Cancel 按钮（覆盖原版样式）
+        // AE2 濡炲瀛╅悧鍝ョ磼濡搫锟?Done/Cancel 闁圭顦甸幐鎶芥晬閸綆娲柣鈺傜墪鐢偊鎮ч崼鐔哄鐎殿喖楠忕槐?
         renderAEButton(g, this.doneButton, mouseX, mouseY);
         renderAEButton(g, this.cancelButton, mouseX, mouseY);
     }
 
     /**
-     * 用 AE2 风格绘制一个 Button，覆盖原版渲染。
-     * 先绘制 AE2 背景，再让原版 Button 渲染文字（文字颜色由原版处理）。
+     * 锟?AE2 濡炲瀛╅悧鍝ョ磼濡搫鐓戝☉鎾亾锟?Button闁挎稑鐭侀々顐︽儎閺嵮冩枾闁绘鐗婄憰鍡涘蓟閹炬墎锟?
+     * 闁稿繐鐗忕划顖炲礆?AE2 闁煎啿鏈▍娆撴晬鐏炶棄鏅欓悹浣叉櫅鐢偊锟?Button 婵炴挸寮堕悡瀣棘閸パ呮憻闁挎稑鐗婇弸鍐偓娑欘殜椤や線鎳濋懠顒佹殸闁告鍠撴晶妤佸緞閸曨厽鍊為柨娑橆槶锟?
      */
     private void renderAEButton(GuiGraphics g, Button btn, int mouseX, int mouseY) {
         if (btn == null || !btn.visible) return;
         boolean hovered = btn.isMouseOver(mouseX, mouseY);
         int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
-        // 绘制 AE2 风格背景（覆盖原版）
+        // 缂備焦锚锟?AE2 濡炲瀛╅悧鎼佹嚄鐏炵偓鐝柨娑樼墣椤╊偊鎯勯弽褍鏂ч柣妤€鐗炵槐?        AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+        // 缂備焦锚閸╂寮崶褏鎽熼柨娑樼墕閻櫕绋夐銊хAE2 闁圭顦甸幐鎶藉棘閸パ呮憻闁肩顕滅槐?
         AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        // 绘制文字（居中，AE2 按钮文字色）
         int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
         g.drawCenteredString(this.font, btn.getMessage(), bx + bw / 2, by + (bh - this.font.lineHeight) / 2, textColor);
+    }
+
+    private void renderThemeOptionButton(GuiGraphics g, Button btn, String themeId, int mouseX, int mouseY) {
+        if (!btn.visible) return;
+        boolean hovered = btn.isMouseOver(mouseX, mouseY);
+        boolean selected = themeId.equals(this.selectedThemeId);
+        int bx = btn.getX();
+        int by = btn.getY();
+        int bw = btn.getWidth();
+        int bh = btn.getHeight();
+
+        if (selected) {
+            AEStyleRenderer.drawSunkenPanel(g, bx, by, bw, bh, AEStyleRenderer.COLOR_BUTTON_HOVER, 1);
+        } else {
+            AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+        }
+
+        int indicatorX = bx + 6;
+        int indicatorY = by + (bh - THEME_INDICATOR_SIZE) / 2;
+        AEStyleRenderer.drawOutline(g, indicatorX, indicatorY, THEME_INDICATOR_SIZE, THEME_INDICATOR_SIZE,
+            AEStyleRenderer.COLOR_OUTLINE, 1);
+        g.fill(indicatorX + 1, indicatorY + 1, indicatorX + THEME_INDICATOR_SIZE - 1, indicatorY + THEME_INDICATOR_SIZE - 1, 0xFF7A8090);
+        if (selected) {
+            g.fill(indicatorX + 2, indicatorY + 2, indicatorX + THEME_INDICATOR_SIZE - 2, indicatorY + THEME_INDICATOR_SIZE - 2,
+                AEStyleRenderer.COLOR_ON);
+        }
+
+        int textColor = selected
+            ? AEStyleRenderer.COLOR_SECTION_TEXT
+            : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+        int textX = indicatorX + THEME_INDICATOR_SIZE + 8;
+        int textY = by + (bh - this.font.lineHeight) / 2;
+        g.drawString(this.font, btn.getMessage(), textX, textY, textColor, false);
     }
 
     private void renderButtonBar(GuiGraphics g, Layout layout) {
@@ -457,12 +559,12 @@ public class NeoTabConfigScreen extends Screen {
                 panelW - 2, panelBottom - layout.buttonBarTop());
     }
 
-    /** 滚动条轨道宽度（与 mouseClicked 保持一致）。 */
+    /** 婵犲﹥鑹炬慨鈺呭级闄囧娲焼閹炬剚鍟嶉幖杈捐缁辨瑦锟?mouseClicked 濞ｅ洦绻冪€垫梹绋夐埀顒勬嚊鏉堝墽绀嗛柕?*/
     private static final int SCROLL_TRACK_W = 14;
 
     private void renderScrollbar(GuiGraphics g, Layout layout) {
         if (layout.maxScroll() <= 0) return;
-        // 滚动条紧贴内容区右侧，留 8px 间距
+        // 婵犲﹥鑹炬慨鈺呭级閿涘嫭褰涢悹鎰綑閸炲鈧湱鎳撶亸顖炲矗閸忓懏娅犻柨娑樼灱閺嗏偓 8px 闂傚倻顥愮粣?
         int trackX = layout.right() + 8;
         AEStyleRenderer.drawScrollbar(g,
                 trackX, layout.viewportTop(), layout.viewportBottom(),
@@ -475,7 +577,7 @@ public class NeoTabConfigScreen extends Screen {
         if (ht != null) g.renderTooltip(this.font, ht.tooltip(), mouseX, mouseY);
     }
 
-    // drawSectionHeader 已迁移到 AEStyleRenderer.drawSectionHeader()
+    // drawSectionHeader 鐎规瓕灏缓鑲╃矓鐠囨彃锟?AEStyleRenderer.drawSectionHeader()
 
     private void drawSettingRow(GuiGraphics g, Component label, LabelBounds bounds, int mouseX, int mouseY) {
         drawLabel(g, label, bounds, mouseX, mouseY);
@@ -498,10 +600,29 @@ public class NeoTabConfigScreen extends Screen {
             .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY);
     }
 
-    /** 带完整标签的开关按钮，文字显示在按钮内部，宽度占满整列。 */
+    /** 閻㈩垽绠戦悾顒勫极鐎涙鍨肩紒娑樺⒔濞堟垵顕ｉ埀顒勫礂閾忣偄鐦婚梺绛嬪櫙缁辨繈寮崶褏鎽熼柡鍕⒔閵囨岸宕烽妸锕€鐦婚梺绛嬪枛閸炴挳鏌堥…鎺旂閻庣妫勭€规娊宕￠悩鍐插К闁轰焦娼欓崹顏堝Υ?*/
     private CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {
         return CycleButton.onOffBuilder(initialValue)
             .create(x, 0, width, INPUT_HEIGHT, label);
+    }
+
+    /** 閻炴稈鍋撻梺鎻掔箲濡绮堥悜妯绘珡闁哄绮岄崹蹇涘箲閵忊€崇樆闂佺瓔鍣槐娆戔偓鐟版湰锟?/ 闁告娲滅€氼參鏁嶆径鍫氬亾?*/
+    private CycleButton<HealthDisplayMode> newHealthModeButton(int x, HealthDisplayMode initialValue) {
+        return CycleButton.<HealthDisplayMode>builder(mode -> Component.translatable(
+                    mode == HealthDisplayMode.FULL
+                        ? "screen.neotab.theme.health_mode.full"
+                        : "screen.neotab.theme.health_mode.compact"))
+            .withValues(HealthDisplayMode.FULL, HealthDisplayMode.COMPACT)
+            .withInitialValue(initialValue)
+            .displayOnlyValue()
+            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY);
+    }
+
+    private static int themeSelectorHeight(int optionCount) {
+        int rows = Math.max(optionCount, 1);
+        return THEME_LIST_INSET * 2
+            + rows * THEME_OPTION_HEIGHT
+            + Math.max(0, rows - 1) * THEME_OPTION_GAP;
     }
 
     private HoverTarget hoveredTarget(int mouseX, int mouseY, Layout layout) {
@@ -520,12 +641,17 @@ public class NeoTabConfigScreen extends Screen {
                 return new HoverTarget(Component.translatable("screen.neotab.list.health_display.tooltip"));
             if (layout.footerCustomLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.footer.custom.tooltip"));
+        } else if (activeTab == ConfigTab.THEME) {
+            if (layout.healthModeLabelBounds().contains(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.theme.health_mode.tooltip"));
+            if (layout.themeSelectLabelBounds().contains(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.theme.tab_theme.tooltip"));
         }
         return null;
     }
 
     private boolean isInsideViewport(double mouseX, double mouseY, Layout layout) {
-        // 右边界扩展到包含滚动条轨道区域（right + 8 起始，宽 SCROLL_TRACK_W）
+        // 闁告瑥鐤囩粩鐔兼偩鐏炴儳鈷栭悘鐐存礀閸╁矂宕犻崨顓熷創婵犲﹥鑹炬慨鈺呭级闄囧娲焼閹惧啿闅橀柛鈺冨櫐缁辨獧ight + 8 閻犙冨槻椤劙鏁嶇仦绛嬪晬 SCROLL_TRACK_W锟?
         return mouseX >= layout.left() && mouseX <= layout.right() + 8 + SCROLL_TRACK_W
             && mouseY >= layout.viewportTop() && mouseY <= layout.viewportBottom();
     }
@@ -557,6 +683,14 @@ public class NeoTabConfigScreen extends Screen {
         placeScrollableWidget(this.titleEnabled,         layout.toggleX(),           layout.toScreenY(layout.titleRowY()));
         placeScrollableWidget(this.healthDisplayEnabled, layout.toggleX(),           layout.toScreenY(layout.healthDisplayRowY()));
         placeScrollableWidget(this.footerCustomInput,    layout.left(),              layout.toScreenY(layout.footerCustomInputY()));
+        // THEME tab 闁硅矇鍌涱偨
+        placeScrollableWidget(this.healthDisplayMode,    layout.toggleX(),           layout.toScreenY(layout.healthModeRowY()));
+        for (int i = 0; i < this.themeOptionButtons.size(); i++) {
+            Button button = this.themeOptionButtons.get(i);
+            button.setX(layout.left() + THEME_LIST_INSET);
+            button.setY(layout.toScreenY(layout.themeSelectorY() + THEME_LIST_INSET + i * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP)));
+            button.setWidth(layout.themeSelectorWidth() - THEME_LIST_INSET * 2);
+        }
         placeScrollableWidget(this.footerTpsEnabled,     layout.footerFirstColumnX(),  layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerMsptEnabled,    layout.footerSecondColumnX(), layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerOnlineEnabled,  layout.footerThirdColumnX(),  layout.toScreenY(layout.footerRowY()));
@@ -580,6 +714,8 @@ public class NeoTabConfigScreen extends Screen {
             this.onlineDurationEnabled.getValue(),
             this.titleEnabled.getValue(),
             this.healthDisplayEnabled.getValue(),
+            this.healthDisplayMode.getValue(),
+            this.selectedThemeId,
             this.footerCustomInput.getValue(),
             this.footerTpsEnabled.getValue(),
             this.footerMsptEnabled.getValue(),
@@ -591,30 +727,30 @@ public class NeoTabConfigScreen extends Screen {
     }
 
     /**
-     * 重算整张页面的布局。
-     * Tab 栏占据左侧 TAB_BAR_WIDTH 像素，内容区在其右侧。
+     * 闂佹彃绉堕悾濠氬极閺夋垹鐐婂銈囨暬濞间即鎯冮崟顐ゎ伌閻忕偐鍋撻柕?
+     * Tab 闁哄秴绻愬畷浼村箲椤旈棿绠〒?TAB_BAR_WIDTH 闁稿秴绻掔粈宀勬晬鐏炶棄鏁堕悗鍦嚀鐏忣垶宕烽妸銉ュ緭闁告瑥鍘栭弲鍫曞Υ?
      */
     private Layout buildLayout() {
-        // Tab 栏起始 X：屏幕水平居中后，内容区左边再往左 TAB_BAR_WIDTH
+        // Tab 闁哄秴绻楅幑锝嗘叏?X闁挎稒鑹鹃惈鍡涚嵁閺囩喐瀵滄鐐插暱閻櫕绋夐鐐村€甸柨娑樿嫰閸炲鈧湱鎳撶亸顖氼啅閿曚胶鐝堕柛鎰Т缁舵艾锟?TAB_BAR_WIDTH
         int contentWidth = Math.min(MAX_CONTENT_WIDTH, this.width - CONTENT_SIDE_PADDING - TAB_BAR_WIDTH);
-        // 整体块（Tab栏 + 内容区）居中
+        // 闁轰胶绻濈紞瀣锤濡ゅ绀凾ab锟?+ 闁告劕鎳庨鎰板礌閻氬绀嗛悘鐐叉噸锟?
         int totalWidth = TAB_BAR_WIDTH + TAB_CONTENT_GAP + contentWidth;
         int blockLeft = (this.width - totalWidth) / 2;
         int tabBarX = blockLeft;
         int left = blockLeft + TAB_BAR_WIDTH + TAB_CONTENT_GAP;
         int right = left + contentWidth;
-        // toggleX 对齐到输入框实际右边框（输入框宽度减去 NoCountMultiLineEditBox 的 SCROLLBAR_SPACE=6）
+        // toggleX 閻庨潧缍婄紞鍫ュ礆閹峰瞼缈婚柛蹇嬪劜椤㈠鈧湱鍋ゅ顖炲矗鐎圭姷鐝舵俊妤€妫寸槐娆愭綇閹惧啿寮虫俊妤€妫楅鏃€鎯旈敃鈧崳娲储?NoCountMultiLineEditBox 锟?SCROLLBAR_SPACE=6锟?
         int toggleX = right - 6 - TOGGLE_WIDTH;
 
         int buttonWidth = Math.min(150, (contentWidth - 10) / 2);
         int panelBottomMargin = 8;
-        int buttonY = this.height - panelBottomMargin - 10 - INPUT_HEIGHT;  // 面板底部 - 间距 - 按钮高度
+        int buttonY = this.height - panelBottomMargin - 10 - INPUT_HEIGHT;  // 闂傚牄鍨哄妯绘償閺囥垹锟?- 闂傚倻顥愮粣?- 闁圭顦甸幐铏殗濡搫锟?
         int buttonBarTop = buttonY - 6;
         int viewportTop = VIEWPORT_TOP;
         int viewportBottom = Math.max(viewportTop + 40, buttonBarTop - VIEWPORT_BOTTOM_MARGIN);
 
-        // PAGE_CONFIG：三个分区连续排列，y 坐标累加
-        // 顶部留内边距，让"顶部信息"标题与内容区上边框保持间距
+        // PAGE_CONFIG闁挎稒鐭粭浣圭▔椤忓嫬鐎婚柛鏍細缁绘稓绱掗鐔风瑩闁告帗顨愮槐锟?闁秆勫姈閻栵絿妲愰姘潱
+        // 濡炪倕鐖奸崕鎾偩濞嗗繐鏁堕弶鍫㈩攰缁愭盯鏁嶅畝鍐惧敤"濡炪倕鐖奸崕瀛樼┍閳╁啩锟?闁哄秴娲。鑺ョ▔鎼粹€虫暥閻庡湱鎳撶亸顖涚▔婵犲懐鐝舵俊妤€妫旂换姘跺箰娓氣偓濡法锟?
         int y = CONTENT_TOP_PADDING;
         int topSectionHeaderY = y;
         y += SECTION_HEADER_HEIGHT;
@@ -643,7 +779,7 @@ public class NeoTabConfigScreen extends Screen {
         y = footerCustomInputY + MULTILINE_INPUT_HEIGHT + ROW_GAP;
         int footerRowY = y;
 
-        // 底部三列宽度：总宽与输入框右边框对齐（contentWidth - 6，与 SCROLLBAR_SPACE 一致）
+        // 閹煎瓨娲熼崕瀛樼▔婢跺﹤鐏欓悗纭呮鐎规娊鏁嶅顓涘亾鐠囧樊鍟嶅☉鎾虫唉缁额參宕楅妷锔绘敱闁告瑥鐤囩粩鐔奉浖閸℃鍤犲缁樺姧缁辨獑ontentWidth - 6闁挎稑濂旂粭?SCROLLBAR_SPACE 濞戞挴鍋撻柤鐤彧锟?
         int footerTotalWidth = contentWidth - 6;
         int footerColumnWidth = (footerTotalWidth - FOOTER_COLUMN_GAP * 2) / 3;
         int footerFirstColumnX  = left;
@@ -652,17 +788,25 @@ public class NeoTabConfigScreen extends Screen {
 
         int labelWidth = Math.max(80, contentWidth - 6 - TOGGLE_WIDTH - 8);
 
-        // 当前 Tab 的内容高度
+        // Theme tab layout
+        int themeSectionHeaderY = CONTENT_TOP_PADDING;
+        int healthModeRowY      = themeSectionHeaderY + SECTION_HEADER_HEIGHT;
+        int themeSelectRowY     = healthModeRowY + ROW_HEIGHT + ROW_GAP;
+        int themeSelectorY      = themeSelectRowY + ROW_HEIGHT + THEME_LIST_TOP_GAP;
+        int themeSelectorWidth  = contentWidth - 6;
+        int themeSelectorHeight = themeSelectorHeight(TabThemeRegistry.ids().size());
+
+        // Content height for the active tab
         int contentHeight;
         if (activeTab == ConfigTab.PAGE_CONFIG) {
-            // 完整内容：三个分区全部展示
             contentHeight = footerRowY + ROW_HEIGHT;
-        } else {            // THEME tab 暂无内容
-            contentHeight = 0;
+        } else {
+            // Theme tab: health mode plus theme selector
+            contentHeight = themeSelectorY + themeSelectorHeight;
         }
         int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
 
-        // 面板中心 X（与 render 方法中的 panelX/panelW 计算保持一致）
+        // 闂傚牄鍨哄妯荤▔椤撶偟锟?X闁挎稑鐗呯粭?render 闁哄倽顫夌涵鑸电▔椤撶姵锟?panelX/panelW 閻犱緤绱曢悾缁樼┍濠靛洤鐦☉鎾亾闁肩柉鎻槐?
         int scrollTrackW = SCROLL_TRACK_W;
         int panelX = tabBarX - 2;
         int panelW = (right + 8 + scrollTrackW + 4) - panelX;
@@ -685,6 +829,7 @@ public class NeoTabConfigScreen extends Screen {
             panelCenterX - buttonWidth - 5,
             panelCenterX + 5,
             tabBarX,
+            themeSectionHeaderY, healthModeRowY, themeSelectRowY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
             labelBounds(Component.translatable("screen.neotab.top.title"),        left, viewportTop - this.scrollOffset + topTitleRowY,       labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.top.content"),      left, viewportTop - this.scrollOffset + topContentRowY,     labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.list.better_ping"), left, viewportTop - this.scrollOffset + betterPingRowY,     labelWidth, this.font),
@@ -694,7 +839,9 @@ public class NeoTabConfigScreen extends Screen {
             labelBounds(Component.translatable("screen.neotab.footer.custom"),    left, viewportTop - this.scrollOffset + footerCustomRowY,   labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.tps"),    footerFirstColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.mspt"),   footerSecondColumnX, viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
-            labelBounds(Component.translatable("screen.neotab.footer.online"), footerThirdColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font)
+            labelBounds(Component.translatable("screen.neotab.footer.online"), footerThirdColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
+            labelBounds(Component.translatable("screen.neotab.theme.health_mode"), left, viewportTop - this.scrollOffset + healthModeRowY, labelWidth, this.font),
+            labelBounds(Component.translatable("screen.neotab.theme.tab_theme"),   left, viewportTop - this.scrollOffset + themeSelectRowY,  labelWidth, this.font)
         );
     }
 
@@ -725,12 +872,16 @@ public class NeoTabConfigScreen extends Screen {
         int contentHeight, int maxScroll, int buttonWidth, int buttonY,
         int doneButtonX, int cancelButtonX,
         int tabBarX,
+        int themeSectionHeaderY, int healthModeRowY, int themeSelectRowY,
+        int themeSelectorY, int themeSelectorWidth, int themeSelectorHeight,
         LabelBounds topTitleLabelBounds, LabelBounds topContentLabelBounds,
         LabelBounds betterPingLabelBounds, LabelBounds onlineDurationLabelBounds,
         LabelBounds titleLabelBounds, LabelBounds healthDisplayLabelBounds,
         LabelBounds footerCustomLabelBounds,
         LabelBounds footerFirstLabelBounds, LabelBounds footerSecondLabelBounds,
-        LabelBounds footerThirdLabelBounds
+        LabelBounds footerThirdLabelBounds,
+        LabelBounds healthModeLabelBounds,
+        LabelBounds themeSelectLabelBounds
     ) {
         private int toScreenY(int contentY) {
             return this.viewportTop - this.scrollOffset + contentY;
@@ -739,3 +890,4 @@ public class NeoTabConfigScreen extends Screen {
         private int scissorRight() { return this.right + 10; }
     }
 }
+
