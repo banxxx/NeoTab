@@ -16,6 +16,8 @@
   "screen.neotab.top.content.tooltip": "Set the top content text shown under the title. Maximum length: 256 characters (excluding rich text tags).",
   "screen.neotab.list.title": "Title Feature",
   "screen.neotab.list.title.tooltip": "When enabled, displays a title before player names. Title text is provided by other mods.",
+  "screen.neotab.list.health_display": "Health Display",
+  "screen.neotab.list.health_display.tooltip": "When enabled, displays player health with heart icons in the tab list.",
   "screen.neotab.list.better_ping": "Better Ping Display",
   "screen.neotab.list.better_ping.tooltip": "When enabled, ping text changes color based on latency.",
   "screen.neotab.list.online_duration": "Online Duration Display",

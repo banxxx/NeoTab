@@ -4,6 +4,7 @@ import com.poso.neotab.NeoTab;
 import com.poso.neotab.network.payload.OpenConfigScreenPayload;
 import com.poso.neotab.network.payload.SaveConfigPayload;
 import com.poso.neotab.network.payload.SyncOnlineDurationsPayload;
+import com.poso.neotab.network.payload.SyncPlayerHealthPayload;
 import com.poso.neotab.network.payload.SyncTabConfigPayload;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
@@ -28,6 +29,7 @@ public final class NeoTabPayloads {
         registrar.playToClient(OpenConfigScreenPayload.TYPE, OpenConfigScreenPayload.STREAM_CODEC, OpenConfigScreenPayload::handle);
         registrar.playToClient(SyncTabConfigPayload.TYPE, SyncTabConfigPayload.STREAM_CODEC, SyncTabConfigPayload::handle);
         registrar.playToClient(SyncOnlineDurationsPayload.TYPE, SyncOnlineDurationsPayload.STREAM_CODEC, SyncOnlineDurationsPayload::handle);
+        registrar.playToClient(SyncPlayerHealthPayload.TYPE, SyncPlayerHealthPayload.STREAM_CODEC, SyncPlayerHealthPayload::handle);
         registrar.playToServer(SaveConfigPayload.TYPE, SaveConfigPayload.STREAM_CODEC, SaveConfigPayload::handle);
     }
 }

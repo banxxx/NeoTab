@@ -16,6 +16,8 @@
   "screen.neotab.top.content.tooltip": "设置标题下方的内容文字，最多 256 个字符（不含富文本标签）。",
   "screen.neotab.list.title": "称号功能",
   "screen.neotab.list.title.tooltip": "开启后将在玩家名称前显示称号，称号文本由其他模组提供。",
+  "screen.neotab.list.health_display": "玩家血量显示",
+  "screen.neotab.list.health_display.tooltip": "开启后将在 TAB 列表中玩家名称后显示血量心形图标。",
   "screen.neotab.list.better_ping": "更好的延迟显示",
   "screen.neotab.list.better_ping.tooltip": "开启更好的延迟后，延迟将根据数值大小改变颜色。",
   "screen.neotab.list.online_duration": "在线时长显示",

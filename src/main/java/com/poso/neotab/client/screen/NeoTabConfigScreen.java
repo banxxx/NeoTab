@@ -78,6 +78,7 @@ public class NeoTabConfigScreen extends Screen {
     private CycleButton<Boolean> betterPingEnabled;
     private CycleButton<Boolean> onlineDurationEnabled;
     private CycleButton<Boolean> titleEnabled;
+    private CycleButton<Boolean> healthDisplayEnabled;
     private ImprovedRichTextMultiLineEditBox footerCustomInput;
     private CycleButton<Boolean> footerTpsEnabled;
     private CycleButton<Boolean> footerMsptEnabled;
@@ -114,6 +115,7 @@ public class NeoTabConfigScreen extends Screen {
         this.betterPingEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.betterPingEnabled()));
         this.onlineDurationEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.onlineDurationEnabled()));
         this.titleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.titleEnabled()));
+        this.healthDisplayEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.healthDisplayEnabled()));
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
@@ -145,6 +147,7 @@ public class NeoTabConfigScreen extends Screen {
         betterPingEnabled.visible     = page;
         onlineDurationEnabled.visible = page;
         titleEnabled.visible          = page;
+        healthDisplayEnabled.visible  = page;
         footerCustomInput.visible     = page;
         footerTpsEnabled.visible      = page;
         footerMsptEnabled.visible     = page;
@@ -373,6 +376,7 @@ public class NeoTabConfigScreen extends Screen {
             drawSettingRow(g, Component.translatable("screen.neotab.list.better_ping"), layout.betterPingLabelBounds(), mouseX, mouseY);
             drawSettingRow(g, Component.translatable("screen.neotab.list.online_duration"), layout.onlineDurationLabelBounds(), mouseX, mouseY);
             drawSettingRow(g, Component.translatable("screen.neotab.list.title"), layout.titleLabelBounds(), mouseX, mouseY);
+            drawSettingRow(g, Component.translatable("screen.neotab.list.health_display"), layout.healthDisplayLabelBounds(), mouseX, mouseY);
 
             AEStyleRenderer.drawSectionHeader(g, this.font,
                     Component.translatable("screen.neotab.section.footer"),
@@ -512,6 +516,8 @@ public class NeoTabConfigScreen extends Screen {
                 return new HoverTarget(Component.translatable("screen.neotab.list.online_duration.note"));
             if (layout.titleLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.list.title.tooltip"));
+            if (layout.healthDisplayLabelBounds().contains(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.list.health_display.tooltip"));
             if (layout.footerCustomLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.footer.custom.tooltip"));
         }
@@ -549,6 +555,7 @@ public class NeoTabConfigScreen extends Screen {
         placeScrollableWidget(this.betterPingEnabled,    layout.toggleX(),           layout.toScreenY(layout.betterPingRowY()));
         placeScrollableWidget(this.onlineDurationEnabled,layout.toggleX(),           layout.toScreenY(layout.onlineDurationRowY()));
         placeScrollableWidget(this.titleEnabled,         layout.toggleX(),           layout.toScreenY(layout.titleRowY()));
+        placeScrollableWidget(this.healthDisplayEnabled, layout.toggleX(),           layout.toScreenY(layout.healthDisplayRowY()));
         placeScrollableWidget(this.footerCustomInput,    layout.left(),              layout.toScreenY(layout.footerCustomInputY()));
         placeScrollableWidget(this.footerTpsEnabled,     layout.footerFirstColumnX(),  layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerMsptEnabled,    layout.footerSecondColumnX(), layout.toScreenY(layout.footerRowY()));
@@ -572,6 +579,7 @@ public class NeoTabConfigScreen extends Screen {
             this.betterPingEnabled.getValue(),
             this.onlineDurationEnabled.getValue(),
             this.titleEnabled.getValue(),
+            this.healthDisplayEnabled.getValue(),
             this.footerCustomInput.getValue(),
             this.footerTpsEnabled.getValue(),
             this.footerMsptEnabled.getValue(),
@@ -624,6 +632,8 @@ public class NeoTabConfigScreen extends Screen {
         int onlineDurationRowY = y;
         y += ROW_HEIGHT + ROW_GAP;
         int titleRowY = y;
+        y += ROW_HEIGHT + ROW_GAP;
+        int healthDisplayRowY = y;
         y += ROW_HEIGHT + SECTION_GAP;
 
         int footerSectionHeaderY = y;
@@ -647,8 +657,7 @@ public class NeoTabConfigScreen extends Screen {
         if (activeTab == ConfigTab.PAGE_CONFIG) {
             // 完整内容：三个分区全部展示
             contentHeight = footerRowY + ROW_HEIGHT;
-        } else {
-            // THEME tab 暂无内容
+        } else {            // THEME tab 暂无内容
             contentHeight = 0;
         }
         int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
@@ -665,7 +674,7 @@ public class NeoTabConfigScreen extends Screen {
             buttonBarTop,
             topSectionHeaderY, topTitleRowY, topTitleInputY,
             topContentRowY, topContentInputY,
-            listSectionHeaderY, betterPingRowY, onlineDurationRowY, titleRowY,
+            listSectionHeaderY, betterPingRowY, onlineDurationRowY, titleRowY, healthDisplayRowY,
             footerSectionHeaderY, footerCustomRowY, footerCustomInputY, footerRowY,
             footerFirstColumnX, footerSecondColumnX, footerThirdColumnX,
             footerFirstColumnX  + footerColumnWidth - TOGGLE_WIDTH,
@@ -681,6 +690,7 @@ public class NeoTabConfigScreen extends Screen {
             labelBounds(Component.translatable("screen.neotab.list.better_ping"), left, viewportTop - this.scrollOffset + betterPingRowY,     labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.list.online_duration"), left, viewportTop - this.scrollOffset + onlineDurationRowY, labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.list.title"),       left, viewportTop - this.scrollOffset + titleRowY,          labelWidth, this.font),
+            labelBounds(Component.translatable("screen.neotab.list.health_display"), left, viewportTop - this.scrollOffset + healthDisplayRowY, labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.custom"),    left, viewportTop - this.scrollOffset + footerCustomRowY,   labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.tps"),    footerFirstColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.mspt"),   footerSecondColumnX, viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
@@ -707,7 +717,7 @@ public class NeoTabConfigScreen extends Screen {
         int scrollOffset, int viewportTop, int viewportBottom, int buttonBarTop,
         int topSectionHeaderY, int topTitleRowY, int topTitleInputY,
         int topContentRowY, int topContentInputY,
-        int listSectionHeaderY, int betterPingRowY, int onlineDurationRowY, int titleRowY,
+        int listSectionHeaderY, int betterPingRowY, int onlineDurationRowY, int titleRowY, int healthDisplayRowY,
         int footerSectionHeaderY, int footerCustomRowY, int footerCustomInputY, int footerRowY,
         int footerFirstColumnX, int footerSecondColumnX, int footerThirdColumnX,
         int footerFirstToggleX, int footerSecondToggleX, int footerThirdToggleX,
@@ -717,7 +727,8 @@ public class NeoTabConfigScreen extends Screen {
         int tabBarX,
         LabelBounds topTitleLabelBounds, LabelBounds topContentLabelBounds,
         LabelBounds betterPingLabelBounds, LabelBounds onlineDurationLabelBounds,
-        LabelBounds titleLabelBounds, LabelBounds footerCustomLabelBounds,
+        LabelBounds titleLabelBounds, LabelBounds healthDisplayLabelBounds,
+        LabelBounds footerCustomLabelBounds,
         LabelBounds footerFirstLabelBounds, LabelBounds footerSecondLabelBounds,
         LabelBounds footerThirdLabelBounds
     ) {

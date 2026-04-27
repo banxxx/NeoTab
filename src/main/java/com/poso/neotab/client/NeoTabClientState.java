@@ -19,6 +19,8 @@ import java.util.UUID;
 public final class NeoTabClientState {
     private static TabConfig currentConfig = TabConfig.defaults();
     private static Map<UUID, String> onlineDurations = new HashMap<>();
+    private static Map<UUID, Float> playerHealths    = new HashMap<>();
+    private static Map<UUID, Float> playerMaxHealths = new HashMap<>();
 
     private NeoTabClientState() {
     }
@@ -43,8 +45,25 @@ public final class NeoTabClientState {
         return onlineDurations.getOrDefault(playerId, "1h");
     }
 
+    public static void setPlayerHealths(Map<UUID, Float> healths, Map<UUID, Float> maxHealths) {
+        playerHealths    = healths    == null ? new HashMap<>() : new HashMap<>(healths);
+        playerMaxHealths = maxHealths == null ? new HashMap<>() : new HashMap<>(maxHealths);
+    }
+
+    /** 获取指定玩家的当前血量（半颗心 = 1.0f）。未收到数据时返回 20.0f。 */
+    public static float getPlayerHealth(UUID playerId) {
+        return playerHealths.getOrDefault(playerId, 20.0f);
+    }
+
+    /** 获取指定玩家的最大血量（半颗心 = 1.0f）。未收到数据时返回 20.0f。 */
+    public static float getPlayerMaxHealth(UUID playerId) {
+        return playerMaxHealths.getOrDefault(playerId, 20.0f);
+    }
+
     public static void reset() {
         currentConfig = TabConfig.defaults();
         onlineDurations.clear();
+        playerHealths.clear();
+        playerMaxHealths.clear();
     }
 }

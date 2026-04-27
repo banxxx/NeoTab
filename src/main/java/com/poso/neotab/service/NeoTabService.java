@@ -3,6 +3,7 @@ package com.poso.neotab.service;
 import com.poso.neotab.config.TabConfig;
 import com.poso.neotab.config.TabConfigRepository;
 import com.poso.neotab.network.payload.SyncOnlineDurationsPayload;
+import com.poso.neotab.network.payload.SyncPlayerHealthPayload;
 import com.poso.neotab.network.payload.SyncTabConfigPayload;
 import com.poso.neotab.permission.NeoTabPermissions;
 import com.poso.neotab.tab.PlaceholderContext;
@@ -61,6 +62,14 @@ public final class NeoTabService {
     private Map<UUID, String> lastOnlineDurations = new HashMap<>();
 
     /**
+     * 上一次同步的血量数据。
+     *
+     * <p>性能优化：只在数据变化时才发包。</p>
+     */
+    private Map<UUID, Float> lastPlayerHealths    = new HashMap<>();
+    private Map<UUID, Float> lastPlayerMaxHealths = new HashMap<>();
+
+    /**
      * 返回当前生效配置。
      */
     public TabConfig getConfig() {
@@ -77,6 +86,8 @@ public final class NeoTabService {
         // 清空缓存，确保使用新配置
         this.cachedMetrics = null;
         this.lastOnlineDurations.clear();
+        this.lastPlayerHealths.clear();
+        this.lastPlayerMaxHealths.clear();
         RichTextEngine.clearCache(); // 清空富文本解析缓存
         
         syncConfigToAll(server);
@@ -101,6 +112,8 @@ public final class NeoTabService {
         this.config = TabConfig.defaults();
         this.cachedMetrics = null;
         this.lastOnlineDurations.clear();
+        this.lastPlayerHealths.clear();
+        this.lastPlayerMaxHealths.clear();
         RichTextEngine.clearCache();
     }
 
@@ -120,6 +133,13 @@ public final class NeoTabService {
             syncOnlineDurationsTo(player);
             // 也需要向其他玩家同步新玩家的在线时长
             syncOnlineDurationsToAllOptimized(player.server);
+        }
+        
+        // 如果启用了血量显示，同步血量数据
+        if (config.healthDisplayEnabled()) {
+            syncPlayerHealthsTo(player);
+            // 也需要向其他玩家同步新玩家的血量
+            syncPlayerHealthsToAllOptimized(player.server);
         }
     }
 
@@ -164,6 +184,11 @@ public final class NeoTabService {
         if (config.onlineDurationEnabled()) {
             syncOnlineDurationsToAllOptimized(server);
         }
+        
+        // 如果启用了血量显示，同步血量数据到客户端
+        if (config.healthDisplayEnabled()) {
+            syncPlayerHealthsToAllOptimized(server);
+        }
     }
 
     /**
@@ -184,6 +209,8 @@ public final class NeoTabService {
         // 清空缓存，确保使用新配置
         this.cachedMetrics = null;
         this.lastOnlineDurations.clear();
+        this.lastPlayerHealths.clear();
+        this.lastPlayerMaxHealths.clear();
         RichTextEngine.clearCache(); // 清空富文本解析缓存
         
         syncConfigToAll(actor.server);
@@ -193,6 +220,11 @@ public final class NeoTabService {
         // 如果启用了在线时长显示，同步在线时长数据
         if (config.onlineDurationEnabled()) {
             syncOnlineDurationsToAll(actor.server);
+        }
+        
+        // 如果启用了血量显示，同步血量数据
+        if (config.healthDisplayEnabled()) {
+            syncPlayerHealthsToAll(actor.server);
         }
         
         actor.sendSystemMessage(Component.translatable("message.neotab.saved"));
@@ -401,5 +433,45 @@ public final class NeoTabService {
             lastOnlineDurations = current;
         }
         // 数据未变化时 current 直接被 GC，但这比之前少了一次 new HashMap（拷贝）
+    }
+
+    /** 向单个客户端同步所有玩家血量数据。 */
+    private void syncPlayerHealthsTo(ServerPlayer player) {
+        Map<UUID, Float> healths    = new HashMap<>();
+        Map<UUID, Float> maxHealths = new HashMap<>();
+        for (ServerPlayer onlinePlayer : player.server.getPlayerList().getPlayers()) {
+            healths.put(onlinePlayer.getUUID(), onlinePlayer.getHealth());
+            maxHealths.put(onlinePlayer.getUUID(), onlinePlayer.getMaxHealth());
+        }
+        PacketDistributor.sendToPlayer(player, new SyncPlayerHealthPayload(healths, maxHealths));
+    }
+
+    /** 向全服客户端同步所有玩家血量数据。 */
+    private void syncPlayerHealthsToAll(MinecraftServer server) {
+        Map<UUID, Float> healths    = new HashMap<>();
+        Map<UUID, Float> maxHealths = new HashMap<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            healths.put(player.getUUID(), player.getHealth());
+            maxHealths.put(player.getUUID(), player.getMaxHealth());
+        }
+        PacketDistributor.sendToAllPlayers(new SyncPlayerHealthPayload(healths, maxHealths));
+    }
+
+    /**
+     * 向全服客户端同步血量数据（优化版本）。
+     * 只在数据变化时才发包。
+     */
+    private void syncPlayerHealthsToAllOptimized(MinecraftServer server) {
+        Map<UUID, Float> current    = new HashMap<>();
+        Map<UUID, Float> currentMax = new HashMap<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            current.put(player.getUUID(), player.getHealth());
+            currentMax.put(player.getUUID(), player.getMaxHealth());
+        }
+        if (!current.equals(lastPlayerHealths) || !currentMax.equals(lastPlayerMaxHealths)) {
+            PacketDistributor.sendToAllPlayers(new SyncPlayerHealthPayload(current, currentMax));
+            lastPlayerHealths    = current;
+            lastPlayerMaxHealths = currentMax;
+        }
     }
 }
