@@ -181,7 +181,7 @@ public abstract class PlayerTabOverlayMixin {
 
         var config = NeoTabClientState.getCurrentConfig();
         TabTheme theme = TabThemeRegistry.get(config.tabTheme());
-        if (!"dark".equals(theme.id())) return;
+        if (!"custom".equals(theme.id())) return;
 
         // 使用捕获的实际背景边界绘制边框
         if (tabBackgroundLeft != -1 && tabBackgroundTop != -1 && 

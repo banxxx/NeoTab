@@ -28,7 +28,7 @@
   "screen.neotab.theme.tab_theme": "TAB 主题",
   "screen.neotab.theme.tab_theme.tooltip": "切换 TAB 列表的视觉主题。",
   "screen.neotab.theme.vanilla": "原版",
-  "screen.neotab.theme.dark": "暗夜",
+  "screen.neotab.theme.custom": "自定义",
   "screen.neotab.list.better_ping": "更好的延迟显示",
   "screen.neotab.list.better_ping.tooltip": "开启更好的延迟后，延迟将根据数值大小改变颜色。",
   "screen.neotab.list.online_duration": "在线时长显示",
