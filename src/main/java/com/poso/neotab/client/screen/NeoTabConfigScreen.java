@@ -93,6 +93,7 @@ public class NeoTabConfigScreen extends Screen {
     private final List<Button> themeOptionButtons = new ArrayList<>();
     private final List<String> themeOptionIds = new ArrayList<>();
     private String selectedThemeId = "vanilla";
+    private Button customThemeConfigButton;  // 自定义主题配置按钮
     private ImprovedRichTextMultiLineEditBox footerCustomInput;
     private CycleButton<Boolean> footerTpsEnabled;
     private CycleButton<Boolean> footerMsptEnabled;
@@ -143,6 +144,14 @@ public class NeoTabConfigScreen extends Screen {
             this.themeOptionButtons.add(optionButton);
             this.themeOptionIds.add(themeId);
         }
+        
+        // 自定义主题配置按钮
+        this.customThemeConfigButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.custom_theme.configure"),
+                button -> this.minecraft.setScreen(new CustomThemeConfigScreen(this)))
+            .bounds(layout.left(), 0, layout.themeSelectorWidth() - THEME_LIST_INSET * 2, THEME_OPTION_HEIGHT)
+            .build());
+        
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
@@ -184,6 +193,8 @@ public class NeoTabConfigScreen extends Screen {
         for (Button button : this.themeOptionButtons) {
             button.visible = theme;
         }
+        // 只有选中 custom 主题时才显示配置按钮
+        customThemeConfigButton.visible = theme && "custom".equals(selectedThemeId);
     }
 
     /** 闁告帒娲﹀畷鏌ュ礆閻楀牆鐦归悗?Tab闁挎稑鐭傞崳鍝ョ磾椤旂晫娉婇柛鏂诲妼閼荤喖宕氶柨瀣厐闁硅矇鍌涱偨闁告瑯鍨甸～鍡涘箑瑜嬮埀?*/
@@ -691,6 +702,12 @@ public class NeoTabConfigScreen extends Screen {
             button.setY(layout.toScreenY(layout.themeSelectorY() + THEME_LIST_INSET + i * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP)));
             button.setWidth(layout.themeSelectorWidth() - THEME_LIST_INSET * 2);
         }
+        // 自定义主题配置按钮（放在主题选择器下方）
+        int configButtonY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
+        customThemeConfigButton.setX(layout.left() + THEME_LIST_INSET);
+        customThemeConfigButton.setY(layout.toScreenY(configButtonY));
+        customThemeConfigButton.setWidth(layout.themeSelectorWidth() - THEME_LIST_INSET * 2);
+        
         placeScrollableWidget(this.footerTpsEnabled,     layout.footerFirstColumnX(),  layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerMsptEnabled,    layout.footerSecondColumnX(), layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerOnlineEnabled,  layout.footerThirdColumnX(),  layout.toScreenY(layout.footerRowY()));
