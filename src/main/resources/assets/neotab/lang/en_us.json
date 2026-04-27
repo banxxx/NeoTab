@@ -29,6 +29,7 @@
   "screen.neotab.theme.tab_theme.tooltip": "Switch the visual theme of the tab list.",
   "screen.neotab.theme.vanilla": "Vanilla",
   "screen.neotab.theme.custom": "Custom",
+  "screen.neotab.color_picker.title": "Choose Color",
   "screen.neotab.list.better_ping": "Better Ping Display",
   "screen.neotab.list.better_ping.tooltip": "When enabled, ping text changes color based on latency.",
   "screen.neotab.list.online_duration": "Online Duration Display",
