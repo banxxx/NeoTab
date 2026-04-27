@@ -147,13 +147,18 @@ public abstract class PlayerTabOverlayMixin {
     private void neotab$redirectTabBackgroundFill(GuiGraphics guiGraphics, int minX, int minY, int maxX, int maxY, int color) {
         var config = NeoTabClientState.getCurrentConfig();
         TabTheme theme = TabThemeRegistry.get(config.tabTheme());
-        if (!theme.isVanilla() && color == Integer.MIN_VALUE && theme.backgroundColor() != 0) {
+        
+        // 如果是自定义主题，从配置文件读取背景颜色
+        if (!theme.isVanilla() && "custom".equals(theme.id()) && color == Integer.MIN_VALUE) {
+            com.poso.neotab.theme.CustomThemeConfig themeConfig = com.poso.neotab.theme.CustomThemeManager.get();
+            color = themeConfig.getBackgroundColor();
+        } else if (!theme.isVanilla() && color == Integer.MIN_VALUE && theme.backgroundColor() != 0) {
             color = theme.backgroundColor();
         }
         
         // 捕获 TAB 背景的实际边界（用于后续绘制边框）
         // Integer.MIN_VALUE 是原版 TAB 背景的颜色标识
-        if (color == Integer.MIN_VALUE || (!theme.isVanilla() && theme.backgroundColor() != 0)) {
+        if (color == Integer.MIN_VALUE || (!theme.isVanilla() && (theme.backgroundColor() != 0 || "custom".equals(theme.id())))) {
             // 更新边界：取所有背景矩形的最大范围
             if (tabBackgroundLeft == -1 || minX < tabBackgroundLeft) {
                 tabBackgroundLeft = minX;
@@ -550,50 +555,64 @@ public abstract class PlayerTabOverlayMixin {
     }
 
     private void neotab$drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
-        // 定义增强版莫奈色系（提高饱和度和亮度，让动画更明显）
-        int[] rainbowColors = {
-            0xFFFF9999,  // 增强莫奈粉红
-            0xFFFFCC99,  // 增强莫奈杏色
-            0xFFFFFF99,  // 增强莫奈米黄
-            0xFF99FFCC,  // 增强莫奈薄荷绿
-            0xFF99DDFF,  // 增强莫奈天蓝
-            0xFF9999FF,  // 增强莫奈淡紫
-            0xFFCC99FF   // 增强莫奈紫罗兰
-        };
+        // 从自定义主题配置加载颜色
+        com.poso.neotab.theme.CustomThemeConfig themeConfig = com.poso.neotab.theme.CustomThemeManager.get();
+        
+        // 获取边框颜色数组
+        java.util.List<Integer> borderColorsList = themeConfig.getBorderColors();
+        int[] rainbowColors = borderColorsList.stream().mapToInt(Integer::intValue).toArray();
+        
+        // 如果没有配置颜色，使用默认值
+        if (rainbowColors.length == 0) {
+            rainbowColors = new int[]{
+                0xFFFF9999,  // 增强莫奈粉红
+                0xFFFFCC99,  // 增强莫奈杏色
+                0xFFFFFF99,  // 增强莫奈米黄
+                0xFF99FFCC,  // 增强莫奈薄荷绿
+                0xFF99DDFF,  // 增强莫奈天蓝
+                0xFF9999FF,  // 增强莫奈淡紫
+                0xFFCC99FF   // 增强莫奈紫罗兰
+            };
+        }
 
         // 获取动画参数
         long currentTime = System.currentTimeMillis();
-        float flowOffset = (currentTime % 5000) / 5000.0F; // 5秒完成一次流动循环
-        float breathe = (float) (0.85F + 0.15F * Math.sin(currentTime / 1000.0)); // 优化呼吸效果：0.85-1.0，避免过暗
+        float flowOffset = themeConfig.isAnimationEnabled() ? (currentTime % 5000) / 5000.0F : 0.0F; // 5秒完成一次流动循环
+        float breathe = themeConfig.isAnimationEnabled() 
+            ? (float) (0.85F + 0.15F * Math.sin(currentTime / 1000.0)) 
+            : 1.0F; // 优化呼吸效果：0.85-1.0，避免过暗
 
         int width = Math.max(1, right - left);
         int height = Math.max(1, bottom - top);
+        
+        // 外边框深度因子（从配置读取，范围 0-100，转换为 0.0-1.0）
+        float outerFactor = themeConfig.getBorderOuterColorFactor() / 100.0F;
 
         // 绘制外层深色边框（上边）
         for (int x = left - 1; x < right + 1; x++) {
             int color = neotab$getAnimatedRainbowColor(x - left + 1, width + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, 0.4F * breathe);
+            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
             guiGraphics.fill(x, top - 1, x + 1, top, darkColor);
         }
 
         // 绘制外层深色边框（下边）
         for (int x = left - 1; x < right + 1; x++) {
             int color = neotab$getAnimatedRainbowColor(x - left + 1, width + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, 0.4F * breathe);
+            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
             guiGraphics.fill(x, bottom, x + 1, bottom + 1, darkColor);
         }
 
         // 绘制外层深色边框（左边）
         for (int y = top - 1; y < bottom + 1; y++) {
             int color = neotab$getAnimatedRainbowColor(y - top + 1, height + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, 0.4F * breathe);
+            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
             guiGraphics.fill(left - 1, y, left, y + 1, darkColor);
         }
 
         // 绘制外层深色边框（右边）
         for (int y = top - 1; y < bottom + 1; y++) {
             int color = neotab$getAnimatedRainbowColor(y - top + 1, height + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, 0.4F * breathe);
+            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
             guiGraphics.fill(right, y, right + 1, y + 1, darkColor);
         }
 
