@@ -121,9 +121,9 @@ public class CustomThemeConfig {
             }
         }
         
-        // 如果颜色数量不足，使用默认值填充
+        // 如果颜色数量为0，添加一个与背景颜色相同的边框色（与背景融为一体）
         if (config.borderColors.isEmpty()) {
-            config.borderColors = defaults().borderColors;
+            config.borderColors.add(config.backgroundColor);
         }
         
         // 外圈颜色因子

@@ -562,17 +562,10 @@ public abstract class PlayerTabOverlayMixin {
         java.util.List<Integer> borderColorsList = themeConfig.getBorderColors();
         int[] rainbowColors = borderColorsList.stream().mapToInt(Integer::intValue).toArray();
         
-        // 如果没有配置颜色，使用默认值
+        // 如果没有配置颜色，使用背景颜色（与背景融为一体，不显示边框）
         if (rainbowColors.length == 0) {
-            rainbowColors = new int[]{
-                0xFFFF9999,  // 增强莫奈粉红
-                0xFFFFCC99,  // 增强莫奈杏色
-                0xFFFFFF99,  // 增强莫奈米黄
-                0xFF99FFCC,  // 增强莫奈薄荷绿
-                0xFF99DDFF,  // 增强莫奈天蓝
-                0xFF9999FF,  // 增强莫奈淡紫
-                0xFFCC99FF   // 增强莫奈紫罗兰
-            };
+            int bgColor = themeConfig.getBackgroundColor();
+            rainbowColors = new int[]{bgColor};
         }
 
         // 获取动画参数
