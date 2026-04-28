@@ -76,6 +76,8 @@ public abstract class PlayerTabOverlayMixin {
     private static final int SECTION_GAP  = 4;
     /** 血量图标与用户名之间的最小保留间距（px），只加在列宽里 */
     private static final int NAME_GAP     = 8;
+    /** TAB边框与内容之间的内边距（px） */
+    private static final int TAB_CONTENT_PADDING = 3;
 
     // ── 列宽缓存 ───────────────────────────────────────────────────────────────
     private int     cachedRequiredSpace       = -1;
@@ -186,15 +188,41 @@ public abstract class PlayerTabOverlayMixin {
 
         var config = NeoTabClientState.getCurrentConfig();
         TabTheme theme = TabThemeRegistry.get(config.tabTheme());
-        if (!"custom".equals(theme.id())) return;
 
-        // 使用捕获的实际背景边界绘制边框
-        if (tabBackgroundLeft != -1 && tabBackgroundTop != -1 && 
+        if (tabBackgroundLeft != -1 && tabBackgroundTop != -1 &&
             tabBackgroundRight != -1 && tabBackgroundBottom != -1) {
-            neotab$drawRainbowBorder(guiGraphics, tabBackgroundLeft, tabBackgroundTop, 
-                                     tabBackgroundRight, tabBackgroundBottom);
+
+            int pl = tabBackgroundLeft   - TAB_CONTENT_PADDING;
+            int pt = tabBackgroundTop    - TAB_CONTENT_PADDING;
+            int pr = tabBackgroundRight  + TAB_CONTENT_PADDING;
+            int pb = tabBackgroundBottom + TAB_CONTENT_PADDING;
+
+            // 用背景色填充四条 padding 边带，使间距区域有背景色而非透明
+            int bgColor;
+            if ("custom".equals(theme.id())) {
+                bgColor = com.poso.neotab.theme.CustomThemeManager.get().getBackgroundColor();
+            } else if (!theme.isVanilla() && theme.backgroundColor() != 0) {
+                bgColor = theme.backgroundColor();
+            } else {
+                // 原版背景色（半透明黑色）
+                bgColor = Integer.MIN_VALUE; // 0x80000000
+            }
+
+            // 上边带
+            guiGraphics.fill(pl, pt, pr, tabBackgroundTop, bgColor);
+            // 下边带
+            guiGraphics.fill(pl, tabBackgroundBottom, pr, pb, bgColor);
+            // 左边带（不含上下角，已由上下边带覆盖）
+            guiGraphics.fill(pl, tabBackgroundTop, tabBackgroundLeft, tabBackgroundBottom, bgColor);
+            // 右边带
+            guiGraphics.fill(tabBackgroundRight, tabBackgroundTop, pr, tabBackgroundBottom, bgColor);
+
+            // 自定义主题额外绘制彩虹边框
+            if ("custom".equals(theme.id())) {
+                neotab$drawRainbowBorder(guiGraphics, pl, pt, pr, pb);
+            }
         }
-        
+
         // 重置边界缓存，为下一帧做准备
         tabBackgroundLeft = -1;
         tabBackgroundTop = -1;
