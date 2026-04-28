@@ -57,5 +57,11 @@
   "screen.neotab.footer.tps": "TPS",
   "screen.neotab.footer.mspt": "MSPT",
   "screen.neotab.footer.online": "Online",
-  "tab.neotab.footer.online": "Online: %s"
+  "tab.neotab.footer.online": "Online: %s",
+
+  "screen.neotab.section.layout": "Layout Columns",
+  "screen.neotab.layout.columns": "Column Count: %s",
+  "screen.neotab.layout.columns.tooltip": "Number of columns shown in the tab list (1-5). When players exceed the capacity, pagination is used. Hotkey: TAB+Left/Right arrow keys to navigate pages.",
+  "screen.neotab.layout.rows": "Rows Per Column: %s",
+  "screen.neotab.layout.rows.tooltip": "Number of player rows per column. When all players exceed the total capacity (columns × rows), the tab list will paginate. Hotkey: TAB+Left/Right arrow keys to navigate pages."
 }

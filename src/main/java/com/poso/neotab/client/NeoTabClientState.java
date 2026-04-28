@@ -24,6 +24,17 @@ public final class NeoTabClientState {
     /** TAB 列表是否被固定常显（Tab+右键触发）。 */
     private static boolean tabPinned = false;
 
+    /** 当前分页页码（0-based）。 */
+    private static int currentPage = 0;
+    /** 当前渲染帧的总页数（由 mixin 每帧更新）。 */
+    private static int totalPages  = 1;
+
+    /** 上一帧渲染的 TAB 背景边界（含 padding），用于翻页箭头点击检测。 */
+    private static int tabBoundsLeft   = -1;
+    private static int tabBoundsTop    = -1;
+    private static int tabBoundsRight  = -1;
+    private static int tabBoundsBottom = -1;
+
     private NeoTabClientState() {
     }
 
@@ -67,20 +78,70 @@ public final class NeoTabClientState {
         onlineDurations.clear();
         playerHealths.clear();
         playerMaxHealths.clear();
-        tabPinned = false;
+        tabPinned   = false;
+        currentPage = 0;
+        totalPages  = 1;
     }
 
-    public static boolean isTabPinned() {
-        return tabPinned;
-    }
-
-    public static void setTabPinned(boolean pinned) {
-        tabPinned = pinned;
-    }
-
+    public static boolean isTabPinned() { return tabPinned; }
+    public static void setTabPinned(boolean pinned) { tabPinned = pinned; }
     /** 切换固定状态，返回切换后的值。 */
-    public static boolean toggleTabPinned() {
-        tabPinned = !tabPinned;
-        return tabPinned;
+    public static boolean toggleTabPinned() { tabPinned = !tabPinned; return tabPinned; }
+
+    public static int getCurrentPage()  { return currentPage; }
+    public static int getTotalPages()   { return totalPages; }
+
+    public static void setCurrentPage(int page) {
+        currentPage = Math.max(0, Math.min(page, totalPages - 1));
+    }
+
+    public static void setTotalPages(int pages) {
+        totalPages  = Math.max(1, pages);
+        currentPage = Math.max(0, Math.min(currentPage, totalPages - 1));
+    }
+
+    public static void nextPage() { setCurrentPage(currentPage + 1); }
+    public static void prevPage() { setCurrentPage(currentPage - 1); }
+
+    public static void setTabBounds(int left, int top, int right, int bottom) {
+        tabBoundsLeft   = left;
+        tabBoundsTop    = top;
+        tabBoundsRight  = right;
+        tabBoundsBottom = bottom;
+    }
+
+    public static int getTabBoundsLeft()   { return tabBoundsLeft; }
+    public static int getTabBoundsTop()    { return tabBoundsTop; }
+    public static int getTabBoundsRight()  { return tabBoundsRight; }
+    public static int getTabBoundsBottom() { return tabBoundsBottom; }
+
+    /**
+     * 检测鼠标点击是否在翻页箭头区域内，如果是则翻页并返回 true。
+     * 箭头区域：左侧 [left, centerY±8]，右侧 [right-10, centerY±8]
+     */
+    public static boolean handlePageArrowClick(double mouseX, double mouseY) {
+        if (tabBoundsLeft == -1 || totalPages <= 1) return false;
+        int arrowW = 10;
+        int arrowH = 16;
+        int centerY = (tabBoundsTop + tabBoundsBottom) / 2;
+        int arrowY  = centerY - arrowH / 2;
+
+        // 左箭头
+        if (currentPage > 0) {
+            int ax = tabBoundsLeft + 3;
+            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+                prevPage();
+                return true;
+            }
+        }
+        // 右箭头
+        if (currentPage < totalPages - 1) {
+            int ax = tabBoundsRight - 3 - arrowW;
+            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+                nextPage();
+                return true;
+            }
+        }
+        return false;
     }
 }

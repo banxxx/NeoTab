@@ -42,6 +42,7 @@ public class NeoTabConfigScreen extends Screen {
     private static final int TITLE_INPUT_HEIGHT      = 60;   // 锟?40闁挎稑鑻·鍐礉?1/2
     private static final int MULTILINE_INPUT_HEIGHT  = 60;   // 锟?40闁挎稑鑻·鍐礉?1/2
     private static final int TOGGLE_WIDTH            = 56;
+    private static final int LAYOUT_BUTTON_WIDTH     = 80;  // 布局按钮使用更大的宽度
     private static final int THEME_OPTION_HEIGHT     = 20;
     private static final int THEME_OPTION_GAP        = 4;
     private static final int THEME_LIST_INSET        = 4;
@@ -94,6 +95,9 @@ public class NeoTabConfigScreen extends Screen {
     private final List<Button> themeOptionButtons = new ArrayList<>();
     private final List<String> themeOptionIds = new ArrayList<>();
     private String selectedThemeId = "vanilla";
+    // 布局分列配置组件
+    private Button layoutColumnsButton;
+    private Button layoutRowsButton;
     // 自定义主题配置组件
     private Button customBackgroundColorButton;  // 背景颜色按钮（可选中）
     private Button customBorderOuterFactorButton;  // 外边框深度按钮
@@ -150,6 +154,40 @@ public class NeoTabConfigScreen extends Screen {
         this.titleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.titleEnabled()));
         this.healthDisplayEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.healthDisplayEnabled()));
         this.healthDisplayMode = addRenderableWidget(newHealthModeButton(layout.toggleX(), initialConfig.healthDisplayMode()));
+        // 布局分列配置按钮 - 并排显示，无文字标签
+        com.poso.neotab.config.TabLayoutConfig layoutCfg = com.poso.neotab.config.TabLayoutConfig.get();
+        this.layoutColumnsButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()),
+                button -> {
+                    com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
+                    int next = cfg.getColumns() % com.poso.neotab.config.TabLayoutConfig.MAX_COLUMNS + 1;
+                    cfg.setColumns(next);
+                    com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                    button.setMessage(Component.translatable("screen.neotab.layout.columns", next));
+                })
+            .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
+            .build());
+        this.layoutRowsButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()),
+                button -> {
+                    com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
+                    // 循环：5 → 10 → 15 → 20 → 25 → 30 → 40 → 5
+                    int cur = cfg.getRowsPerColumn();
+                    int next = switch (cur) {
+                        case 5  -> 10;
+                        case 10 -> 15;
+                        case 15 -> 20;
+                        case 20 -> 25;
+                        case 25 -> 30;
+                        case 30 -> 40;
+                        default -> 5;
+                    };
+                    cfg.setRowsPerColumn(next);
+                    com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                    button.setMessage(Component.translatable("screen.neotab.layout.rows", next));
+                })
+            .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
+            .build());
         for (String themeId : TabThemeRegistry.ids()) {
             Button optionButton = addRenderableWidget(Button.builder(
                     Component.translatable("screen.neotab.theme." + themeId),
@@ -323,6 +361,8 @@ public class NeoTabConfigScreen extends Screen {
         footerOnlineEnabled.visible   = page;
         // Theme tab widgets
         healthDisplayMode.visible     = theme;
+        if (layoutColumnsButton != null) layoutColumnsButton.visible = theme;
+        if (layoutRowsButton    != null) layoutRowsButton.visible    = theme;
         for (Button button : this.themeOptionButtons) {
             button.visible = theme;
         }
@@ -711,6 +751,11 @@ public class NeoTabConfigScreen extends Screen {
                     Component.translatable("screen.neotab.section.health"),
                     layout.left(), layout.toScreenY(layout.healthSectionHeaderY()), layout.right());
             drawSettingRow(g, Component.translatable("screen.neotab.theme.health_mode"), layout.healthModeLabelBounds(), mouseX, mouseY);
+
+            // 布局分列section
+            AEStyleRenderer.drawSectionHeader(g, this.font,
+                    Component.translatable("screen.neotab.section.layout"),
+                    layout.left(), layout.toScreenY(layout.layoutSectionHeaderY()), layout.right());
             
             // 如果选中自定义主题，渲染分类标题
             if ("custom".equals(selectedThemeId)) {
@@ -782,6 +827,8 @@ public class NeoTabConfigScreen extends Screen {
                     }
                 } else if (button == customBorderOuterFactorButton || button == addCustomBorderColorButton || button == resetToDefaultButton || button == resetConfirmButton || button == resetCancelButton) {
                     // 使用 AE 风格渲染其他按钮（包括重置按钮和确认/取消按钮）
+                    renderAEButton(g, button, mouseX, mouseY);
+                } else if (button == layoutColumnsButton || button == layoutRowsButton) {
                     renderAEButton(g, button, mouseX, mouseY);
                 } else {
                     r.render(g, mouseX, mouseY, partialTick);
@@ -1002,7 +1049,6 @@ public class NeoTabConfigScreen extends Screen {
         } else if (activeTab == ConfigTab.THEME) {
             if (layout.healthModeLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.theme.health_mode.tooltip"));
-            // 移除TAB主题的tooltip
         }
         return null;
     }
@@ -1042,6 +1088,9 @@ public class NeoTabConfigScreen extends Screen {
         placeScrollableWidget(this.footerCustomInput,    layout.left(),              layout.toScreenY(layout.footerCustomInputY()));
         // THEME tab 闁硅矇鍌涱偨
         placeScrollableWidget(this.healthDisplayMode,    layout.toggleX(),           layout.toScreenY(layout.healthModeRowY()));
+        // 布局分列按钮 - 并排显示
+        if (layoutColumnsButton != null) placeScrollableWidget(layoutColumnsButton, layout.left(), layout.toScreenY(layout.layoutButtonsY()));
+        if (layoutRowsButton    != null) placeScrollableWidget(layoutRowsButton,    layout.left() + LAYOUT_BUTTON_WIDTH + 10, layout.toScreenY(layout.layoutButtonsY()));
         for (int i = 0; i < this.themeOptionButtons.size(); i++) {
             Button button = this.themeOptionButtons.get(i);
             button.setX(layout.left() + THEME_LIST_INSET);
@@ -1391,13 +1440,17 @@ public class NeoTabConfigScreen extends Screen {
         int healthSectionHeaderY = customConfigBaseY + customConfigHeight + SECTION_GAP;
         int healthModeRowY       = healthSectionHeaderY + SECTION_HEADER_HEIGHT;
 
+        // 布局分列section（在血量显示section下面）
+        int layoutSectionHeaderY = healthModeRowY + ROW_HEIGHT + SECTION_GAP;
+        int layoutButtonsY       = layoutSectionHeaderY + SECTION_HEADER_HEIGHT;  // 直接放按钮，无文字标签
+
         // Content height for the active tab
         int contentHeight;
         if (activeTab == ConfigTab.PAGE_CONFIG) {
             contentHeight = footerRowY + ROW_HEIGHT;
         } else {
-            // Theme tab: 主题选择器 + 自定义配置（如有）+ 血量显示section
-            contentHeight = healthModeRowY + ROW_HEIGHT;
+            // Theme tab: 主题选择器 + 自定义配置（如有）+ 血量显示section + 布局分列section
+            contentHeight = layoutButtonsY + INPUT_HEIGHT;
         }
         int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
 
@@ -1426,6 +1479,7 @@ public class NeoTabConfigScreen extends Screen {
             tabBarX,
             themeSectionHeaderY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
             healthSectionHeaderY, healthModeRowY,
+            layoutSectionHeaderY, layoutButtonsY,
             labelBounds(Component.translatable("screen.neotab.top.title"),        left, viewportTop - this.scrollOffset + topTitleRowY,       labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.top.content"),      left, viewportTop - this.scrollOffset + topContentRowY,     labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.list.better_ping"), left, viewportTop - this.scrollOffset + betterPingRowY,     labelWidth, this.font),
@@ -1469,6 +1523,7 @@ public class NeoTabConfigScreen extends Screen {
         int tabBarX,
         int themeSectionHeaderY, int themeSelectorY, int themeSelectorWidth, int themeSelectorHeight,
         int healthSectionHeaderY, int healthModeRowY,
+        int layoutSectionHeaderY, int layoutButtonsY,
         LabelBounds topTitleLabelBounds, LabelBounds topContentLabelBounds,
         LabelBounds betterPingLabelBounds, LabelBounds onlineDurationLabelBounds,
         LabelBounds titleLabelBounds, LabelBounds healthDisplayLabelBounds,

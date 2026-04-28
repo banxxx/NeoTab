@@ -36,6 +36,8 @@ public abstract class GuiMixin {
 
     /** 上一帧右键是否已按下，用于边沿检测防止连续触发。 */
     private boolean neotab$wasRightClickDown = false;
+    /** 上一帧左键是否已按下，用于翻页点击边沿检测。 */
+    private boolean neotab$wasLeftClickDown = false;
 
     @Inject(method = "renderTabList", at = @At("HEAD"), cancellable = true)
     private void neotab$renderTabList(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo callbackInfo) {
@@ -61,6 +63,22 @@ public abstract class GuiMixin {
         } else {
             neotab$wasRightClickDown = false;
         }
+
+        // 检测左键点击翻页箭头
+        boolean leftDown = this.minecraft.options.keyAttack.isDown();
+        if (leftDown && !neotab$wasLeftClickDown) {
+            int bl = com.poso.neotab.client.NeoTabClientState.getTabBoundsLeft();
+            if (bl != -1 && com.poso.neotab.client.NeoTabClientState.getTotalPages() > 1) {
+                double mx = this.minecraft.mouseHandler.xpos()
+                        * this.minecraft.getWindow().getGuiScaledWidth()
+                        / this.minecraft.getWindow().getScreenWidth();
+                double my = this.minecraft.mouseHandler.ypos()
+                        * this.minecraft.getWindow().getGuiScaledHeight()
+                        / this.minecraft.getWindow().getScreenHeight();
+                com.poso.neotab.client.NeoTabClientState.handlePageArrowClick(mx, my);
+            }
+        }
+        neotab$wasLeftClickDown = leftDown;
         
         boolean shouldHide = !this.minecraft.options.keyPlayerList.isDown()
             && !com.poso.neotab.client.NeoTabClientState.isTabPinned()

@@ -57,5 +57,11 @@
   "screen.neotab.footer.tps": "TPS 信息",
   "screen.neotab.footer.mspt": "MSPT 信息",
   "screen.neotab.footer.online": "在线人数",
-  "tab.neotab.footer.online": "在线人数: %s"
+  "tab.neotab.footer.online": "在线人数: %s",
+
+  "screen.neotab.section.layout": "布局分列",
+  "screen.neotab.layout.columns": "展示列数: %s",
+  "screen.neotab.layout.columns.tooltip": "TAB 列表显示的列数（1-5）。当玩家数超过每页容量时，将自动分页显示。快捷键：TAB+左/右箭头键翻页。",
+  "screen.neotab.layout.rows": "展示行数: %s",
+  "screen.neotab.layout.rows.tooltip": "每列显示的玩家行数。当总玩家数超过列数×行数时，TAB 列表将分页显示，左右边框出现翻页箭头。快捷键：TAB+左/右箭头键翻页。"
 }

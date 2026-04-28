@@ -1,6 +1,7 @@
 package com.poso.neotab.mixin.client;
 
 import com.poso.neotab.client.NeoTabClientState;
+import com.poso.neotab.config.TabLayoutConfig;
 import com.poso.neotab.theme.TabTheme;
 import com.poso.neotab.theme.TabThemeRegistry;
 import net.minecraft.ChatFormatting;
@@ -27,6 +28,7 @@ import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import javax.annotation.Nullable;
@@ -78,6 +80,10 @@ public abstract class PlayerTabOverlayMixin {
     private static final int NAME_GAP     = 8;
     /** TAB边框与内容之间的内边距（px） */
     private static final int TAB_CONTENT_PADDING = 3;
+    /** 翻页箭头区域宽度（px），当需要分页时在左右两侧预留 */
+    private static final int PAGE_ARROW_W = 10;
+    /** 翻页箭头区域高度（px） */
+    private static final int PAGE_ARROW_H = 16;
 
     // ── 列宽缓存 ───────────────────────────────────────────────────────────────
     private int     cachedRequiredSpace       = -1;
@@ -100,6 +106,12 @@ public abstract class PlayerTabOverlayMixin {
     private int tabBackgroundTop    = -1;
     private int tabBackgroundRight  = -1;
     private int tabBackgroundBottom = -1;
+
+    // ── 分页状态 ───────────────────────────────────────────────────────────────
+    /** 当前帧是否需要分页（玩家数 > 每页容量）。 */
+    private boolean neotab$needsPagination = false;
+    /** 当前帧渲染的总玩家数（用于计算总页数）。 */
+    private int neotab$totalPlayerCount = 0;
 
     // ─────────────────────────────────────────────────────────────────────────
     // 主题背景注入
@@ -136,6 +148,46 @@ public abstract class PlayerTabOverlayMixin {
             // 全屏覆盖一层主题背景色（测试用，后续精确化）
             g.fill(0, 0, screenWidth, this.minecraft.getWindow().getGuiScaledHeight(), theme.backgroundColor());
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 分页：拦截玩家列表，只返回当前页的子集
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Redirect(
+        method = "render",
+        at = @At(value = "INVOKE",
+                 target = "Lnet/minecraft/client/gui/components/PlayerTabOverlay;getPlayerInfos()Ljava/util/List;")
+    )
+    private List<PlayerInfo> neotab$filterPlayersForPage(PlayerTabOverlay self) {
+        // 重新实现 getPlayerInfos() 的逻辑，避免 shadow private 方法
+        List<PlayerInfo> all = this.minecraft.player.connection.getListedOnlinePlayers()
+                .stream()
+                .sorted(PLAYER_COMPARATOR)
+                .limit(80L)
+                .collect(java.util.stream.Collectors.toList());
+
+        TabLayoutConfig layout = TabLayoutConfig.get();
+        int perPage = layout.playersPerPage();
+
+        neotab$totalPlayerCount = all.size();
+        int totalPages = Math.max(1, (all.size() + perPage - 1) / perPage);
+        NeoTabClientState.setTotalPages(totalPages);
+        neotab$needsPagination = totalPages > 1;
+
+        if (!neotab$needsPagination) {
+            return all;
+        }
+
+        int page = NeoTabClientState.getCurrentPage();
+        int from = page * perPage;
+        int to   = Math.min(from + perPage, all.size());
+        if (from >= all.size()) {
+            NeoTabClientState.setCurrentPage(totalPages - 1);
+            from = (totalPages - 1) * perPage;
+            to   = all.size();
+        }
+        return all.subList(from, to);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -179,6 +231,21 @@ public abstract class PlayerTabOverlayMixin {
         guiGraphics.fill(minX, minY, maxX, maxY, color);
     }
 
+    /**
+     * 拦截原版列数计算循环中的硬编码常量 20（每列最大行数），
+     * 替换为用户配置的展示行数，使原版的列数反推结果恰好等于用户配置的列数。
+     *
+     * 原版逻辑：while (rows > 20) { ++columns; rows = ceil(playerCount / columns); }
+     * 当 playerCount = displayColumns * displayRows，maxRows = displayRows 时，
+     * 循环在 columns = displayColumns 处停止，结果完全符合预期。
+     */
+    @ModifyConstant(method = "render", constant = @Constant(intValue = 20))
+    private int neotab$adjustMaxRowsPerColumn(int original) {
+        TabLayoutConfig layout = TabLayoutConfig.get();
+        int displayRows = layout.getRowsPerColumn(); // 用户配置的每列行数
+        return displayRows > 0 ? displayRows : original;
+    }
+
     @Inject(method = "render", at = @At("TAIL"))
     private void neotab$renderRainbowBorder(
             GuiGraphics guiGraphics, int width,
@@ -192,9 +259,12 @@ public abstract class PlayerTabOverlayMixin {
         if (tabBackgroundLeft != -1 && tabBackgroundTop != -1 &&
             tabBackgroundRight != -1 && tabBackgroundBottom != -1) {
 
-            int pl = tabBackgroundLeft   - TAB_CONTENT_PADDING;
+            // 如果需要分页，在左右两侧额外预留箭头空间
+            int extraH = neotab$needsPagination ? PAGE_ARROW_W + TAB_CONTENT_PADDING : 0;
+
+            int pl = tabBackgroundLeft   - TAB_CONTENT_PADDING - extraH;
             int pt = tabBackgroundTop    - TAB_CONTENT_PADDING;
-            int pr = tabBackgroundRight  + TAB_CONTENT_PADDING;
+            int pr = tabBackgroundRight  + TAB_CONTENT_PADDING + extraH;
             int pb = tabBackgroundBottom + TAB_CONTENT_PADDING;
 
             // 用背景色填充四条 padding 边带，使间距区域有背景色而非透明
@@ -204,15 +274,14 @@ public abstract class PlayerTabOverlayMixin {
             } else if (!theme.isVanilla() && theme.backgroundColor() != 0) {
                 bgColor = theme.backgroundColor();
             } else {
-                // 原版背景色（半透明黑色）
-                bgColor = Integer.MIN_VALUE; // 0x80000000
+                bgColor = Integer.MIN_VALUE; // 原版背景色 0x80000000
             }
 
             // 上边带
             guiGraphics.fill(pl, pt, pr, tabBackgroundTop, bgColor);
             // 下边带
             guiGraphics.fill(pl, tabBackgroundBottom, pr, pb, bgColor);
-            // 左边带（不含上下角，已由上下边带覆盖）
+            // 左边带
             guiGraphics.fill(pl, tabBackgroundTop, tabBackgroundLeft, tabBackgroundBottom, bgColor);
             // 右边带
             guiGraphics.fill(tabBackgroundRight, tabBackgroundTop, pr, tabBackgroundBottom, bgColor);
@@ -221,12 +290,19 @@ public abstract class PlayerTabOverlayMixin {
             if ("custom".equals(theme.id())) {
                 neotab$drawRainbowBorder(guiGraphics, pl, pt, pr, pb);
             }
+
+            // 绘制翻页箭头
+            if (neotab$needsPagination) {
+                neotab$drawPageArrows(guiGraphics, pl, pt, pr, pb);
+                // 保存边界供点击检测使用
+                NeoTabClientState.setTabBounds(pl, pt, pr, pb);
+            }
         }
 
         // 重置边界缓存，为下一帧做准备
-        tabBackgroundLeft = -1;
-        tabBackgroundTop = -1;
-        tabBackgroundRight = -1;
+        tabBackgroundLeft   = -1;
+        tabBackgroundTop    = -1;
+        tabBackgroundRight  = -1;
         tabBackgroundBottom = -1;
     }
 
@@ -580,6 +656,58 @@ public abstract class PlayerTabOverlayMixin {
         else if (latency < 200) return ChatFormatting.YELLOW.getColor() != null ? ChatFormatting.YELLOW.getColor() : 0xFFFF55;
         else if (latency < 350) return ChatFormatting.GOLD.getColor()   != null ? ChatFormatting.GOLD.getColor()   : 0xFFAA00;
         else                    return ChatFormatting.RED.getColor()    != null ? ChatFormatting.RED.getColor()    : 0xFF5555;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 翻页箭头绘制
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 绘制翻页箭头（左右两侧居中）。
+     * 左箭头：当前页 > 0 时显示
+     * 右箭头：当前页 < 总页数-1 时显示
+     */
+    private void neotab$drawPageArrows(GuiGraphics g, int left, int top, int right, int bottom) {
+        int centerY = (top + bottom) / 2;
+        int arrowY  = centerY - PAGE_ARROW_H / 2;
+
+        int page  = NeoTabClientState.getCurrentPage();
+        int total = NeoTabClientState.getTotalPages();
+
+        // 左箭头（上一页）
+        if (page > 0) {
+            int arrowX = left + TAB_CONTENT_PADDING;
+            neotab$drawLeftArrow(g, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H, 0xFFFFFFFF);
+        }
+
+        // 右箭头（下一页）
+        if (page < total - 1) {
+            int arrowX = right - TAB_CONTENT_PADDING - PAGE_ARROW_W;
+            neotab$drawRightArrow(g, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H, 0xFFFFFFFF);
+        }
+    }
+
+    /** 绘制左箭头（<），实心三角形 */
+    private void neotab$drawLeftArrow(GuiGraphics g, int x, int y, int w, int h, int color) {
+        // 三角形：右边两个顶点，左边尖端
+        // 从右向左逐列绘制，每列高度递减
+        int halfH = h / 2;
+        for (int col = 0; col < w; col++) {
+            int span = (col + 1) * halfH / w;
+            int midY = y + halfH;
+            g.fill(x + w - 1 - col, midY - span, x + w - col, midY + span + 1, color);
+        }
+    }
+
+    /** 绘制右箭头（>），实心三角形 */
+    private void neotab$drawRightArrow(GuiGraphics g, int x, int y, int w, int h, int color) {
+        // 从左向右逐列绘制，每列高度递减
+        int halfH = h / 2;
+        for (int col = 0; col < w; col++) {
+            int span = (col + 1) * halfH / w;
+            int midY = y + halfH;
+            g.fill(x + col, midY - span, x + col + 1, midY + span + 1, color);
+        }
     }
 
     private void neotab$drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
