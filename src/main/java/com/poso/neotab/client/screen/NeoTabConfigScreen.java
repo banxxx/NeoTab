@@ -571,6 +571,38 @@ public class NeoTabConfigScreen extends Screen {
             drawSettingRow(g, Component.translatable("screen.neotab.theme.health_mode"), layout.healthModeLabelBounds(), mouseX, mouseY);
             drawSettingRow(g, Component.translatable("screen.neotab.theme.tab_theme"),   layout.themeSelectLabelBounds(), mouseX, mouseY);
             renderThemeSelectorBackground(g, layout);
+            
+            // 如果选中自定义主题，渲染分类标题
+            if ("custom".equals(selectedThemeId)) {
+                int customConfigStartY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
+                int customConfigY = customConfigStartY + 15; // 分类标题间距
+                
+                // 动画分类标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.animation"), 
+                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
+                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
+                
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过动画按钮 + 分类间距
+                
+                // 外边框分类标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.outer_border"), 
+                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
+                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
+                
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过外边框按钮 + 分类间距
+                
+                // 背景分类标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.background"), 
+                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
+                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
+                
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过背景按钮 + 分类间距
+                
+                // 边框分类标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.border"), 
+                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
+                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
+            }
         }
         // Render scrollable widgets inside the clipped viewport
         renderScrollableWidgets(g, mouseX, mouseY, partialTick);
@@ -878,21 +910,8 @@ public class NeoTabConfigScreen extends Screen {
         // 计算按钮宽度（只占左半边）
         int customButtonWidth = (layout.themeSelectorWidth() - THEME_LIST_INSET * 2 - 10) / 2;
         
-        // 背景颜色按钮
-        if (customBackgroundColorButton != null) {
-            customBackgroundColorButton.setX(layout.left() + THEME_LIST_INSET);
-            customBackgroundColorButton.setY(layout.toScreenY(customConfigY));
-            customBackgroundColorButton.setWidth(customButtonWidth);
-        }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
-        
-        // 外边框深度按钮
-        if (customBorderOuterFactorButton != null) {
-            customBorderOuterFactorButton.setX(layout.left() + THEME_LIST_INSET);
-            customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY));
-            customBorderOuterFactorButton.setWidth(customButtonWidth);
-        }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+        // === 动画分类 ===
+        customConfigY += 15; // 分类标题间距
         
         // 动画开关
         if (customAnimationToggle != null) {
@@ -900,7 +919,32 @@ public class NeoTabConfigScreen extends Screen {
             customAnimationToggle.setY(layout.toScreenY(customConfigY));
             customAnimationToggle.setWidth(customButtonWidth);
         }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 额外间距
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        
+        // === 外边框分类 ===
+        customConfigY += 15; // 分类标题间距
+        
+        // 外边框深度按钮
+        if (customBorderOuterFactorButton != null) {
+            customBorderOuterFactorButton.setX(layout.left() + THEME_LIST_INSET);
+            customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY));
+            customBorderOuterFactorButton.setWidth(customButtonWidth);
+        }
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        
+        // === 背景分类 ===
+        customConfigY += 15; // 分类标题间距
+        
+        // 背景颜色按钮
+        if (customBackgroundColorButton != null) {
+            customBackgroundColorButton.setX(layout.left() + THEME_LIST_INSET);
+            customBackgroundColorButton.setY(layout.toScreenY(customConfigY));
+            customBackgroundColorButton.setWidth(customButtonWidth);
+        }
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        
+        // === 边框分类 ===
+        customConfigY += 15; // 分类标题间距
         
         // 嵌入式颜色选择器（放在右侧）
         if (embeddedColorPicker != null) {
@@ -1145,12 +1189,14 @@ public class NeoTabConfigScreen extends Screen {
             // 如果选中 custom 主题，需要为配置组件预留空间
             if ("custom".equals(selectedThemeId)) {
                 contentHeight += THEME_LIST_TOP_GAP;
-                // 背景颜色按钮
-                contentHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
-                // 外边框深度按钮
-                contentHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
-                // 动画开关
-                contentHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
+                // 动画分类标题 + 动画开关
+                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
+                // 外边框分类标题 + 外边框深度按钮
+                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
+                // 背景分类标题 + 背景颜色按钮
+                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
+                // 边框分类标题
+                contentHeight += 15;
                 // 边框颜色按钮列表
                 int borderColorCount = customThemeConfig.getBorderColors().size();
                 contentHeight += borderColorCount * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP);
