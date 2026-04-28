@@ -111,6 +111,8 @@ public class NeoTabConfigScreen extends Screen {
     private com.poso.neotab.theme.CustomThemeConfig customThemeConfig;  // 自定义主题配置
     // 嵌入式颜色选择器
     private ColorPickerWidget embeddedColorPicker;  // 嵌入式颜色选择器（始终显示在右侧）
+    private int cachedColorPickerWidth = 158;   // init() 中计算的实际颜色选择器宽度（含缩放）
+    private int cachedCustomButtonWidth = 60;   // init() 中计算的左侧按钮宽度
     private String currentSelectedColorType = null;  // 当前选中的颜色类型：null, "background", "border_0", "border_1", ...
     private int currentSelectedBorderIndex = -1;  // 当前选中的边框颜色索引
     private ImprovedRichTextMultiLineEditBox footerCustomInput;
@@ -160,7 +162,10 @@ public class NeoTabConfigScreen extends Screen {
                 Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()),
                 button -> {
                     com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
-                    int next = cfg.getColumns() % com.poso.neotab.config.TabLayoutConfig.MAX_COLUMNS + 1;
+                    int current = cfg.getColumns();
+                    int maxColumns = cfg.getMaxColumns();
+                    // 循环递增，超过最大值时回到1
+                    int next = current >= maxColumns ? 1 : current + 1;
                     cfg.setColumns(next);
                     com.poso.neotab.config.TabLayoutConfig.save(cfg);
                     button.setMessage(Component.translatable("screen.neotab.layout.columns", next));
@@ -171,17 +176,25 @@ public class NeoTabConfigScreen extends Screen {
                 Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()),
                 button -> {
                     com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
-                    // 循环：5 → 10 → 15 → 20 → 25 → 30 → 40 → 5
-                    int cur = cfg.getRowsPerColumn();
-                    int next = switch (cur) {
-                        case 5  -> 10;
-                        case 10 -> 15;
-                        case 15 -> 20;
-                        case 20 -> 25;
-                        case 25 -> 30;
-                        case 30 -> 40;
+                    int current = cfg.getRowsPerColumn();
+                    int maxRows = cfg.getMaxRows();
+                    // 循环：5 → 10 → 15 → 20 → 25 → 30 → 35 → 40 → 5
+                    // 但不超过当前最大值
+                    int next = switch (current) {
+                        case 5  -> Math.min(10, maxRows);
+                        case 10 -> Math.min(15, maxRows);
+                        case 15 -> Math.min(20, maxRows);
+                        case 20 -> Math.min(25, maxRows);
+                        case 25 -> Math.min(30, maxRows);
+                        case 30 -> Math.min(35, maxRows);
+                        case 35 -> Math.min(40, maxRows);
+                        case 40 -> 5;
                         default -> 5;
                     };
+                    // 如果next等于current（说明已达到最大值），则回到5
+                    if (next == current && current >= maxRows) {
+                        next = 5;
+                    }
                     cfg.setRowsPerColumn(next);
                     com.poso.neotab.config.TabLayoutConfig.save(cfg);
                     button.setMessage(Component.translatable("screen.neotab.layout.rows", next));
@@ -204,8 +217,28 @@ public class NeoTabConfigScreen extends Screen {
         // 加载自定义主题配置
         this.customThemeConfig = com.poso.neotab.theme.CustomThemeManager.get();
         
-        // 计算按钮宽度（只占左半边）
-        int customButtonWidth = (layout.themeSelectorWidth() - THEME_LIST_INSET * 2 - 10) / 2;
+        // 计算按钮宽度和颜色选择器位置，确保不超出屏幕右边界
+        int availableWidth = layout.themeSelectorWidth() - THEME_LIST_INSET * 2;
+        
+        // 左侧按钮宽度固定为可用宽度的一半（不受颜色选择器影响）
+        int customButtonWidth = Math.max(60, availableWidth / 2);
+        
+        // 颜色选择器只使用按钮右边的剩余空间
+        int colorPickerGap = 10;
+        int pickerStartX = layout.left() + THEME_LIST_INSET + customButtonWidth + colorPickerGap;
+        int contentRightBoundary = layout.left() + layout.themeSelectorWidth() - THEME_LIST_INSET;
+        int spaceForColorPicker = contentRightBoundary - pickerStartX;
+        
+        // 根据可用空间计算颜色选择器的缩放比例
+        int baseColorPickerWidth = 158;  // 基础宽度（scale=1.0时）
+        float maxScale = 1.0f;
+        float minScale = 0.6f;
+        float colorPickerScale = Math.max(minScale, Math.min(maxScale, (float) spaceForColorPicker / baseColorPickerWidth));
+        int scaledColorPickerWidth = (int) (baseColorPickerWidth * colorPickerScale);
+        
+        // 缓存到字段，供 applyWidgetLayout 使用（避免两处计算不一致）
+        this.cachedColorPickerWidth = scaledColorPickerWidth;
+        this.cachedCustomButtonWidth = customButtonWidth;
         
         // 自定义主题配置组件
         // 背景颜色按钮（可选中）
@@ -292,8 +325,9 @@ public class NeoTabConfigScreen extends Screen {
             .bounds(layout.left(), 0, 50, 18)  // 固定宽度50，高度18
             .build());
         
-        // 创建嵌入式颜色选择器（始终显示在右侧）
-        int pickerX = layout.left() + customButtonWidth + 20;  // 左侧按钮宽度 + 间距
+        // 创建嵌入式颜色选择器（使用计算出的缩放比例）
+        // 初始X位置：按钮右边 + gap（applyWidgetLayout 会精确设置）
+        int pickerX = layout.left() + THEME_LIST_INSET + customButtonWidth + colorPickerGap;
         int pickerY = 0;  // 稍后在 applyWidgetLayout 中设置
         this.embeddedColorPicker = new ColorPickerWidget(pickerX, pickerY, this.font, 
             0xFFFFFFFF,  // 默认显示白色，只有选中颜色按钮后才显示对应颜色
@@ -312,7 +346,7 @@ public class NeoTabConfigScreen extends Screen {
                         }
                     }
                 }
-            });
+            }, colorPickerScale);  // 使用计算出的缩放比例
         addRenderableWidget(this.embeddedColorPicker);
         
         // 不默认选中任何颜色
@@ -337,6 +371,9 @@ public class NeoTabConfigScreen extends Screen {
         
         // 初始化边框颜色按钮（在所有组件初始化完成后）
         rebuildCustomBorderColorButtons();
+        
+        // 检查并调整布局配置到当前限制范围内（处理GUI缩放变化）
+        adjustLayoutConfigToCurrentLimits();
         
         clampScroll(layout);
         applyWidgetLayout(layout);
@@ -1020,7 +1057,54 @@ public class NeoTabConfigScreen extends Screen {
             .withValues(HealthDisplayMode.FULL, HealthDisplayMode.COMPACT)
             .withInitialValue(initialValue)
             .displayOnlyValue()
-            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY);
+            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY, (button, newMode) -> {
+                // 当血量显示模式变化时，自动调整布局配置到新的限制范围内
+                adjustLayoutConfigToCurrentLimits();
+            });
+    }
+    
+    /**
+     * 根据当前的GUI缩放和血量显示模式，自动调整布局配置到限制范围内。
+     * 
+     * <p>当限制变小时（GUI缩放变大或血量模式从单独变完整），
+     * 如果当前配置超出新的限制，会自动调整到最大允许值。</p>
+     */
+    private void adjustLayoutConfigToCurrentLimits() {
+        com.poso.neotab.config.TabLayoutConfig layoutCfg = com.poso.neotab.config.TabLayoutConfig.get();
+        
+        // 获取当前的最大限制
+        int maxColumns = layoutCfg.getMaxColumns();
+        int maxRows = layoutCfg.getMaxRows();
+        
+        // 获取当前配置的值
+        int currentColumns = layoutCfg.getColumns();
+        int currentRows = layoutCfg.getRowsPerColumn();
+        
+        // 检查是否需要调整
+        boolean needsAdjust = false;
+        
+        if (currentColumns > maxColumns) {
+            layoutCfg.setColumns(maxColumns);
+            needsAdjust = true;
+        }
+        
+        if (currentRows > maxRows) {
+            layoutCfg.setRowsPerColumn(maxRows);
+            needsAdjust = true;
+        }
+        
+        // 如果有调整，保存配置并更新按钮显示
+        if (needsAdjust) {
+            com.poso.neotab.config.TabLayoutConfig.save(layoutCfg);
+            
+            // 更新按钮文字
+            if (layoutColumnsButton != null) {
+                layoutColumnsButton.setMessage(Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()));
+            }
+            if (layoutRowsButton != null) {
+                layoutRowsButton.setMessage(Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()));
+            }
+        }
     }
 
     private static int themeSelectorHeight(int optionCount) {
@@ -1101,8 +1185,8 @@ public class NeoTabConfigScreen extends Screen {
         int customConfigStartY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
         int customConfigY = customConfigStartY;
         
-        // 计算按钮宽度（只占左半边）
-        int customButtonWidth = (layout.themeSelectorWidth() - THEME_LIST_INSET * 2 - 10) / 2;
+        // 计算按钮宽度（使用 init() 中缓存的值，与颜色选择器宽度保持一致）
+        int customButtonWidth = cachedCustomButtonWidth;
         
         // === 重置默认按钮 ===
         if (resetToDefaultButton != null) {
@@ -1177,10 +1261,31 @@ public class NeoTabConfigScreen extends Screen {
         
         // 嵌入式颜色选择器（放在右侧）
         if (embeddedColorPicker != null) {
-            int pickerX = layout.left() + THEME_LIST_INSET + customButtonWidth + 20;
-            int pickerY = layout.toScreenY(customConfigStartY);
+            int gap = 10; // 与左侧按钮的间距
+            int maxRight = layout.right() - THEME_LIST_INSET;
+            int candidateX = layout.left() + THEME_LIST_INSET + customButtonWidth + gap;
+            boolean fits = (candidateX + cachedColorPickerWidth <= maxRight);
+
+            int pickerX, pickerY, pickerWidth;
+            if (fits) {
+                // 足够并排：放在右侧，位置与重置按钮等顶端对齐
+                pickerX = candidateX;
+                pickerY = layout.toScreenY(customConfigStartY);
+                pickerWidth = cachedColorPickerWidth;
+            } else {
+                // 空间不足：换行，独占一行
+                pickerX = layout.left() + THEME_LIST_INSET;
+                pickerY = layout.toScreenY(customConfigY); // 背景按钮下方
+                int availableWidth = maxRight - pickerX;
+                pickerWidth = Math.min(availableWidth, cachedColorPickerWidth);
+                // 占用一行高度，更新 customConfigY
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+            }
             embeddedColorPicker.setX(pickerX);
             embeddedColorPicker.setY(pickerY);
+            embeddedColorPicker.setWidth(pickerWidth);
+            // 如果 ColorPickerWidget 内部不支持 setWidth，需要后续在渲染中应用缩放；
+            // 可在此处添加缩放因子记录，并在 render 时用 pose.scale 处理。
         }
         
         // 边框颜色按钮列表
@@ -1251,8 +1356,8 @@ public class NeoTabConfigScreen extends Screen {
         Layout layout = buildLayout();
         List<Integer> colors = customThemeConfig.getBorderColors();
         
-        // 计算按钮宽度（只占左半边）
-        int customButtonWidth = (layout.themeSelectorWidth() - THEME_LIST_INSET * 2 - 10) / 2;
+        // 计算按钮宽度（使用 init() 中缓存的值，与颜色选择器宽度保持一致）
+        int customButtonWidth = cachedCustomButtonWidth;
         int colorButtonWidth = customButtonWidth - 25;
         
         // 创建边框颜色按钮
@@ -1353,10 +1458,18 @@ public class NeoTabConfigScreen extends Screen {
      */
     private Layout buildLayout() {
         // Tab 闁哄秴绻楅幑锝嗘叏?X闁挎稒鑹鹃惈鍡涚嵁閺囩喐瀵滄鐐插暱閻櫕绋夐鐐村€甸柨娑樿嫰閸炲鈧湱鎳撶亸顖氼啅閿曚胶鐝堕柛鎰Т缁舵艾锟?TAB_BAR_WIDTH
-        int contentWidth = Math.min(MAX_CONTENT_WIDTH, this.width - CONTENT_SIDE_PADDING - TAB_BAR_WIDTH);
+        // 根据屏幕宽度动态调整内容区域宽度，确保在不同GUI缩放下都能正常显示
+        // 计算可用宽度：屏幕宽度 - 左右边距 - Tab栏宽度 - Tab与内容间距 - 滚动条宽度 - 额外边距
+        int minSidePadding = 16;  // 最小边距
+        int scrollbarAndMargin = SCROLL_TRACK_W + 20;  // 滚动条宽度 + 额外边距
+        int availableWidth = this.width - minSidePadding * 2 - TAB_BAR_WIDTH - TAB_CONTENT_GAP - scrollbarAndMargin;
+        
+        // 内容宽度：在可用宽度和最大宽度之间取较小值
+        int contentWidth = Math.min(MAX_CONTENT_WIDTH, Math.max(200, availableWidth));
         // 闁轰胶绻濈紞瀣锤濡ゅ绀凾ab锟?+ 闁告劕鎳庨鎰板礌閻氬绀嗛悘鐐叉噸锟?
-        int totalWidth = TAB_BAR_WIDTH + TAB_CONTENT_GAP + contentWidth;
-        int blockLeft = (this.width - totalWidth) / 2;
+        // 计算总宽度和居中位置
+        int totalWidth = TAB_BAR_WIDTH + TAB_CONTENT_GAP + contentWidth + scrollbarAndMargin;
+        int blockLeft = Math.max(minSidePadding, (this.width - totalWidth) / 2);
         int tabBarX = blockLeft;
         int left = blockLeft + TAB_BAR_WIDTH + TAB_CONTENT_GAP;
         int right = left + contentWidth;
@@ -1420,11 +1533,18 @@ public class NeoTabConfigScreen extends Screen {
         int customConfigHeight = 0;
         if ("custom".equals(selectedThemeId) && customThemeConfig != null) {
             customConfigHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 重置默认按钮
-            // 注意：确认/取消按钮是浮动的，不占用布局空间
-            
             customConfigHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 动画
             customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 外边框
             customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 背景
+
+            // 判断颜色选择器是否需要换行
+            int customButtonWidth = Math.max(60, (themeSelectorWidth - THEME_LIST_INSET * 2) / 2);
+            int pickerX = left + THEME_LIST_INSET + customButtonWidth + 10;
+            int maxRight = right - THEME_LIST_INSET;
+            if (pickerX + 158 > maxRight) {
+                // 换行将占用额外一行高度
+                customConfigHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+            }
             customConfigHeight += 8; // 边框分类标题
             List<Integer> borderColors = customThemeConfig.getBorderColors();
             if (borderColors != null) {

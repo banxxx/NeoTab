@@ -29,17 +29,29 @@ import java.util.function.Consumer;
  * <p>支持 HSV 色彩空间选择和十六进制输入。</p>
  */
 public class ColorPickerWidget extends AbstractWidget {
-    private static final int HUE_BAR_WIDTH = 12;  // 色相条宽度
-    private static final int SV_PANEL_SIZE = 100;  // 面板尺寸
-    private static final int PREVIEW_SIZE = 20;    // 预览框大小
-    private static final int HEX_INPUT_WIDTH = 70; // 输入框宽度
-    private static final int COMPONENT_GAP = 6;    // 组件间距
-    private static final int ALPHA_BAR_WIDTH = 12; // 透明度条宽度（垂直）
-    private static final int BORDER_PADDING = 8;   // 外边框内边距
-    private static final int HEX_LABEL_WIDTH = 30; // HEX标签宽度
-    // 布局：[SV面板][间距][色相条][间距][预览框+Alpha条]
-    private static final int TOTAL_WIDTH = SV_PANEL_SIZE + COMPONENT_GAP + HUE_BAR_WIDTH + COMPONENT_GAP + Math.max(PREVIEW_SIZE, ALPHA_BAR_WIDTH) + BORDER_PADDING * 2;
-    private static final int TOTAL_HEIGHT = SV_PANEL_SIZE + COMPONENT_GAP + 20 + BORDER_PADDING * 2; // HSV面板 + 间距 + HEX输入框 + 边距
+    private static final int BASE_HUE_BAR_WIDTH = 12;  // 色相条基础宽度
+    private static final int BASE_SV_PANEL_SIZE = 100;  // 面板基础尺寸
+    private static final int BASE_PREVIEW_SIZE = 20;    // 预览框基础大小
+    private static final int BASE_HEX_INPUT_WIDTH = 70; // 输入框基础宽度
+    private static final int BASE_COMPONENT_GAP = 6;    // 组件基础间距
+    private static final int BASE_ALPHA_BAR_WIDTH = 12; // 透明度条基础宽度（垂直）
+    private static final int BASE_BORDER_PADDING = 8;   // 外边框基础内边距
+    private static final int BASE_HEX_LABEL_WIDTH = 30; // HEX标签基础宽度
+    
+    // 缩放比例
+    private final float scale;
+    
+    // 实际尺寸（根据缩放计算）
+    private final int HUE_BAR_WIDTH;
+    private final int SV_PANEL_SIZE;
+    private final int PREVIEW_SIZE;
+    private final int HEX_INPUT_WIDTH;
+    private final int COMPONENT_GAP;
+    private final int ALPHA_BAR_WIDTH;
+    private final int BORDER_PADDING;
+    private final int HEX_LABEL_WIDTH;
+    private final int TOTAL_WIDTH;
+    private final int TOTAL_HEIGHT;
     
     private final Font font;
     private final Consumer<Integer> onColorChanged;
@@ -84,10 +96,33 @@ public class ColorPickerWidget extends AbstractWidget {
     private static final long TEXTURE_UPDATE_INTERVAL_MS = 16;  // 约60fps的更新频率
     
     public ColorPickerWidget(int x, int y, Font font, int initialColor, Consumer<Integer> onColorChanged) {
-        super(x, y, TOTAL_WIDTH, TOTAL_HEIGHT, Component.empty());
+        this(x, y, font, initialColor, onColorChanged, 1.0f);
+    }
+    
+    public ColorPickerWidget(int x, int y, Font font, int initialColor, Consumer<Integer> onColorChanged, float scale) {
+        super(x, y, 0, 0, Component.empty()); // 宽高稍后设置
         this.font = font;
         this.onColorChanged = onColorChanged;
         this.currentColor = initialColor;
+        this.scale = Math.max(0.5f, Math.min(2.0f, scale)); // 限制缩放范围在0.5-2.0之间
+        
+        // 根据缩放计算实际尺寸
+        this.HUE_BAR_WIDTH = Math.max(6, (int) (BASE_HUE_BAR_WIDTH * this.scale));
+        this.SV_PANEL_SIZE = Math.max(50, (int) (BASE_SV_PANEL_SIZE * this.scale));
+        this.PREVIEW_SIZE = Math.max(10, (int) (BASE_PREVIEW_SIZE * this.scale));
+        this.HEX_INPUT_WIDTH = Math.max(50, (int) (BASE_HEX_INPUT_WIDTH * this.scale));
+        this.COMPONENT_GAP = Math.max(3, (int) (BASE_COMPONENT_GAP * this.scale));
+        this.ALPHA_BAR_WIDTH = Math.max(6, (int) (BASE_ALPHA_BAR_WIDTH * this.scale));
+        this.BORDER_PADDING = Math.max(4, (int) (BASE_BORDER_PADDING * this.scale));
+        this.HEX_LABEL_WIDTH = Math.max(20, (int) (BASE_HEX_LABEL_WIDTH * this.scale));
+        
+        // 计算总尺寸
+        this.TOTAL_WIDTH = SV_PANEL_SIZE + COMPONENT_GAP + HUE_BAR_WIDTH + COMPONENT_GAP + Math.max(PREVIEW_SIZE, ALPHA_BAR_WIDTH) + BORDER_PADDING * 2;
+        this.TOTAL_HEIGHT = SV_PANEL_SIZE + COMPONENT_GAP + (int)(20 * this.scale) + BORDER_PADDING * 2;
+        
+        // 设置实际的宽高
+        this.width = TOTAL_WIDTH;
+        this.height = TOTAL_HEIGHT;
         
         // 从 ARGB 转换为 HSV
         rgbToHsv(initialColor);
@@ -873,4 +908,19 @@ public class ColorPickerWidget extends AbstractWidget {
         output.add(net.minecraft.client.gui.narration.NarratedElementType.TITLE, 
                    Component.literal("Color Picker: " + colorToHex(currentColor)));
     }
+
+    /**
+     * 获取缩放后的宽度
+     */
+    public int getScaledWidth() {
+        return TOTAL_WIDTH;
+    }
+
+    /**
+     * 获取缩放后的高度
+     */
+    public int getScaledHeight() {
+        return TOTAL_HEIGHT;
+    }
 }
+    
