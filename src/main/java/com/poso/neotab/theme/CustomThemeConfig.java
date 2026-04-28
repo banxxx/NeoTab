@@ -160,9 +160,28 @@ public class CustomThemeConfig {
             return defaults();
         }
         
-        String jsonString = Files.readString(filePath);
-        JsonObject json = GSON.fromJson(jsonString, JsonObject.class);
-        return fromJson(json);
+        try {
+            String jsonString = Files.readString(filePath);
+            // 检查JSON字符串是否为空或无效
+            if (jsonString == null || jsonString.trim().isEmpty()) {
+                return defaults();
+            }
+            
+            JsonObject json = GSON.fromJson(jsonString, JsonObject.class);
+            // 检查解析结果是否为null
+            if (json == null) {
+                return defaults();
+            }
+            
+            return fromJson(json);
+        } catch (com.google.gson.JsonSyntaxException e) {
+            // JSON格式错误，返回默认配置
+            System.err.println("Failed to parse custom theme config: " + e.getMessage());
+            return defaults();
+        } catch (Exception e) {
+            // 其他错误，抛出IOException
+            throw new IOException("Failed to load custom theme config", e);
+        }
     }
     
     /**
