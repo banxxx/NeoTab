@@ -98,6 +98,10 @@ public class NeoTabConfigScreen extends Screen {
     private Button customBackgroundColorButton;  // 背景颜色按钮（可选中）
     private Button customBorderOuterFactorButton;  // 外边框深度按钮
     private CycleButton<Boolean> customAnimationToggle;  // 动画开关
+    private Button resetToDefaultButton;  // 重置默认按钮
+    private Button resetConfirmButton;  // 重置确认按钮
+    private Button resetCancelButton;  // 重置取消按钮
+    private boolean showResetConfirmation = false;  // 是否显示重置确认按钮
     private final List<Button> customBorderColorButtons = new ArrayList<>();  // 边框颜色按钮列表（可选中）
     private Button addCustomBorderColorButton;  // 添加边框颜色按钮
     private com.poso.neotab.theme.CustomThemeConfig customThemeConfig;  // 自定义主题配置
@@ -211,11 +215,50 @@ public class NeoTabConfigScreen extends Screen {
                         com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     }));
         
+        // 重置默认按钮
+        this.resetToDefaultButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.custom_theme.reset_to_default"),
+                button -> {
+                    // 显示确认/取消按钮
+                    showResetConfirmation = true;
+                    syncTabWidgetVisibility();
+                })
+            .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
+            .build());
+        
+        // 重置确认按钮（初始隐藏）
+        this.resetConfirmButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.custom_theme.reset_confirm"),
+                button -> {
+                    // 执行重置操作
+                    this.customThemeConfig = com.poso.neotab.theme.CustomThemeConfig.defaults();
+                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                    
+                    // 隐藏确认按钮
+                    showResetConfirmation = false;
+                    
+                    // 重新初始化整个界面以应用所有更改
+                    this.init();
+                })
+            .bounds(layout.left(), 0, 50, 18)  // 固定宽度50，高度18
+            .build());
+        
+        // 重置取消按钮（初始隐藏）
+        this.resetCancelButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.custom_theme.reset_cancel"),
+                button -> {
+                    // 隐藏确认按钮
+                    showResetConfirmation = false;
+                    syncTabWidgetVisibility();
+                })
+            .bounds(layout.left(), 0, 50, 18)  // 固定宽度50，高度18
+            .build());
+        
         // 创建嵌入式颜色选择器（始终显示在右侧）
         int pickerX = layout.left() + customButtonWidth + 20;  // 左侧按钮宽度 + 间距
         int pickerY = 0;  // 稍后在 applyWidgetLayout 中设置
         this.embeddedColorPicker = new ColorPickerWidget(pickerX, pickerY, this.font, 
-            customThemeConfig.getBackgroundColor(), 
+            0xFFFFFFFF,  // 默认显示白色，只有选中颜色按钮后才显示对应颜色
             color -> {
                 // 颜色变化时的回调 - 根据当前选中的项更新颜色
                 if ("background".equals(currentSelectedColorType)) {
@@ -234,8 +277,8 @@ public class NeoTabConfigScreen extends Screen {
             });
         addRenderableWidget(this.embeddedColorPicker);
         
-        // 默认选中背景颜色
-        currentSelectedColorType = "background";
+        // 不默认选中任何颜色
+        currentSelectedColorType = null;
         currentSelectedBorderIndex = -1;
         
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
@@ -287,6 +330,15 @@ public class NeoTabConfigScreen extends Screen {
         customBackgroundColorButton.visible = theme && "custom".equals(selectedThemeId);
         customBorderOuterFactorButton.visible = theme && "custom".equals(selectedThemeId);
         customAnimationToggle.visible = theme && "custom".equals(selectedThemeId);
+        if (resetToDefaultButton != null) {
+            resetToDefaultButton.visible = theme && "custom".equals(selectedThemeId);
+        }
+        if (resetConfirmButton != null) {
+            resetConfirmButton.visible = theme && "custom".equals(selectedThemeId) && showResetConfirmation;
+        }
+        if (resetCancelButton != null) {
+            resetCancelButton.visible = theme && "custom".equals(selectedThemeId) && showResetConfirmation;
+        }
         for (Button button : customBorderColorButtons) {
             button.visible = theme && "custom".equals(selectedThemeId);
         }
@@ -304,6 +356,12 @@ public class NeoTabConfigScreen extends Screen {
         if (activeTab == tab) return;
         activeTab = tab;
         scrollOffset = 0;
+        
+        // 切换Tab时隐藏重置确认按钮
+        if (showResetConfirmation) {
+            showResetConfirmation = false;
+        }
+        
         Layout layout = buildLayout();
         clampScroll(layout);
         applyWidgetLayout(layout);
@@ -357,6 +415,12 @@ public class NeoTabConfigScreen extends Screen {
         
         // 闁瑰嚖闄勯崺鍛償閺囥垹鍔ラ柟绋款樀閹告娊锟?
         if (mouseY >= layout.buttonBarTop()) {
+            // 点击了底部按钮区域，隐藏重置确认按钮
+            if (showResetConfirmation) {
+                showResetConfirmation = false;
+                syncTabWidgetVisibility();
+            }
+            
             if (this.doneButton != null) {
                 int bx = this.doneButton.getX(), by = this.doneButton.getY();
                 if (mouseX >= bx && mouseX <= bx + this.doneButton.getWidth() && mouseY >= by && mouseY <= by + this.doneButton.getHeight())
@@ -370,8 +434,79 @@ public class NeoTabConfigScreen extends Screen {
             return true;
         }
         
-        // 优先检查颜色选择器的点击（避免被左侧按钮拦截）
-        // 检查鼠标是否在颜色选择器的区域内
+        // 先检查主题选择器按钮（包括原版、自定义等）
+        if (activeTab == ConfigTab.THEME) {
+            for (Button themeBtn : themeOptionButtons) {
+                if (themeBtn.visible && themeBtn.isMouseOver(mouseX, mouseY)) {
+                    // 点击了主题按钮，隐藏重置确认按钮
+                    if (showResetConfirmation) {
+                        showResetConfirmation = false;
+                        syncTabWidgetVisibility();
+                    }
+                    return themeBtn.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+        }
+        
+        // 然后检查左侧的自定义主题配置按钮
+        if ("custom".equals(selectedThemeId) && activeTab == ConfigTab.THEME) {
+            // 检查重置确认按钮
+            if (resetConfirmButton != null && resetConfirmButton.visible && 
+                resetConfirmButton.isMouseOver(mouseX, mouseY)) {
+                return resetConfirmButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 检查重置取消按钮
+            if (resetCancelButton != null && resetCancelButton.visible && 
+                resetCancelButton.isMouseOver(mouseX, mouseY)) {
+                return resetCancelButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 检查重置按钮
+            if (resetToDefaultButton != null && resetToDefaultButton.visible && 
+                resetToDefaultButton.isMouseOver(mouseX, mouseY)) {
+                return resetToDefaultButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 点击了其他按钮，隐藏重置确认按钮
+            if (showResetConfirmation) {
+                showResetConfirmation = false;
+                syncTabWidgetVisibility();
+            }
+            
+            // 检查动画开关
+            if (customAnimationToggle != null && customAnimationToggle.visible && 
+                customAnimationToggle.isMouseOver(mouseX, mouseY)) {
+                return customAnimationToggle.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 检查外边框深度按钮
+            if (customBorderOuterFactorButton != null && customBorderOuterFactorButton.visible && 
+                customBorderOuterFactorButton.isMouseOver(mouseX, mouseY)) {
+                return customBorderOuterFactorButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 检查背景颜色按钮
+            if (customBackgroundColorButton != null && customBackgroundColorButton.visible && 
+                customBackgroundColorButton.isMouseOver(mouseX, mouseY)) {
+                return customBackgroundColorButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 检查边框颜色按钮
+            for (Button btn : customBorderColorButtons) {
+                if (btn.visible && btn.isMouseOver(mouseX, mouseY)) {
+                    return btn.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+            
+            // 检查添加按钮
+            if (addCustomBorderColorButton != null && addCustomBorderColorButton.visible && 
+                addCustomBorderColorButton.isMouseOver(mouseX, mouseY)) {
+                return addCustomBorderColorButton.mouseClicked(mouseX, mouseY, button);
+            }
+        }
+        
+        // 然后检查颜色选择器的点击
         if (embeddedColorPicker != null && embeddedColorPicker.visible) {
             int pickerX = embeddedColorPicker.getX();
             int pickerY = embeddedColorPicker.getY();
@@ -565,38 +700,49 @@ public class NeoTabConfigScreen extends Screen {
                     layout.left(), layout.toScreenY(layout.footerSectionHeaderY()), layout.right());
             drawSettingRow(g, Component.translatable("screen.neotab.footer.custom"), layout.footerCustomLabelBounds(), mouseX, mouseY);
         } else if (activeTab == ConfigTab.THEME) {
+            // TAB主题section（放在最上面）
+            AEStyleRenderer.drawSectionHeader(g, this.font,
+                    Component.translatable("screen.neotab.theme.tab_theme"),
+                    layout.left(), layout.toScreenY(layout.themeSectionHeaderY()), layout.right());
+            renderThemeSelectorBackground(g, layout);
+            
+            // 血量显示section（放在TAB主题下面）
             AEStyleRenderer.drawSectionHeader(g, this.font,
                     Component.translatable("screen.neotab.section.health"),
-                    layout.left(), layout.toScreenY(layout.themeSectionHeaderY()), layout.right());
+                    layout.left(), layout.toScreenY(layout.healthSectionHeaderY()), layout.right());
             drawSettingRow(g, Component.translatable("screen.neotab.theme.health_mode"), layout.healthModeLabelBounds(), mouseX, mouseY);
-            drawSettingRow(g, Component.translatable("screen.neotab.theme.tab_theme"),   layout.themeSelectLabelBounds(), mouseX, mouseY);
-            renderThemeSelectorBackground(g, layout);
             
             // 如果选中自定义主题，渲染分类标题
             if ("custom".equals(selectedThemeId)) {
                 int customConfigStartY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
-                int customConfigY = customConfigStartY + 15; // 分类标题间距
+                int customConfigY = customConfigStartY;
+                
+                // 跳过重置按钮
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;
+                
+                // 增加与重置按钮的间距
+                customConfigY += 15;
                 
                 // 动画分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.animation"), 
                     layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
                     AEStyleRenderer.COLOR_SECTION_TEXT, false);
                 
-                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过动画按钮 + 分类间距
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过动画按钮 + 分类间距
                 
                 // 外边框分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.outer_border"), 
                     layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
                     AEStyleRenderer.COLOR_SECTION_TEXT, false);
                 
-                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过外边框按钮 + 分类间距
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过外边框按钮 + 分类间距
                 
                 // 背景分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.background"), 
                     layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
                     AEStyleRenderer.COLOR_SECTION_TEXT, false);
                 
-                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10 + 15; // 跳过背景按钮 + 分类间距
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过背景按钮 + 分类间距
                 
                 // 边框分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.border"), 
@@ -634,8 +780,8 @@ public class NeoTabConfigScreen extends Screen {
                         // 删除按钮使用普通 AE 风格
                         renderAEButton(g, button, mouseX, mouseY);
                     }
-                } else if (button == customBorderOuterFactorButton || button == addCustomBorderColorButton) {
-                    // 使用 AE 风格渲染其他按钮
+                } else if (button == customBorderOuterFactorButton || button == addCustomBorderColorButton || button == resetToDefaultButton || button == resetConfirmButton || button == resetCancelButton) {
+                    // 使用 AE 风格渲染其他按钮（包括重置按钮和确认/取消按钮）
                     renderAEButton(g, button, mouseX, mouseY);
                 } else {
                     r.render(g, mouseX, mouseY, partialTick);
@@ -856,8 +1002,7 @@ public class NeoTabConfigScreen extends Screen {
         } else if (activeTab == ConfigTab.THEME) {
             if (layout.healthModeLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.theme.health_mode.tooltip"));
-            if (layout.themeSelectLabelBounds().contains(mouseX, mouseY))
-                return new HoverTarget(Component.translatable("screen.neotab.theme.tab_theme.tooltip"));
+            // 移除TAB主题的tooltip
         }
         return null;
     }
@@ -903,15 +1048,50 @@ public class NeoTabConfigScreen extends Screen {
             button.setY(layout.toScreenY(layout.themeSelectorY() + THEME_LIST_INSET + i * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP)));
             button.setWidth(layout.themeSelectorWidth() - THEME_LIST_INSET * 2);
         }
-        // 自定义主题配置组件（放在主题选择器下方）
+        // 自定义主题配置组件（紧跟在主题选择器下方，血量显示section之前）
         int customConfigStartY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
         int customConfigY = customConfigStartY;
         
         // 计算按钮宽度（只占左半边）
         int customButtonWidth = (layout.themeSelectorWidth() - THEME_LIST_INSET * 2 - 10) / 2;
         
+        // === 重置默认按钮 ===
+        if (resetToDefaultButton != null) {
+            resetToDefaultButton.setX(layout.left() + THEME_LIST_INSET);
+            resetToDefaultButton.setY(layout.toScreenY(customConfigY));
+            resetToDefaultButton.setWidth(customButtonWidth);
+        }
+        
+        // === 重置确认和取消按钮（浮动在重置按钮右下角，不占用布局空间）===
+        if (showResetConfirmation && resetToDefaultButton != null) {
+            int confirmCancelButtonWidth = 50;  // 固定宽度
+            int confirmCancelButtonHeight = 18; // 稍小的高度
+            
+            // 计算位置：在重置按钮的右下角
+            int baseX = resetToDefaultButton.getX() + resetToDefaultButton.getWidth();
+            int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight();
+            
+            // 取消按钮（左侧）
+            if (resetCancelButton != null) {
+                resetCancelButton.setX(baseX - confirmCancelButtonWidth * 2);  // 紧贴，无间距
+                resetCancelButton.setY(baseY);
+                resetCancelButton.setWidth(confirmCancelButtonWidth);
+                resetCancelButton.setHeight(confirmCancelButtonHeight);
+            }
+            
+            // 确认按钮（右侧）
+            if (resetConfirmButton != null) {
+                resetConfirmButton.setX(baseX - confirmCancelButtonWidth);
+                resetConfirmButton.setY(baseY);
+                resetConfirmButton.setWidth(confirmCancelButtonWidth);
+                resetConfirmButton.setHeight(confirmCancelButtonHeight);
+            }
+        }
+        
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 按钮高度 + 间距
+        
         // === 动画分类 ===
-        customConfigY += 15; // 分类标题间距
+        customConfigY += 15; // 增加与上方组件的间距
         
         // 动画开关
         if (customAnimationToggle != null) {
@@ -919,10 +1099,10 @@ public class NeoTabConfigScreen extends Screen {
             customAnimationToggle.setY(layout.toScreenY(customConfigY));
             customAnimationToggle.setWidth(customButtonWidth);
         }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
         
         // === 外边框分类 ===
-        customConfigY += 15; // 分类标题间距
+        customConfigY += 8; // 分类标题间距
         
         // 外边框深度按钮
         if (customBorderOuterFactorButton != null) {
@@ -930,10 +1110,10 @@ public class NeoTabConfigScreen extends Screen {
             customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY));
             customBorderOuterFactorButton.setWidth(customButtonWidth);
         }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
         
         // === 背景分类 ===
-        customConfigY += 15; // 分类标题间距
+        customConfigY += 8; // 分类标题间距
         
         // 背景颜色按钮
         if (customBackgroundColorButton != null) {
@@ -941,10 +1121,10 @@ public class NeoTabConfigScreen extends Screen {
             customBackgroundColorButton.setY(layout.toScreenY(customConfigY));
             customBackgroundColorButton.setWidth(customButtonWidth);
         }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;  // 分类间距
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
         
         // === 边框分类 ===
-        customConfigY += 15; // 分类标题间距
+        customConfigY += 8; // 分类标题间距
         
         // 嵌入式颜色选择器（放在右侧）
         if (embeddedColorPicker != null) {
@@ -955,7 +1135,7 @@ public class NeoTabConfigScreen extends Screen {
         }
         
         // 边框颜色按钮列表
-        List<Integer> borderColors = customThemeConfig.getBorderColors();
+        List<Integer> borderColors = customThemeConfig != null ? customThemeConfig.getBorderColors() : new ArrayList<>();
         for (int i = 0; i < borderColors.size(); i++) {
             int buttonIndex = i * 2;  // 每个颜色有2个按钮（颜色+删除）
             if (buttonIndex < customBorderColorButtons.size()) {
@@ -1012,6 +1192,11 @@ public class NeoTabConfigScreen extends Screen {
         if (addCustomBorderColorButton != null) {
             removeWidget(addCustomBorderColorButton);
             addCustomBorderColorButton = null;
+        }
+        
+        // 如果 customThemeConfig 为 null，直接返回
+        if (customThemeConfig == null) {
+            return;
         }
         
         Layout layout = buildLayout();
@@ -1079,6 +1264,10 @@ public class NeoTabConfigScreen extends Screen {
                     rebuildCustomBorderColorButtons();
                     Layout newLayout = buildLayout();
                     applyWidgetLayout(newLayout);
+                    // 自动滚动到底部，确保新添加的按钮可见
+                    if (newLayout.maxScroll() > 0) {
+                        setScrollOffset(newLayout.maxScroll(), newLayout);
+                    }
                 }
             ).bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT).build());
         }
@@ -1171,40 +1360,44 @@ public class NeoTabConfigScreen extends Screen {
 
         int labelWidth = Math.max(80, contentWidth - 6 - TOGGLE_WIDTH - 8);
 
-        // Theme tab layout
+        // Theme tab layout - TAB主题section在最上面，血量显示section在最下面
         int themeSectionHeaderY = CONTENT_TOP_PADDING;
-        int healthModeRowY      = themeSectionHeaderY + SECTION_HEADER_HEIGHT;
-        int themeSelectRowY     = healthModeRowY + ROW_HEIGHT + ROW_GAP;
-        int themeSelectorY      = themeSelectRowY + ROW_HEIGHT + THEME_LIST_TOP_GAP;
+        int themeSelectorY      = themeSectionHeaderY + SECTION_HEADER_HEIGHT;
         int themeSelectorWidth  = contentWidth - 6;
         int themeSelectorHeight = themeSelectorHeight(TabThemeRegistry.ids().size());
+        
+        // 自定义主题配置组件紧跟在主题选择器下面
+        int customConfigBaseY = themeSelectorY + themeSelectorHeight + THEME_LIST_TOP_GAP;
+        int customConfigHeight = 0;
+        if ("custom".equals(selectedThemeId) && customThemeConfig != null) {
+            customConfigHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 重置默认按钮
+            // 注意：确认/取消按钮是浮动的，不占用布局空间
+            
+            customConfigHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 动画
+            customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 外边框
+            customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 背景
+            customConfigHeight += 8; // 边框分类标题
+            List<Integer> borderColors = customThemeConfig.getBorderColors();
+            if (borderColors != null) {
+                int borderColorCount = borderColors.size();
+                customConfigHeight += borderColorCount * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP);
+                if (borderColorCount < 7) {
+                    customConfigHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+                }
+            }
+        }
+        
+        // 血量显示section在自定义配置下面（或主题选择器下面，如果没有自定义配置）
+        int healthSectionHeaderY = customConfigBaseY + customConfigHeight + SECTION_GAP;
+        int healthModeRowY       = healthSectionHeaderY + SECTION_HEADER_HEIGHT;
 
         // Content height for the active tab
         int contentHeight;
         if (activeTab == ConfigTab.PAGE_CONFIG) {
             contentHeight = footerRowY + ROW_HEIGHT;
         } else {
-            // Theme tab: health mode plus theme selector
-            contentHeight = themeSelectorY + themeSelectorHeight;
-            // 如果选中 custom 主题，需要为配置组件预留空间
-            if ("custom".equals(selectedThemeId)) {
-                contentHeight += THEME_LIST_TOP_GAP;
-                // 动画分类标题 + 动画开关
-                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
-                // 外边框分类标题 + 外边框深度按钮
-                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
-                // 背景分类标题 + 背景颜色按钮
-                contentHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 10;
-                // 边框分类标题
-                contentHeight += 15;
-                // 边框颜色按钮列表
-                int borderColorCount = customThemeConfig.getBorderColors().size();
-                contentHeight += borderColorCount * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP);
-                // 添加按钮（如果显示）
-                if (borderColorCount < 7) {
-                    contentHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
-                }
-            }
+            // Theme tab: 主题选择器 + 自定义配置（如有）+ 血量显示section
+            contentHeight = healthModeRowY + ROW_HEIGHT;
         }
         int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
 
@@ -1231,7 +1424,8 @@ public class NeoTabConfigScreen extends Screen {
             panelCenterX - buttonWidth - 5,
             panelCenterX + 5,
             tabBarX,
-            themeSectionHeaderY, healthModeRowY, themeSelectRowY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
+            themeSectionHeaderY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
+            healthSectionHeaderY, healthModeRowY,
             labelBounds(Component.translatable("screen.neotab.top.title"),        left, viewportTop - this.scrollOffset + topTitleRowY,       labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.top.content"),      left, viewportTop - this.scrollOffset + topContentRowY,     labelWidth, this.font),
             labelBounds(Component.translatable("screen.neotab.list.better_ping"), left, viewportTop - this.scrollOffset + betterPingRowY,     labelWidth, this.font),
@@ -1242,8 +1436,7 @@ public class NeoTabConfigScreen extends Screen {
             labelBounds(Component.translatable("screen.neotab.footer.tps"),    footerFirstColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.mspt"),   footerSecondColumnX, viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
             labelBounds(Component.translatable("screen.neotab.footer.online"), footerThirdColumnX,  viewportTop - this.scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6, this.font),
-            labelBounds(Component.translatable("screen.neotab.theme.health_mode"), left, viewportTop - this.scrollOffset + healthModeRowY, labelWidth, this.font),
-            labelBounds(Component.translatable("screen.neotab.theme.tab_theme"),   left, viewportTop - this.scrollOffset + themeSelectRowY,  labelWidth, this.font)
+            labelBounds(Component.translatable("screen.neotab.theme.health_mode"), left, viewportTop - this.scrollOffset + healthModeRowY, labelWidth, this.font)
         );
     }
 
@@ -1274,16 +1467,15 @@ public class NeoTabConfigScreen extends Screen {
         int contentHeight, int maxScroll, int buttonWidth, int buttonY,
         int doneButtonX, int cancelButtonX,
         int tabBarX,
-        int themeSectionHeaderY, int healthModeRowY, int themeSelectRowY,
-        int themeSelectorY, int themeSelectorWidth, int themeSelectorHeight,
+        int themeSectionHeaderY, int themeSelectorY, int themeSelectorWidth, int themeSelectorHeight,
+        int healthSectionHeaderY, int healthModeRowY,
         LabelBounds topTitleLabelBounds, LabelBounds topContentLabelBounds,
         LabelBounds betterPingLabelBounds, LabelBounds onlineDurationLabelBounds,
         LabelBounds titleLabelBounds, LabelBounds healthDisplayLabelBounds,
         LabelBounds footerCustomLabelBounds,
         LabelBounds footerFirstLabelBounds, LabelBounds footerSecondLabelBounds,
         LabelBounds footerThirdLabelBounds,
-        LabelBounds healthModeLabelBounds,
-        LabelBounds themeSelectLabelBounds
+        LabelBounds healthModeLabelBounds
     ) {
         private int toScreenY(int contentY) {
             return this.viewportTop - this.scrollOffset + contentY;
