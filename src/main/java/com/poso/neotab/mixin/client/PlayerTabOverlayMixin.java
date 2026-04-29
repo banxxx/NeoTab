@@ -774,43 +774,42 @@ public abstract class PlayerTabOverlayMixin {
 
         // 获取动画参数
         long currentTime = System.currentTimeMillis();
-        float flowOffset = themeConfig.isAnimationEnabled() ? (currentTime % 5000) / 5000.0F : 0.0F; // 5秒完成一次流动循环
-        float breathe = themeConfig.isAnimationEnabled() 
-            ? (float) (0.85F + 0.15F * Math.sin(currentTime / 1000.0)) 
+        // 根据速率档位计算周期：1x=10000ms，2x=5000ms，3x=2500ms
+        int speed = themeConfig.getAnimationSpeed();
+        long cycleDuration = speed == 1 ? 10000L : speed == 3 ? 2500L : 5000L;
+        float flowOffset = themeConfig.isAnimationEnabled() ? (currentTime % cycleDuration) / (float) cycleDuration : 0.0F;
+        float breathe = themeConfig.isAnimationEnabled()
+            ? (float) (0.85F + 0.15F * Math.sin(currentTime / 1000.0))
             : 1.0F; // 优化呼吸效果：0.85-1.0，避免过暗
 
         int width = Math.max(1, right - left);
         int height = Math.max(1, bottom - top);
-        
-        // 外边框深度因子（从配置读取，范围 0-100，转换为 0.0-1.0）
-        float outerFactor = themeConfig.getBorderOuterColorFactor() / 100.0F;
 
-        // 绘制外层深色边框（上边）
+        // 外层边框颜色（直接从配置读取，支持呼吸效果）
+        int outerColorBase = themeConfig.getBorderOuterColor();
+
+        // 绘制外层边框（上边）
         for (int x = left - 1; x < right + 1; x++) {
-            int color = neotab$getAnimatedRainbowColor(x - left + 1, width + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
-            guiGraphics.fill(x, top - 1, x + 1, top, darkColor);
+            int outerColor = neotab$applyBreathe(outerColorBase, breathe);
+            guiGraphics.fill(x, top - 1, x + 1, top, outerColor);
         }
 
-        // 绘制外层深色边框（下边）
+        // 绘制外层边框（下边）
         for (int x = left - 1; x < right + 1; x++) {
-            int color = neotab$getAnimatedRainbowColor(x - left + 1, width + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
-            guiGraphics.fill(x, bottom, x + 1, bottom + 1, darkColor);
+            int outerColor = neotab$applyBreathe(outerColorBase, breathe);
+            guiGraphics.fill(x, bottom, x + 1, bottom + 1, outerColor);
         }
 
-        // 绘制外层深色边框（左边）
+        // 绘制外层边框（左边）
         for (int y = top - 1; y < bottom + 1; y++) {
-            int color = neotab$getAnimatedRainbowColor(y - top + 1, height + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
-            guiGraphics.fill(left - 1, y, left, y + 1, darkColor);
+            int outerColor = neotab$applyBreathe(outerColorBase, breathe);
+            guiGraphics.fill(left - 1, y, left, y + 1, outerColor);
         }
 
-        // 绘制外层深色边框（右边）
+        // 绘制外层边框（右边）
         for (int y = top - 1; y < bottom + 1; y++) {
-            int color = neotab$getAnimatedRainbowColor(y - top + 1, height + 2, rainbowColors, flowOffset);
-            int darkColor = neotab$darkenColor(color, outerFactor * breathe);
-            guiGraphics.fill(right, y, right + 1, y + 1, darkColor);
+            int outerColor = neotab$applyBreathe(outerColorBase, breathe);
+            guiGraphics.fill(right, y, right + 1, y + 1, outerColor);
         }
 
         // 绘制内层彩虹边框（上下边）
@@ -851,19 +850,22 @@ public abstract class PlayerTabOverlayMixin {
         int color1 = colors[index1];
         int color2 = colors[index2];
         
+        int a1 = (color1 >> 24) & 0xFF;
         int r1 = (color1 >> 16) & 0xFF;
         int g1 = (color1 >> 8) & 0xFF;
         int b1 = color1 & 0xFF;
         
+        int a2 = (color2 >> 24) & 0xFF;
         int r2 = (color2 >> 16) & 0xFF;
         int g2 = (color2 >> 8) & 0xFF;
         int b2 = color2 & 0xFF;
         
+        int a = (int) (a1 + (a2 - a1) * localProgress);
         int r = (int) (r1 + (r2 - r1) * localProgress);
         int g = (int) (g1 + (g2 - g1) * localProgress);
         int b = (int) (b1 + (b2 - b1) * localProgress);
         
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     /**
@@ -888,19 +890,22 @@ public abstract class PlayerTabOverlayMixin {
         int color1 = colors[index1];
         int color2 = colors[index2];
         
+        int a1 = (color1 >> 24) & 0xFF;
         int r1 = (color1 >> 16) & 0xFF;
         int g1 = (color1 >> 8) & 0xFF;
         int b1 = color1 & 0xFF;
         
+        int a2 = (color2 >> 24) & 0xFF;
         int r2 = (color2 >> 16) & 0xFF;
         int g2 = (color2 >> 8) & 0xFF;
         int b2 = color2 & 0xFF;
         
+        int a = (int) (a1 + (a2 - a1) * localProgress);
         int r = (int) (r1 + (r2 - r1) * localProgress);
         int g = (int) (g1 + (g2 - g1) * localProgress);
         int b = (int) (b1 + (b2 - b1) * localProgress);
         
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     /**
@@ -910,15 +915,16 @@ public abstract class PlayerTabOverlayMixin {
      * @return 应用呼吸效果后的颜色
      */
     private int neotab$applyBreathe(int color, float breathe) {
+        int a = (color >> 24) & 0xFF;  // 保留原始 alpha
         int r = (color >> 16) & 0xFF;
         int g = (color >> 8) & 0xFF;
         int b = color & 0xFF;
-        
+
         r = (int) (r * breathe);
         g = (int) (g * breathe);
         b = (int) (b * breathe);
-        
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     /**

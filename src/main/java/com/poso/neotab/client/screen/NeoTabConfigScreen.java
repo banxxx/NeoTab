@@ -103,6 +103,7 @@ public class NeoTabConfigScreen extends Screen {
     private Button customBackgroundColorButton;  // 背景颜色按钮（可选中）
     private Button customBorderOuterFactorButton;  // 外边框深度按钮
     private CycleButton<Boolean> customAnimationToggle;  // 动画开关
+    private Button customAnimationSpeedButton;           // 动画速率按钮
     private Button resetToDefaultButton;  // 重置默认按钮
     private Button resetConfirmButton;  // 重置确认按钮
     private Button resetCancelButton;  // 重置取消按钮
@@ -271,36 +272,46 @@ public class NeoTabConfigScreen extends Screen {
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
         
-        // 外边框深度因子按钮
+        // 外层边框颜色按钮（可选中，与背景颜色按钮交互方式完全一致）
         this.customBorderOuterFactorButton = addRenderableWidget(Button.builder(
-                Component.translatable("screen.neotab.custom_theme.border_outer_factor", customThemeConfig.getBorderOuterColorFactor()),
+                Component.translatable("screen.neotab.custom_theme.border_outer_color"),
                 button -> {
-                    int current = customThemeConfig.getBorderOuterColorFactor();
-                    int next = switch (current) {
-                        case 20 -> 30;
-                        case 30 -> 40;
-                        case 40 -> 50;
-                        case 50 -> 20;
-                        default -> 40;
-                    };
-                    customThemeConfig.setBorderOuterColorFactor(next);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    button.setMessage(Component.translatable("screen.neotab.custom_theme.border_outer_factor", next));
+                    currentSelectedColorType = "outer_border";
+                    currentSelectedBorderIndex = -1;
+                    if (embeddedColorPicker != null) {
+                        embeddedColorPicker.setColor(customThemeConfig.getBorderOuterColor());
+                    }
                 })
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
         
-        // 动画开关
+        // 动画开关（宽度缩小为原来的一半，与速率按钮并排）
+        int animHalfW = (customButtonWidth - 4) / 2;  // 4px 为两按钮间距
         this.customAnimationToggle = addRenderableWidget(CycleButton.booleanBuilder(
                 Component.translatable("screen.neotab.custom_theme.animation.on"),
                 Component.translatable("screen.neotab.custom_theme.animation.off"))
             .withInitialValue(customThemeConfig.isAnimationEnabled())
-            .create(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT,
+            .create(layout.left(), 0, animHalfW, THEME_OPTION_HEIGHT,
                     Component.translatable("screen.neotab.custom_theme.animation"),
                     (btn, value) -> {
                         customThemeConfig.setAnimationEnabled(value);
                         com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     }));
+
+        // 动画速率按钮（紧跟动画开关右侧，占据剩余空间）
+        this.customAnimationSpeedButton = addRenderableWidget(Button.builder(
+                Component.translatable("screen.neotab.custom_theme.animation_speed",
+                        customThemeConfig.getAnimationSpeed()),
+                button -> {
+                    int cur = customThemeConfig.getAnimationSpeed();
+                    int next = cur >= 3 ? 1 : cur + 1;
+                    customThemeConfig.setAnimationSpeed(next);
+                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                    button.setMessage(Component.translatable(
+                            "screen.neotab.custom_theme.animation_speed", next));
+                })
+            .bounds(layout.left(), 0, animHalfW, THEME_OPTION_HEIGHT)
+            .build());
         
         // 重置默认按钮
         this.resetToDefaultButton = addRenderableWidget(Button.builder(
@@ -351,6 +362,9 @@ public class NeoTabConfigScreen extends Screen {
                 // 颜色变化时的回调 - 根据当前选中的项更新颜色
                 if ("background".equals(currentSelectedColorType)) {
                     customThemeConfig.setBackgroundColor(color);
+                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                } else if ("outer_border".equals(currentSelectedColorType)) {
+                    customThemeConfig.setBorderOuterColor(color);
                     com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                 } else if (currentSelectedColorType != null && currentSelectedColorType.startsWith("border_")) {
                     if (currentSelectedBorderIndex >= 0) {
@@ -424,6 +438,9 @@ public class NeoTabConfigScreen extends Screen {
         customBackgroundColorButton.visible = theme && "custom".equals(selectedThemeId);
         customBorderOuterFactorButton.visible = theme && "custom".equals(selectedThemeId);
         customAnimationToggle.visible = theme && "custom".equals(selectedThemeId);
+        if (customAnimationSpeedButton != null) {
+            customAnimationSpeedButton.visible = theme && "custom".equals(selectedThemeId);
+        }
         if (resetToDefaultButton != null) {
             resetToDefaultButton.visible = theme && "custom".equals(selectedThemeId);
         }
@@ -829,19 +846,19 @@ public class NeoTabConfigScreen extends Screen {
                 
                 customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过动画按钮 + 分类间距
                 
-                // 外边框分类标题
-                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.outer_border"), 
-                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
-                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
-                
-                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过外边框按钮 + 分类间距
-                
                 // 背景分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.background"), 
                     layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
                     AEStyleRenderer.COLOR_SECTION_TEXT, false);
                 
                 customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过背景按钮 + 分类间距
+                
+                // 外边框分类标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.outer_border"), 
+                    layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
+                    AEStyleRenderer.COLOR_SECTION_TEXT, false);
+                
+                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8; // 跳过外边框按钮 + 分类间距
                 
                 // 边框分类标题
                 g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.category.border"), 
@@ -879,7 +896,10 @@ public class NeoTabConfigScreen extends Screen {
                         // 删除按钮使用普通 AE 风格
                         renderAEButton(g, button, mouseX, mouseY);
                     }
-                } else if (button == customBorderOuterFactorButton || button == addCustomBorderColorButton || button == resetToDefaultButton || button == resetConfirmButton || button == resetCancelButton) {
+                } else if (button == customBorderOuterFactorButton) {
+                    boolean selected = "outer_border".equals(currentSelectedColorType);
+                    renderSelectableColorButton(g, button, selected, mouseX, mouseY);
+                } else if (button == customBorderOuterFactorButton || button == addCustomBorderColorButton || button == resetToDefaultButton || button == resetConfirmButton || button == resetCancelButton || button == customAnimationSpeedButton) {
                     // 使用 AE 风格渲染其他按钮（包括重置按钮和确认/取消按钮）
                     renderAEButton(g, button, mouseX, mouseY);
                 } else if (button == layoutColumnsButton || button == layoutRowsButton) {
@@ -1257,34 +1277,40 @@ public class NeoTabConfigScreen extends Screen {
         
         // === 动画分类 ===
         customConfigY += 15; // 增加与上方组件的间距
-        
-        // 动画开关
+
+        // 动画开关 + 速率按钮并排
+        int animHalfW = (customButtonWidth - 4) / 2;
         if (customAnimationToggle != null) {
             customAnimationToggle.setX(layout.left() + THEME_LIST_INSET);
             customAnimationToggle.setY(layout.toScreenY(customConfigY));
-            customAnimationToggle.setWidth(customButtonWidth);
+            customAnimationToggle.setWidth(animHalfW);
+        }
+        if (customAnimationSpeedButton != null) {
+            customAnimationSpeedButton.setX(layout.left() + THEME_LIST_INSET + animHalfW + 4);
+            customAnimationSpeedButton.setY(layout.toScreenY(customConfigY));
+            customAnimationSpeedButton.setWidth(animHalfW);
         }
         customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
-        
-        // === 外边框分类 ===
-        customConfigY += 8; // 分类标题间距
-        
-        // 外边框深度按钮
-        if (customBorderOuterFactorButton != null) {
-            customBorderOuterFactorButton.setX(layout.left() + THEME_LIST_INSET);
-            customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY));
-            customBorderOuterFactorButton.setWidth(customButtonWidth);
-        }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
-        
+
         // === 背景分类 ===
         customConfigY += 8; // 分类标题间距
-        
+
         // 背景颜色按钮
         if (customBackgroundColorButton != null) {
             customBackgroundColorButton.setX(layout.left() + THEME_LIST_INSET);
             customBackgroundColorButton.setY(layout.toScreenY(customConfigY));
             customBackgroundColorButton.setWidth(customButtonWidth);
+        }
+        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
+
+        // === 外边框分类 ===
+        customConfigY += 8; // 分类标题间距
+
+        // 外边框颜色按钮
+        if (customBorderOuterFactorButton != null) {
+            customBorderOuterFactorButton.setX(layout.left() + THEME_LIST_INSET);
+            customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY));
+            customBorderOuterFactorButton.setWidth(customButtonWidth);
         }
         customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 分类间距
         
@@ -1566,8 +1592,8 @@ public class NeoTabConfigScreen extends Screen {
         if ("custom".equals(selectedThemeId) && customThemeConfig != null) {
             customConfigHeight += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 重置默认按钮
             customConfigHeight += 15 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5; // 动画
-            customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 外边框
             customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 背景
+            customConfigHeight += 8 + THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5;  // 外边框
 
             // 判断颜色选择器是否需要换行
             int customButtonWidth = Math.max(60, (themeSelectorWidth - THEME_LIST_INSET * 2) / 2);

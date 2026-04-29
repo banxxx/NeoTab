@@ -227,13 +227,10 @@ public class ColorPickerWidget extends AbstractWidget {
         int barHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP; // 透明度条高度 = 色相条高度 - 预览框高度 - 间距
         NativeImage image = new NativeImage(1, barHeight, false);
         
-        // 创建从不透明到透明的渐变（从上到下：255→0）
-        // 使用非线性渐变（平方函数），让透明度在较低值时变化更快
+        // 创建从不透明到透明的线性渐变（从上到下：255→0）
         for (int y = 0; y < barHeight; y++) {
-            float ratio = (float) y / barHeight;
-            // 使用平方函数：ratio^2，让透明度变化更平缓，棋盘格在更低位置才明显
-            float adjustedRatio = ratio * ratio;
-            int alpha = 255 - (int) (adjustedRatio * 255);  // 从255到0
+            float ratio = (float) y / (barHeight - 1);  // 线性，0.0→1.0
+            int alpha = Math.round((1.0f - ratio) * 255);  // 255→0
             int rgb = currentColor & 0x00FFFFFF;
             int color = (alpha << 24) | rgb;
             
@@ -264,10 +261,8 @@ public class ColorPickerWidget extends AbstractWidget {
         int rgb = currentColor & 0x00FFFFFF;
         
         for (int y = 0; y < barHeight; y++) {
-            float ratio = (float) y / barHeight;
-            // 使用平方函数：ratio^2
-            float adjustedRatio = ratio * ratio;
-            int alpha = 255 - (int) (adjustedRatio * 255);  // 从255到0
+            float ratio = (float) y / (barHeight - 1);  // 线性，0.0→1.0
+            int alpha = Math.round((1.0f - ratio) * 255);  // 255→0
             int color = (alpha << 24) | rgb;
             
             int a = (color >> 24) & 0xFF;
@@ -551,11 +546,9 @@ public class ColorPickerWidget extends AbstractWidget {
         int barY = getY() + BORDER_PADDING + PREVIEW_SIZE + COMPONENT_GAP;
         int barHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP;
         
-        // 计算指示器位置（使用平方函数匹配渐变）
-        float alphaRatio = (float) alpha / 255.0f;  // 0.0 到 1.0
-        float adjustedRatio = 1.0f - alphaRatio;  // 反转
-        float positionRatio = adjustedRatio * adjustedRatio;  // 平方
-        int indicatorY = barY + (int) (positionRatio * barHeight);
+        // 线性映射：alpha=255 → 顶部，alpha=0 → 底部
+        float alphaRatio = 1.0f - (float) alpha / 255.0f;  // 0.0（顶）→ 1.0（底）
+        int indicatorY = barY + Math.round(alphaRatio * (barHeight - 1));
         
         // 绘制水平指示器（与色相条样式一致）
         graphics.fill(barX - 1, indicatorY - 1, barX, indicatorY + 2, 0xFFFFFFFF);
@@ -724,12 +717,11 @@ public class ColorPickerWidget extends AbstractWidget {
     private void updateAlphaFromMouse(double mouseY) {
         int barY = getY() + BORDER_PADDING + PREVIEW_SIZE + COMPONENT_GAP;
         int barHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP;
-        
-        float ratio = Mth.clamp((float) (mouseY - barY) / barHeight, 0.0f, 1.0f);
-        // 使用平方根反转平方函数：sqrt(ratio)
-        float adjustedRatio = (float) Math.sqrt(ratio);
-        alpha = (int) ((1.0f - adjustedRatio) * 255);  // 从上到下：255→0
-        
+
+        // 线性映射：顶部=255（不透明），底部=0（完全透明）
+        float ratio = Mth.clamp((float) (mouseY - barY) / (barHeight - 1), 0.0f, 1.0f);
+        alpha = Math.round((1.0f - ratio) * 255);
+
         // 设置标志，防止循环更新
         updatingFromMouse = true;
         updateColor();

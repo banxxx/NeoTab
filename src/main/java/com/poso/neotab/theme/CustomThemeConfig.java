@@ -25,11 +25,16 @@ public class CustomThemeConfig {
     /** 边框颜色数组（最多7种颜色，ARGB格式） */
     private List<Integer> borderColors;
     
-    /** 边框外圈颜色 (ARGB) */
-    private int borderOuterColorFactor;
+    /** 外层边框颜色 (ARGB)，默认深色 */
+    private int borderOuterColor;
     
     /** 是否启用动画效果 */
     private boolean animationEnabled;
+
+    /**
+     * 动画速率档位：1 = 1x（慢），2 = 2x（默认），3 = 3x（快）
+     */
+    private int animationSpeed;
     
     /** 默认配置（莫奈风格） */
     public static CustomThemeConfig defaults() {
@@ -43,8 +48,9 @@ public class CustomThemeConfig {
         config.borderColors.add(0xFF99DDFF);  // 莫奈天蓝
         config.borderColors.add(0xFF9999FF);  // 莫奈淡紫
         config.borderColors.add(0xFFCC99FF);  // 莫奈紫罗兰
-        config.borderOuterColorFactor = 40;   // 外圈颜色深度因子 (0-100)
+        config.borderOuterColor = 0xAF27468C;  // 默认深蓝色外层边框
         config.animationEnabled = true;
+        config.animationSpeed = 2;
         return config;
     }
     
@@ -64,22 +70,32 @@ public class CustomThemeConfig {
         this.borderColors = new ArrayList<>(borderColors);
     }
     
-    public int getBorderOuterColorFactor() {
-        return borderOuterColorFactor;
+    public int getBorderOuterColor() {
+        return borderOuterColor;
     }
-    
-    public void setBorderOuterColorFactor(int borderOuterColorFactor) {
-        this.borderOuterColorFactor = Math.clamp(borderOuterColorFactor, 0, 100);
+
+    public void setBorderOuterColor(int color) {
+        this.borderOuterColor = color;
     }
     
     public boolean isAnimationEnabled() {
         return animationEnabled;
     }
-    
+
     public void setAnimationEnabled(boolean animationEnabled) {
         this.animationEnabled = animationEnabled;
     }
-    
+
+    /** 获取动画速率档位（1/2/3） */
+    public int getAnimationSpeed() {
+        return animationSpeed;
+    }
+
+    /** 设置动画速率档位，合法值为 1、2、3 */
+    public void setAnimationSpeed(int speed) {
+        this.animationSpeed = Math.clamp(speed, 1, 3);
+    }
+
     /**
      * 序列化为 JSON
      */
@@ -93,8 +109,9 @@ public class CustomThemeConfig {
         }
         json.add("borderColors", colorsArray);
         
-        json.addProperty("borderOuterColorFactor", borderOuterColorFactor);
+        json.addProperty("borderOuterColor", String.format("#%08X", borderOuterColor));
         json.addProperty("animationEnabled", animationEnabled);
+        json.addProperty("animationSpeed", animationSpeed);
         
         return json;
     }
@@ -126,11 +143,16 @@ public class CustomThemeConfig {
             config.borderColors.add(config.backgroundColor);
         }
         
-        // 外圈颜色因子
-        if (json.has("borderOuterColorFactor")) {
-            config.borderOuterColorFactor = json.get("borderOuterColorFactor").getAsInt();
+        // 外层边框颜色（兼容旧版 borderOuterColorFactor 字段）
+        if (json.has("borderOuterColor")) {
+            config.borderOuterColor = parseColor(json.get("borderOuterColor").getAsString());
+        } else if (json.has("borderOuterColorFactor")) {
+            // 旧版迁移：将深度因子转换为近似颜色（factor=40 → 约 60% 亮度的深色）
+            int factor = json.get("borderOuterColorFactor").getAsInt();
+            int v = (int) ((1f - factor / 100f) * 30);  // 保守暗色
+            config.borderOuterColor = 0xFF000000 | (v << 16) | (v << 8) | v;
         } else {
-            config.borderOuterColorFactor = defaults().borderOuterColorFactor;
+            config.borderOuterColor = defaults().borderOuterColor;
         }
         
         // 动画开关
@@ -138,6 +160,13 @@ public class CustomThemeConfig {
             config.animationEnabled = json.get("animationEnabled").getAsBoolean();
         } else {
             config.animationEnabled = defaults().animationEnabled;
+        }
+
+        // 动画速率
+        if (json.has("animationSpeed")) {
+            config.animationSpeed = Math.clamp(json.get("animationSpeed").getAsInt(), 1, 3);
+        } else {
+            config.animationSpeed = defaults().animationSpeed;
         }
         
         return config;

@@ -62,22 +62,10 @@ public class CustomThemeConfigScreen extends Screen {
         addRenderableWidget(this.backgroundColorButton);
         currentY += BUTTON_HEIGHT + BUTTON_GAP + 10;
         
-        // 边框外圈深度因子
+        // 外层边框颜色（已迁移到主配置界面颜色选择器，此处保留按钮但改为提示文字）
         this.borderOuterFactorButton = Button.builder(
-            Component.translatable("screen.neotab.custom_theme.border_outer_factor", config.getBorderOuterColorFactor()),
-            button -> {
-                // 循环调整因子：20, 30, 40, 50
-                int current = config.getBorderOuterColorFactor();
-                int next = switch (current) {
-                    case 20 -> 30;
-                    case 30 -> 40;
-                    case 40 -> 50;
-                    case 50 -> 20;
-                    default -> 40;
-                };
-                config.setBorderOuterColorFactor(next);
-                updateButtonLabels();
-            }
+            Component.translatable("screen.neotab.custom_theme.border_outer_color"),
+            button -> { /* 功能已迁移到主配置界面 */ }
         ).bounds(centerX - BUTTON_WIDTH / 2, currentY, BUTTON_WIDTH, BUTTON_HEIGHT).build();
         addRenderableWidget(this.borderOuterFactorButton);
         currentY += BUTTON_HEIGHT + BUTTON_GAP + 10;
@@ -206,8 +194,7 @@ public class CustomThemeConfigScreen extends Screen {
         
         if (borderOuterFactorButton != null) {
             borderOuterFactorButton.setMessage(
-                Component.translatable("screen.neotab.custom_theme.border_outer_factor", 
-                                      config.getBorderOuterColorFactor())
+                Component.translatable("screen.neotab.custom_theme.border_outer_color")
             );
         }
     }
