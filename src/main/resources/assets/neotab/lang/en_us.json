@@ -60,6 +60,7 @@
   "tab.neotab.footer.online": "Online: %s",
 
   "screen.neotab.section.layout": "Layout Columns",
+  "screen.neotab.layout.enabled.tooltip": "When enabled, the tab list uses the configured column and row counts, with automatic pagination when players exceed capacity. When disabled, vanilla layout is used.",
   "screen.neotab.layout.columns": "Column Count: %s",
   "screen.neotab.layout.columns.tooltip": "Number of columns shown in the tab list. Maximum value adjusts dynamically based on GUI scale and health display mode. When players exceed the capacity, pagination is used. Hotkey: TAB+Left/Right arrow keys to navigate pages.",
   "screen.neotab.layout.rows": "Rows Per Column: %s",

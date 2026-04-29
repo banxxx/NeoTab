@@ -1,5 +1,6 @@
 package com.poso.neotab.mixin.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.poso.neotab.client.NeoTabClientState;
 import com.poso.neotab.config.TabLayoutConfig;
 import com.poso.neotab.theme.TabTheme;
@@ -10,6 +11,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.numbers.NumberFormat;
 import net.minecraft.network.chat.numbers.StyledFormat;
@@ -168,6 +170,15 @@ public abstract class PlayerTabOverlayMixin {
                 .collect(java.util.stream.Collectors.toList());
 
         TabLayoutConfig layout = TabLayoutConfig.get();
+
+        // 布局分列功能未启用时，不分页，直接返回全部玩家
+        if (!layout.isEnabled()) {
+            neotab$totalPlayerCount = all.size();
+            NeoTabClientState.setTotalPages(1);
+            neotab$needsPagination = false;
+            return all;
+        }
+
         int perPage = layout.playersPerPage();
 
         neotab$totalPlayerCount = all.size();
@@ -242,6 +253,7 @@ public abstract class PlayerTabOverlayMixin {
     @ModifyConstant(method = "render", constant = @Constant(intValue = 20))
     private int neotab$adjustMaxRowsPerColumn(int original) {
         TabLayoutConfig layout = TabLayoutConfig.get();
+        if (!layout.isEnabled()) return original;  // 未启用时回退原版行为
         int displayRows = layout.getRowsPerColumn(); // 用户配置的每列行数
         return displayRows > 0 ? displayRows : original;
     }
@@ -293,7 +305,7 @@ public abstract class PlayerTabOverlayMixin {
 
             // 绘制翻页箭头
             if (neotab$needsPagination) {
-                neotab$drawPageArrows(guiGraphics, pl, pt, pr, pb);
+                neotab$drawPageArrows(guiGraphics, pl, pt, pr, pb, bgColor);
                 // 保存边界供点击检测使用
                 NeoTabClientState.setTabBounds(pl, pt, pr, pb);
             }
@@ -662,53 +674,89 @@ public abstract class PlayerTabOverlayMixin {
     // 翻页箭头绘制
     // ─────────────────────────────────────────────────────────────────────────
 
+    private static final ResourceLocation CHEVRON_LEFT  =
+            ResourceLocation.fromNamespaceAndPath("neotab", "textures/gui/chevron_left.png");
+    private static final ResourceLocation CHEVRON_RIGHT =
+            ResourceLocation.fromNamespaceAndPath("neotab", "textures/gui/chevron_right.png");
+
+    /** 纹理原始尺寸（80×128，目标渲染尺寸 PAGE_ARROW_W × PAGE_ARROW_H 的 8 倍） */
+    private static final int CHEVRON_TEX_W = 80;
+    private static final int CHEVRON_TEX_H = 128;
+
     /**
      * 绘制翻页箭头（左右两侧居中）。
-     * 左箭头：当前页 > 0 时显示
-     * 右箭头：当前页 < 总页数-1 时显示
+     * 高分辨率 PNG blit 缩放方案：纹理 80×128，渲染到 PAGE_ARROW_W×PAGE_ARROW_H，
+     * GPU 双线性过滤自动平滑，视觉效果接近矢量图。
+     *
+     * @param bgColor 当前 TAB 背景色 ARGB，Integer.MIN_VALUE 表示原版半透明黑背景
      */
-    private void neotab$drawPageArrows(GuiGraphics g, int left, int top, int right, int bottom) {
-        int centerY = (top + bottom) / 2;
-        int arrowY  = centerY - PAGE_ARROW_H / 2;
-
+    private void neotab$drawPageArrows(GuiGraphics g, int left, int top, int right, int bottom, int bgColor) {
         int page  = NeoTabClientState.getCurrentPage();
         int total = NeoTabClientState.getTotalPages();
 
-        // 左箭头（上一页）
-        if (page > 0) {
+        boolean hasLeft  = page > 0;
+        boolean hasRight = page < total - 1;
+        if (!hasLeft && !hasRight) return;
+
+        int centerY = (top + bottom) / 2;
+        int arrowY  = centerY - PAGE_ARROW_H / 2;
+
+        // ── 根据背景色亮度选择图标颜色 ────────────────────────────────────────
+        // 只有背景色有实际值（非原版半透明黑）时才计算，否则固定用浅色
+        float iconR, iconG, iconB, iconA;
+        if (bgColor != Integer.MIN_VALUE) {
+            // 提取 RGB 分量（忽略 alpha，只看颜色本身的亮度）
+            float r = ((bgColor >> 16) & 0xFF) / 255f;
+            float gv = ((bgColor >>  8) & 0xFF) / 255f;
+            float b = ( bgColor        & 0xFF) / 255f;
+            // 感知亮度公式（ITU-R BT.709）
+            float luminance = 0.2126f * r + 0.7152f * gv + 0.0722f * b;
+            if (luminance > 0.5f) {
+                // 背景偏亮 → 图标用深色（深灰 #2A2A2A）
+                iconR = 0x2A / 255f; iconG = 0x2A / 255f; iconB = 0x2A / 255f;
+            } else {
+                // 背景偏暗 → 图标用浅色（AE2 高光色 #C8CCD4）
+                iconR = 200f/255f; iconG = 204f/255f; iconB = 212f/255f;
+            }
+        } else {
+            // 原版主题：背景半透明，固定用浅色
+            iconR = 200f/255f; iconG = 204f/255f; iconB = 212f/255f;
+        }
+        iconA = 0.70f;
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+
+        if (hasLeft) {
             int arrowX = left + TAB_CONTENT_PADDING;
-            neotab$drawLeftArrow(g, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H, 0xFFFFFFFF);
+            // 阴影层：黑色，偏移 1px
+            RenderSystem.setShaderColor(0f, 0f, 0f, 0.35f);
+            g.blit(CHEVRON_LEFT, arrowX + 1, arrowY + 1, PAGE_ARROW_W, PAGE_ARROW_H,
+                    0, 0, CHEVRON_TEX_W, CHEVRON_TEX_H, CHEVRON_TEX_W, CHEVRON_TEX_H);
+            // 主色层
+            RenderSystem.setShaderColor(iconR, iconG, iconB, iconA);
+            g.blit(CHEVRON_LEFT, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H,
+                    0, 0, CHEVRON_TEX_W, CHEVRON_TEX_H, CHEVRON_TEX_W, CHEVRON_TEX_H);
         }
 
-        // 右箭头（下一页）
-        if (page < total - 1) {
+        if (hasRight) {
             int arrowX = right - TAB_CONTENT_PADDING - PAGE_ARROW_W;
-            neotab$drawRightArrow(g, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H, 0xFFFFFFFF);
+            RenderSystem.setShaderColor(0f, 0f, 0f, 0.35f);
+            g.blit(CHEVRON_RIGHT, arrowX + 1, arrowY + 1, PAGE_ARROW_W, PAGE_ARROW_H,
+                    0, 0, CHEVRON_TEX_W, CHEVRON_TEX_H, CHEVRON_TEX_W, CHEVRON_TEX_H);
+            RenderSystem.setShaderColor(iconR, iconG, iconB, iconA);
+            g.blit(CHEVRON_RIGHT, arrowX, arrowY, PAGE_ARROW_W, PAGE_ARROW_H,
+                    0, 0, CHEVRON_TEX_W, CHEVRON_TEX_H, CHEVRON_TEX_W, CHEVRON_TEX_H);
         }
+
+        // 恢复默认颜色，避免影响后续渲染
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+        RenderSystem.disableBlend();
     }
 
-    /** 绘制左箭头（<），实心三角形 */
-    private void neotab$drawLeftArrow(GuiGraphics g, int x, int y, int w, int h, int color) {
-        // 三角形：右边两个顶点，左边尖端
-        // 从右向左逐列绘制，每列高度递减
-        int halfH = h / 2;
-        for (int col = 0; col < w; col++) {
-            int span = (col + 1) * halfH / w;
-            int midY = y + halfH;
-            g.fill(x + w - 1 - col, midY - span, x + w - col, midY + span + 1, color);
-        }
-    }
-
-    /** 绘制右箭头（>），实心三角形 */
-    private void neotab$drawRightArrow(GuiGraphics g, int x, int y, int w, int h, int color) {
-        // 从左向右逐列绘制，每列高度递减
-        int halfH = h / 2;
-        for (int col = 0; col < w; col++) {
-            int span = (col + 1) * halfH / w;
-            int midY = y + halfH;
-            g.fill(x + col, midY - span, x + col + 1, midY + span + 1, color);
-        }
-    }
+    /** 不再使用，保留空方法避免编译错误（已由 blit 方案替代） */
+    @SuppressWarnings("unused")
+    private static void neotab$drawThickLine(GuiGraphics g, int x0, int y0, int x1, int y1, int color) {}
 
     private void neotab$drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
         // 从自定义主题配置加载颜色

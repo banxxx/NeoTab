@@ -60,6 +60,7 @@
   "tab.neotab.footer.online": "在线人数: %s",
 
   "screen.neotab.section.layout": "布局分列",
+  "screen.neotab.layout.enabled.tooltip": "开启后将按照下方设定的列数和行数显示 TAB 列表，并在玩家数超过容量时自动分页。关闭后恢复原版布局。",
   "screen.neotab.layout.columns": "展示列数: %s",
   "screen.neotab.layout.columns.tooltip": "TAB 列表显示的列数。最大值根据界面尺寸和血量显示模式动态调整。当玩家数超过每页容量时，将自动分页显示。快捷键：TAB+左/右箭头键翻页。",
   "screen.neotab.layout.rows": "展示行数: %s",

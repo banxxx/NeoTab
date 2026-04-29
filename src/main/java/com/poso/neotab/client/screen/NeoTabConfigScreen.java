@@ -96,6 +96,7 @@ public class NeoTabConfigScreen extends Screen {
     private final List<String> themeOptionIds = new ArrayList<>();
     private String selectedThemeId = "vanilla";
     // 布局分列配置组件
+    private CycleButton<Boolean> layoutEnabledToggle;
     private Button layoutColumnsButton;
     private Button layoutRowsButton;
     // 自定义主题配置组件
@@ -158,6 +159,19 @@ public class NeoTabConfigScreen extends Screen {
         this.healthDisplayMode = addRenderableWidget(newHealthModeButton(layout.toggleX(), initialConfig.healthDisplayMode()));
         // 布局分列配置按钮 - 并排显示，无文字标签
         com.poso.neotab.config.TabLayoutConfig layoutCfg = com.poso.neotab.config.TabLayoutConfig.get();
+        // 布局分列开关 - 放在 section header 行右侧（toggleX 位置）
+        this.layoutEnabledToggle = addRenderableWidget(
+            CycleButton.onOffBuilder(layoutCfg.isEnabled())
+                .displayOnlyValue()
+                .create(layout.toggleX(), 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                    (button, enabled) -> {
+                        com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
+                        cfg.setEnabled(enabled);
+                        com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                        // 同步列/行按钮的可交互状态
+                        if (layoutColumnsButton != null) layoutColumnsButton.active = enabled;
+                        if (layoutRowsButton    != null) layoutRowsButton.active    = enabled;
+                    }));
         this.layoutColumnsButton = addRenderableWidget(Button.builder(
                 Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()),
                 button -> {
@@ -172,6 +186,7 @@ public class NeoTabConfigScreen extends Screen {
                 })
             .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
             .build());
+        this.layoutColumnsButton.active = layoutCfg.isEnabled();
         this.layoutRowsButton = addRenderableWidget(Button.builder(
                 Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()),
                 button -> {
@@ -201,6 +216,7 @@ public class NeoTabConfigScreen extends Screen {
                 })
             .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
             .build());
+        this.layoutRowsButton.active = layoutCfg.isEnabled();
         for (String themeId : TabThemeRegistry.ids()) {
             Button optionButton = addRenderableWidget(Button.builder(
                     Component.translatable("screen.neotab.theme." + themeId),
@@ -398,6 +414,7 @@ public class NeoTabConfigScreen extends Screen {
         footerOnlineEnabled.visible   = page;
         // Theme tab widgets
         healthDisplayMode.visible     = theme;
+        if (layoutEnabledToggle != null) layoutEnabledToggle.visible = theme;
         if (layoutColumnsButton != null) layoutColumnsButton.visible = theme;
         if (layoutRowsButton    != null) layoutRowsButton.visible    = theme;
         for (Button button : this.themeOptionButtons) {
@@ -1013,10 +1030,16 @@ public class NeoTabConfigScreen extends Screen {
                 SCROLL_TRACK_W, this.scrollOffset, layout.maxScroll());
     }
 
+    private static final int TOOLTIP_MAX_WIDTH = 200;
+
     private void renderHoveredTooltip(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
         if (!isInsideViewport(mouseX, mouseY, layout)) return;
         HoverTarget ht = hoveredTarget(mouseX, mouseY, layout);
-        if (ht != null) g.renderTooltip(this.font, ht.tooltip(), mouseX, mouseY);
+        if (ht != null) {
+            java.util.List<net.minecraft.util.FormattedCharSequence> lines =
+                    this.font.split(ht.tooltip(), TOOLTIP_MAX_WIDTH);
+            g.renderTooltip(this.font, lines, mouseX, mouseY);
+        }
     }
 
     // drawSectionHeader 鐎规瓕灏缓鑲╃矓鐠囨彃锟?AEStyleRenderer.drawSectionHeader()
@@ -1133,6 +1156,14 @@ public class NeoTabConfigScreen extends Screen {
         } else if (activeTab == ConfigTab.THEME) {
             if (layout.healthModeLabelBounds().contains(mouseX, mouseY))
                 return new HoverTarget(Component.translatable("screen.neotab.theme.health_mode.tooltip"));
+            // 布局分列开关 tooltip
+            if (layoutEnabledToggle != null && layoutEnabledToggle.isMouseOver(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.layout.enabled.tooltip"));
+            // 列数/行数按钮 tooltip
+            if (layoutColumnsButton != null && layoutColumnsButton.isMouseOver(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.layout.columns.tooltip"));
+            if (layoutRowsButton != null && layoutRowsButton.isMouseOver(mouseX, mouseY))
+                return new HoverTarget(Component.translatable("screen.neotab.layout.rows.tooltip"));
         }
         return null;
     }
@@ -1172,9 +1203,10 @@ public class NeoTabConfigScreen extends Screen {
         placeScrollableWidget(this.footerCustomInput,    layout.left(),              layout.toScreenY(layout.footerCustomInputY()));
         // THEME tab 闁硅矇鍌涱偨
         placeScrollableWidget(this.healthDisplayMode,    layout.toggleX(),           layout.toScreenY(layout.healthModeRowY()));
-        // 布局分列按钮 - 并排显示
-        if (layoutColumnsButton != null) placeScrollableWidget(layoutColumnsButton, layout.left(), layout.toScreenY(layout.layoutButtonsY()));
-        if (layoutRowsButton    != null) placeScrollableWidget(layoutRowsButton,    layout.left() + LAYOUT_BUTTON_WIDTH + 10, layout.toScreenY(layout.layoutButtonsY()));
+        // 布局分列开关 + 按钮 - 同一行并排：[开关] [列数按钮] [行数按钮]
+        if (layoutEnabledToggle != null) placeScrollableWidget(layoutEnabledToggle, layout.left(), layout.toScreenY(layout.layoutButtonsY()));
+        if (layoutColumnsButton != null) placeScrollableWidget(layoutColumnsButton, layout.left() + TOGGLE_WIDTH + 6, layout.toScreenY(layout.layoutButtonsY()));
+        if (layoutRowsButton    != null) placeScrollableWidget(layoutRowsButton,    layout.left() + TOGGLE_WIDTH + 6 + LAYOUT_BUTTON_WIDTH + 10, layout.toScreenY(layout.layoutButtonsY()));
         for (int i = 0; i < this.themeOptionButtons.size(); i++) {
             Button button = this.themeOptionButtons.get(i);
             button.setX(layout.left() + THEME_LIST_INSET);
