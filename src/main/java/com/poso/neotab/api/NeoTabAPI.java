@@ -41,6 +41,14 @@ public final class NeoTabAPI {
      * 缓存时间戳。
      */
     private static final Map<UUID, Long> cacheTimestamps = new ConcurrentHashMap<>();
+
+    /**
+     * 称号缓存大小上限。
+     *
+     * <p>P2 优化：防止大量玩家短暂进出时 Map 无限增长导致内存泄漏。
+     * 超过上限时清空全部缓存（简单策略，适合低频变更场景）。</p>
+     */
+    private static final int MAX_TITLE_CACHE_SIZE = 500;
     
     private NeoTabAPI() {
     }
@@ -115,6 +123,12 @@ public final class NeoTabAPI {
         // 缓存过期或不存在，重新获取称号
         String title = fetchPlayerTitle(player);
         
+        // P2 优化：超过上限时清空缓存，防止内存泄漏
+        if (titleCache.size() >= MAX_TITLE_CACHE_SIZE) {
+            titleCache.clear();
+            cacheTimestamps.clear();
+        }
+
         // 更新缓存
         if (title != null && !title.isEmpty()) {
             titleCache.put(playerId, title);

@@ -141,6 +141,13 @@ public class NeoTabConfigScreen extends Screen {
         this.themeOptionIds.clear();
         this.selectedThemeId = TabThemeRegistry.get(initialConfig.tabTheme()).id();
         Layout layout = buildLayout();
+        initPageConfigWidgets(layout);
+        initThemeWidgets(layout);
+        initFooterAndFinalize(layout);
+    }
+
+
+    private void initPageConfigWidgets(Layout layout) {
         this.topTitleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.topTitleEnabled()));
         this.topTitleInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), TITLE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.top.title")));
@@ -232,6 +239,9 @@ public class NeoTabConfigScreen extends Screen {
         }
         
         // 加载自定义主题配置
+    }
+
+    private void initThemeWidgets(Layout layout) {
         this.customThemeConfig = com.poso.neotab.theme.CustomThemeManager.get();
         
         // 计算按钮宽度和颜色选择器位置，确保不超出屏幕右边界
@@ -383,6 +393,9 @@ public class NeoTabConfigScreen extends Screen {
         currentSelectedColorType = null;
         currentSelectedBorderIndex = -1;
         
+    }
+
+    private void initFooterAndFinalize(Layout layout) {
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
@@ -410,7 +423,6 @@ public class NeoTabConfigScreen extends Screen {
         syncTabWidgetVisibility();
     }
 
-    /** 闁哄秷顫夊畵浣姐亹閹惧啿顤呮繝纰樺亾锟?Tab 闁哄嫬澧介妵?闂傚懏鍔樺Λ宀€鈧數鎳撶花鏌ュ箳瑜屽▎銏ゅΥ?*/
     private void syncTabWidgetVisibility() {
         boolean page  = activeTab == ConfigTab.PAGE_CONFIG;
         boolean theme = activeTab == ConfigTab.THEME;
@@ -757,27 +769,7 @@ public class NeoTabConfigScreen extends Screen {
 
     /** 缂備焦锚閸╂顔忛敂鎸庢珷 Tab 闁哄秴楠忕槐姗滶2 濡炲瀛╅悧鎼佹晬婢跺牃锟?*/
     private void renderTabBar(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
-        int x = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;  // 闁圭顦甸幐鍐差啅閿曚胶鐝堕悹?
-        int btnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;  // 闁圭顦甸幐宕団偓纭呮鐎规娊鏁嶉崼婊呯憹閻℃帒鎳庨崵?Tab 闁哄秴绻愯ぐ鍛婃綇閻у摜锟?
-
-        ConfigTab[] tabs = ConfigTab.values();
-        for (int i = 0; i < tabs.length; i++) {
-            ConfigTab tab = tabs[i];
-            int btnY = VIEWPORT_TOP + i * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
-            boolean active  = activeTab == tab;
-            boolean hovered = !active
-                    && mouseX >= x && mouseX <= x + btnW - 1
-                    && mouseY >= btnY && mouseY <= btnY + TAB_BUTTON_HEIGHT;
-
-            AEStyleRenderer.drawTabButton(g, x, btnY, btnW, TAB_BUTTON_HEIGHT, active, hovered);
-
-            int textColor = active ? TAB_TEXT_ACTIVE : TAB_TEXT_INACTIVE;
-            Component label = tab.label();
-            int textW = this.font.width(label);
-            int textX = x + (btnW - textW) / 2;
-            int textY = btnY + (TAB_BUTTON_HEIGHT - this.font.lineHeight) / 2;
-            g.drawString(this.font, label, textX, textY, textColor, false);
-        }
+        Renderer.renderTabBar(g, this.font, this.activeTab, layout, mouseX, mouseY);
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, Layout layout) {
@@ -918,35 +910,11 @@ public class NeoTabConfigScreen extends Screen {
      * 渲染可选中的颜色按钮
      */
     private void renderSelectableColorButton(GuiGraphics g, Button button, boolean selected, int mouseX, int mouseY) {
-        if (!button.visible) return;
-        boolean hovered = button.isMouseOver(mouseX, mouseY);
-        int bx = button.getX();
-        int by = button.getY();
-        int bw = button.getWidth();
-        int bh = button.getHeight();
-        
-        if (selected) {
-            // 选中状态：使用凹陷面板样式
-            AEStyleRenderer.drawSunkenPanel(g, bx, by, bw, bh, AEStyleRenderer.COLOR_BUTTON_HOVER, 1);
-        } else {
-            // 未选中状态：使用普通按钮样式
-            AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        }
-        
-        int textColor = selected 
-            ? AEStyleRenderer.COLOR_SECTION_TEXT 
-            : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        g.drawCenteredString(this.font, button.getMessage(), bx + bw / 2, by + (bh - this.font.lineHeight) / 2, textColor);
+        Renderer.renderSelectableColorButton(g, this.font, button, selected, mouseX, mouseY);
     }
 
     private void renderThemeSelectorBackground(GuiGraphics g, Layout layout) {
-        AEStyleRenderer.drawInputBackground(
-            g,
-            layout.left(),
-            layout.toScreenY(layout.themeSelectorY()),
-            layout.themeSelectorWidth(),
-            layout.themeSelectorHeight()
-        );
+        Renderer.renderThemeSelectorBackground(g, layout);
     }
 
     /**
@@ -954,30 +922,12 @@ public class NeoTabConfigScreen extends Screen {
      * 闁煎啿鏈▍娆撴偨?AEStyleRenderer闁挎稑鏈弸鍐偓娑欘殜椤や線鎳濋崣澶屽锟?ON/OFF 闁绘鍩栭埀顑跨鐏忣垶宕氶崱鎰ㄥ亾?
      */
     private void renderAECycleButton(GuiGraphics g, CycleButton<?> cb, int mouseX, int mouseY) {
-        if (!cb.visible) return;
-        boolean hovered = cb.isMouseOver(mouseX, mouseY);
-        int bx = cb.getX(), by = cb.getY(), bw = cb.getWidth(), bh = cb.getHeight();
-        // AE2 濡炲瀛╅悧鎼佹嚄鐏炵偓锟?
-        AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        // 闁哄倸娲ら悺褔鏁嶅顒€鐏查柡鍌ゅ幗濡叉悂宕ラ敂鑳 Boolean ON/OFF
-        Component msg = cb.getMessage();
-        String msgStr = msg.getString();
-        int textColor;
-        if (msgStr.equals("ON") || msgStr.equals("on")) {
-            textColor = AEStyleRenderer.COLOR_ON;
-        } else if (msgStr.equals("OFF") || msgStr.equals("off")) {
-            textColor = AEStyleRenderer.COLOR_OFF;
-        } else {
-            // 閻㈩垽闄勯悥锝囩驳閸撗勭暠闁圭顦甸幐鎶芥晬閸繍锟?TPS ON闁挎稑顧€缁变即寮紙鐘电Ъ闁活潿鍔嶇€垫粓鏌﹂鑺ョ€悗娑欘殙锟?
-            textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        }
-        g.drawCenteredString(this.font, msg, bx + bw / 2, by + (bh - this.font.lineHeight) / 2, textColor);
+        Renderer.renderAECycleButton(g, this.font, cb, mouseX, mouseY);
     }
 
     private void renderFixedWidgets(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // AE2 濡炲瀛╅悧鍝ョ磼濡搫锟?Done/Cancel 闁圭顦甸幐鎶芥晬閸綆娲柣鈺傜墪鐢偊鎮ч崼鐔哄鐎殿喖楠忕槐?
-        renderAEButton(g, this.doneButton, mouseX, mouseY);
-        renderAEButton(g, this.cancelButton, mouseX, mouseY);
+        Renderer.renderAEButton(g, this.font, this.doneButton, mouseX, mouseY);
+        Renderer.renderAEButton(g, this.font, this.cancelButton, mouseX, mouseY);
     }
 
     /**
@@ -985,125 +935,56 @@ public class NeoTabConfigScreen extends Screen {
      * 闁稿繐鐗忕划顖炲礆?AE2 闁煎啿鏈▍娆撴晬鐏炶棄鏅欓悹浣叉櫅鐢偊锟?Button 婵炴挸寮堕悡瀣棘閸パ呮憻闁挎稑鐗婇弸鍐偓娑欘殜椤や線鎳濋懠顒佹殸闁告鍠撴晶妤佸緞閸曨厽鍊為柨娑橆槶锟?
      */
     private void renderAEButton(GuiGraphics g, Button btn, int mouseX, int mouseY) {
-        if (btn == null || !btn.visible) return;
-        boolean hovered = btn.isMouseOver(mouseX, mouseY);
-        int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
-        // 缂備焦锚锟?AE2 濡炲瀛╅悧鎼佹嚄鐏炵偓鐝柨娑樼墣椤╊偊鎯勯弽褍鏂ч柣妤€鐗炵槐?        AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        // 缂備焦锚閸╂寮崶褏鎽熼柨娑樼墕閻櫕绋夐銊хAE2 闁圭顦甸幐鎶藉棘閸パ呮憻闁肩顕滅槐?
-        AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        g.drawCenteredString(this.font, btn.getMessage(), bx + bw / 2, by + (bh - this.font.lineHeight) / 2, textColor);
+        Renderer.renderAEButton(g, this.font, btn, mouseX, mouseY);
     }
 
     private void renderThemeOptionButton(GuiGraphics g, Button btn, String themeId, int mouseX, int mouseY) {
-        if (!btn.visible) return;
-        boolean hovered = btn.isMouseOver(mouseX, mouseY);
-        boolean selected = themeId.equals(this.selectedThemeId);
-        int bx = btn.getX();
-        int by = btn.getY();
-        int bw = btn.getWidth();
-        int bh = btn.getHeight();
-
-        if (selected) {
-            AEStyleRenderer.drawSunkenPanel(g, bx, by, bw, bh, AEStyleRenderer.COLOR_BUTTON_HOVER, 1);
-        } else {
-            AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
-        }
-
-        int indicatorX = bx + 6;
-        int indicatorY = by + (bh - THEME_INDICATOR_SIZE) / 2;
-        AEStyleRenderer.drawOutline(g, indicatorX, indicatorY, THEME_INDICATOR_SIZE, THEME_INDICATOR_SIZE,
-            AEStyleRenderer.COLOR_OUTLINE, 1);
-        g.fill(indicatorX + 1, indicatorY + 1, indicatorX + THEME_INDICATOR_SIZE - 1, indicatorY + THEME_INDICATOR_SIZE - 1, 0xFF7A8090);
-        if (selected) {
-            g.fill(indicatorX + 2, indicatorY + 2, indicatorX + THEME_INDICATOR_SIZE - 2, indicatorY + THEME_INDICATOR_SIZE - 2,
-                AEStyleRenderer.COLOR_ON);
-        }
-
-        int textColor = selected
-            ? AEStyleRenderer.COLOR_SECTION_TEXT
-            : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        int textX = indicatorX + THEME_INDICATOR_SIZE + 8;
-        int textY = by + (bh - this.font.lineHeight) / 2;
-        g.drawString(this.font, btn.getMessage(), textX, textY, textColor, false);
+        Renderer.renderThemeOptionButton(g, this.font, btn, themeId, this.selectedThemeId, mouseX, mouseY);
     }
 
     private void renderButtonBar(GuiGraphics g, Layout layout) {
-        int scrollTrackW = 14;
-        int panelX = layout.tabBarX() - 2;
-        int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
-        int panelBottomMargin = 8;
-        int panelBottom = this.height - panelBottomMargin;
-        AEStyleRenderer.drawButtonBar(g, panelX + 1, layout.buttonBarTop(),
-                panelW - 2, panelBottom - layout.buttonBarTop());
+        Renderer.renderButtonBar(g, layout, this.height);
     }
 
     /** 婵犲﹥鑹炬慨鈺呭级闄囧娲焼閹炬剚鍟嶉幖杈捐缁辨瑦锟?mouseClicked 濞ｅ洦绻冪€垫梹绋夐埀顒勬嚊鏉堝墽绀嗛柕?*/
     private static final int SCROLL_TRACK_W = 14;
 
     private void renderScrollbar(GuiGraphics g, Layout layout) {
-        if (layout.maxScroll() <= 0) return;
-        // 婵犲﹥鑹炬慨鈺呭级閿涘嫭褰涢悹鎰綑閸炲鈧湱鎳撶亸顖炲矗閸忓懏娅犻柨娑樼灱閺嗏偓 8px 闂傚倻顥愮粣?
-        int trackX = layout.right() + 8;
-        AEStyleRenderer.drawScrollbar(g,
-                trackX, layout.viewportTop(), layout.viewportBottom(),
-                SCROLL_TRACK_W, this.scrollOffset, layout.maxScroll());
+        Renderer.renderScrollbar(g, layout, this.scrollOffset);
     }
 
     private static final int TOOLTIP_MAX_WIDTH = 200;
 
     private void renderHoveredTooltip(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
-        if (!isInsideViewport(mouseX, mouseY, layout)) return;
-        HoverTarget ht = hoveredTarget(mouseX, mouseY, layout);
-        if (ht != null) {
-            java.util.List<net.minecraft.util.FormattedCharSequence> lines =
-                    this.font.split(ht.tooltip(), TOOLTIP_MAX_WIDTH);
-            g.renderTooltip(this.font, lines, mouseX, mouseY);
-        }
+        Renderer.renderHoveredTooltip(g, this.font, hoveredTarget(mouseX, mouseY, layout), mouseX, mouseY);
     }
 
     // drawSectionHeader 鐎规瓕灏缓鑲╃矓鐠囨彃锟?AEStyleRenderer.drawSectionHeader()
 
     private void drawSettingRow(GuiGraphics g, Component label, LabelBounds bounds, int mouseX, int mouseY) {
-        drawLabel(g, label, bounds, mouseX, mouseY);
+        Renderer.drawLabel(g, this.font, label, bounds, mouseX, mouseY);
     }
 
     private void drawFooterOption(GuiGraphics g, Component label, LabelBounds bounds, int mouseX, int mouseY) {
-        drawLabel(g, label, bounds, mouseX, mouseY);
+        Renderer.drawLabel(g, this.font, label, bounds, mouseX, mouseY);
     }
 
     private void drawLabel(GuiGraphics g, Component label, LabelBounds bounds, int mouseX, int mouseY) {
-        boolean hovered = bounds.contains(mouseX, mouseY);
-        int color = hovered ? AEStyleRenderer.COLOR_LABEL_HOVER : AEStyleRenderer.COLOR_LABEL;
-        int labelY = bounds.y() + (INPUT_HEIGHT - this.font.lineHeight) / 2 + 1;
-        g.drawString(this.font, label, bounds.x(), labelY, color, false);
+        Renderer.drawLabel(g, this.font, label, bounds, mouseX, mouseY);
     }
 
     private CycleButton<Boolean> newToggle(int x, boolean initialValue) {
-        return CycleButton.onOffBuilder(initialValue)
-            .displayOnlyValue()
-            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY);
+        return NeoTabConfigWidgetFactory.newToggle(x, initialValue);
     }
 
     /** 閻㈩垽绠戦悾顒勫极鐎涙鍨肩紒娑樺⒔濞堟垵顕ｉ埀顒勫礂閾忣偄鐦婚梺绛嬪櫙缁辨繈寮崶褏鎽熼柡鍕⒔閵囨岸宕烽妸锕€鐦婚梺绛嬪枛閸炴挳鏌堥…鎺旂閻庣妫勭€规娊宕￠悩鍐插К闁轰焦娼欓崹顏堝Υ?*/
     private CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {
-        return CycleButton.onOffBuilder(initialValue)
-            .create(x, 0, width, INPUT_HEIGHT, label);
+        return NeoTabConfigWidgetFactory.newLabeledToggle(x, width, initialValue, label);
     }
 
     /** 閻炴稈鍋撻梺鎻掔箲濡绮堥悜妯绘珡闁哄绮岄崹蹇涘箲閵忊€崇樆闂佺瓔鍣槐娆戔偓鐟版湰锟?/ 闁告娲滅€氼參鏁嶆径鍫氬亾?*/
     private CycleButton<HealthDisplayMode> newHealthModeButton(int x, HealthDisplayMode initialValue) {
-        return CycleButton.<HealthDisplayMode>builder(mode -> Component.translatable(
-                    mode == HealthDisplayMode.FULL
-                        ? "screen.neotab.theme.health_mode.full"
-                        : "screen.neotab.theme.health_mode.compact"))
-            .withValues(HealthDisplayMode.FULL, HealthDisplayMode.COMPACT)
-            .withInitialValue(initialValue)
-            .displayOnlyValue()
-            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY, (button, newMode) -> {
-                // 当血量显示模式变化时，自动调整布局配置到新的限制范围内
-                adjustLayoutConfigToCurrentLimits();
-            });
+        return NeoTabConfigWidgetFactory.newHealthModeButton(x, initialValue, this::adjustLayoutConfigToCurrentLimits);
     }
     
     /**
@@ -1715,6 +1596,192 @@ public class NeoTabConfigScreen extends Screen {
         }
         private int scissorLeft() { return Math.max(0, this.left - 2); }
         private int scissorRight() { return this.right + 10; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 渲染工具类（静态嵌套类）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 配置界面渲染工具。
+     *
+     * <p>将所有纯渲染逻辑从 {@link NeoTabConfigScreen} 中抽离，
+     * 使主屏幕类专注于状态管理、事件处理和布局计算。</p>
+     *
+     * <p>作为静态嵌套类，可直接访问外部类的所有 private 成员，
+     * 无需修改任何访问修饰符。</p>
+     */
+    static final class Renderer {
+
+        private Renderer() {}
+
+        // ── Tab 栏 ────────────────────────────────────────────────────────────
+
+        static void renderTabBar(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                 ConfigTab activeTab, Layout layout,
+                                 int mouseX, int mouseY) {
+            int x    = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;
+            int btnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;
+
+            for (int i = 0; i < ConfigTab.values().length; i++) {
+                ConfigTab tab = ConfigTab.values()[i];
+                int btnY    = VIEWPORT_TOP + i * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
+                boolean active  = activeTab == tab;
+                boolean hovered = !active
+                        && mouseX >= x && mouseX <= x + btnW - 1
+                        && mouseY >= btnY && mouseY <= btnY + TAB_BUTTON_HEIGHT;
+
+                AEStyleRenderer.drawTabButton(g, x, btnY, btnW, TAB_BUTTON_HEIGHT, active, hovered);
+
+                int textColor = active ? TAB_TEXT_ACTIVE : TAB_TEXT_INACTIVE;
+                Component label = tab.label();
+                int textW = font.width(label);
+                int textX = x + (btnW - textW) / 2;
+                int textY = btnY + (TAB_BUTTON_HEIGHT - font.lineHeight) / 2;
+                g.drawString(font, label, textX, textY, textColor, false);
+            }
+        }
+
+        // ── 主题选择器背景 ────────────────────────────────────────────────────
+
+        static void renderThemeSelectorBackground(GuiGraphics g, Layout layout) {
+            AEStyleRenderer.drawInputBackground(
+                    g,
+                    layout.left(),
+                    layout.toScreenY(layout.themeSelectorY()),
+                    layout.themeSelectorWidth(),
+                    layout.themeSelectorHeight()
+            );
+        }
+
+        // ── 主题选项按钮 ──────────────────────────────────────────────────────
+
+        static void renderThemeOptionButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                            Button btn, String themeId, String selectedThemeId,
+                                            int mouseX, int mouseY) {
+            if (!btn.visible) return;
+            boolean hovered  = btn.isMouseOver(mouseX, mouseY);
+            boolean selected = themeId.equals(selectedThemeId);
+            int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
+
+            if (selected) {
+                AEStyleRenderer.drawSunkenPanel(g, bx, by, bw, bh, AEStyleRenderer.COLOR_BUTTON_HOVER, 1);
+            } else {
+                AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+            }
+
+            int indicatorX = bx + 6;
+            int indicatorY = by + (bh - THEME_INDICATOR_SIZE) / 2;
+            AEStyleRenderer.drawOutline(g, indicatorX, indicatorY,
+                    THEME_INDICATOR_SIZE, THEME_INDICATOR_SIZE, AEStyleRenderer.COLOR_OUTLINE, 1);
+            g.fill(indicatorX + 1, indicatorY + 1,
+                   indicatorX + THEME_INDICATOR_SIZE - 1, indicatorY + THEME_INDICATOR_SIZE - 1, 0xFF7A8090);
+            if (selected) {
+                g.fill(indicatorX + 2, indicatorY + 2,
+                       indicatorX + THEME_INDICATOR_SIZE - 2, indicatorY + THEME_INDICATOR_SIZE - 2,
+                       AEStyleRenderer.COLOR_ON);
+            }
+
+            int textColor = selected
+                    ? AEStyleRenderer.COLOR_SECTION_TEXT
+                    : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+            g.drawString(font, btn.getMessage(),
+                    indicatorX + THEME_INDICATOR_SIZE + 8, by + (bh - font.lineHeight) / 2, textColor, false);
+        }
+
+        // ── 可选中颜色按钮 ────────────────────────────────────────────────────
+
+        static void renderSelectableColorButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                                Button button, boolean selected,
+                                                int mouseX, int mouseY) {
+            if (!button.visible) return;
+            boolean hovered = button.isMouseOver(mouseX, mouseY);
+            int bx = button.getX(), by = button.getY(), bw = button.getWidth(), bh = button.getHeight();
+
+            if (selected) {
+                AEStyleRenderer.drawSunkenPanel(g, bx, by, bw, bh, AEStyleRenderer.COLOR_BUTTON_HOVER, 1);
+            } else {
+                AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+            }
+
+            int textColor = selected
+                    ? AEStyleRenderer.COLOR_SECTION_TEXT
+                    : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+            g.drawCenteredString(font, button.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        }
+
+        // ── AE 风格 CycleButton ───────────────────────────────────────────────
+
+        static void renderAECycleButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                        CycleButton<?> cb, int mouseX, int mouseY) {
+            if (!cb.visible) return;
+            boolean hovered = cb.isMouseOver(mouseX, mouseY);
+            int bx = cb.getX(), by = cb.getY(), bw = cb.getWidth(), bh = cb.getHeight();
+            AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+
+            Component msg = cb.getMessage();
+            String msgStr = msg.getString();
+            int textColor;
+            if (msgStr.equals("ON") || msgStr.equals("on")) {
+                textColor = AEStyleRenderer.COLOR_ON;
+            } else if (msgStr.equals("OFF") || msgStr.equals("off")) {
+                textColor = AEStyleRenderer.COLOR_OFF;
+            } else {
+                textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+            }
+            g.drawCenteredString(font, msg, bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        }
+
+        // ── AE 风格普通 Button ────────────────────────────────────────────────
+
+        static void renderAEButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                   Button btn, int mouseX, int mouseY) {
+            if (btn == null || !btn.visible) return;
+            boolean hovered = btn.isMouseOver(mouseX, mouseY);
+            int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
+            AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
+            int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+            g.drawCenteredString(font, btn.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        }
+
+        // ── 底部按钮栏 ────────────────────────────────────────────────────────
+
+        static void renderButtonBar(GuiGraphics g, Layout layout, int screenHeight) {
+            int panelX = layout.tabBarX() - 2;
+            int panelW = (layout.right() + 8 + SCROLL_TRACK_W + 4) - panelX;
+            int panelBottom = screenHeight - 8;
+            AEStyleRenderer.drawButtonBar(g, panelX + 1, layout.buttonBarTop(),
+                    panelW - 2, panelBottom - layout.buttonBarTop());
+        }
+
+        // ── 滚动条 ────────────────────────────────────────────────────────────
+
+        static void renderScrollbar(GuiGraphics g, Layout layout, int scrollOffset) {
+            if (layout.maxScroll() <= 0) return;
+            AEStyleRenderer.drawScrollbar(g,
+                    layout.right() + 8, layout.viewportTop(), layout.viewportBottom(),
+                    SCROLL_TRACK_W, scrollOffset, layout.maxScroll());
+        }
+
+        // ── 悬停提示 ──────────────────────────────────────────────────────────
+
+        static void renderHoveredTooltip(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                         HoverTarget ht, int mouseX, int mouseY) {
+            if (ht == null) return;
+            java.util.List<net.minecraft.util.FormattedCharSequence> lines = font.split(ht.tooltip(), 200);
+            g.renderTooltip(font, lines, mouseX, mouseY);
+        }
+
+        // ── 标签行 ────────────────────────────────────────────────────────────
+
+        static void drawLabel(GuiGraphics g, net.minecraft.client.gui.Font font,
+                              Component label, LabelBounds bounds,
+                              int mouseX, int mouseY) {
+            boolean hovered = bounds.contains(mouseX, mouseY);
+            int color  = hovered ? AEStyleRenderer.COLOR_LABEL_HOVER : AEStyleRenderer.COLOR_LABEL;
+            int labelY = bounds.y() + (INPUT_HEIGHT - font.lineHeight) / 2 + 1;
+            g.drawString(font, label, bounds.x(), labelY, color, false);
+        }
     }
 }
 

@@ -101,8 +101,10 @@ public final class NeoTabServerEvents {
             // 获取称号文本（支持富文本标签）
             String titleText = getTitleForPlayer(player);
             if (titleText != null && !titleText.isEmpty()) {
-                // 使用RichTextEngine渲染称号文本，支持color和gradient标签
-                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText);
+                // P1 优化：用原始 titleText 作为 cacheKey，保证缓存命中率
+                // 称号通常是静态富文本（如 <color #FF0000>[管理员]</color>），
+                // 不含动态占位符，因此 rawText 本身就是最佳缓存键
+                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText, titleText);
                 // 称号 + 空格 + 玩家名称，保持玩家名称原有颜色
                 playerName = Component.empty().append(titleComponent).append(" ").append(playerName);
             }

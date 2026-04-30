@@ -51,7 +51,11 @@ public final class NeoTabClientState {
     }
 
     public static void setOnlineDurations(Map<UUID, String> durations) {
-        onlineDurations = durations == null ? new HashMap<>() : new HashMap<>(durations);
+        // P2 优化：复用已有 Map，避免每次收包都 new HashMap
+        onlineDurations.clear();
+        if (durations != null) {
+            onlineDurations.putAll(durations);
+        }
     }
 
     public static String getOnlineDuration(UUID playerId) {
@@ -59,8 +63,15 @@ public final class NeoTabClientState {
     }
 
     public static void setPlayerHealths(Map<UUID, Float> healths, Map<UUID, Float> maxHealths) {
-        playerHealths    = healths    == null ? new HashMap<>() : new HashMap<>(healths);
-        playerMaxHealths = maxHealths == null ? new HashMap<>() : new HashMap<>(maxHealths);
+        // P2 优化：复用已有 Map，避免每次收包都 new HashMap
+        playerHealths.clear();
+        if (healths != null) {
+            playerHealths.putAll(healths);
+        }
+        playerMaxHealths.clear();
+        if (maxHealths != null) {
+            playerMaxHealths.putAll(maxHealths);
+        }
     }
 
     /** 获取指定玩家的当前血量（半颗心 = 1.0f）。未收到数据时返回 20.0f。 */

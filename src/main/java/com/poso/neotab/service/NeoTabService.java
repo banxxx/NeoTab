@@ -413,16 +413,18 @@ public final class NeoTabService {
     /**
      * 向全服客户端同步在线时长数据（优化版本）。
      *
-     * <p>性能优化：</p>
+     * <p>P1 优化：</p>
      * <ul>
      *   <li>复用 {@code lastOnlineDurations} 作为工作 Map，避免每次 new HashMap</li>
      *   <li>只在数据真正变化时才发送网络包</li>
      * </ul>
      */
     private void syncOnlineDurationsToAllOptimized(MinecraftServer server) {
-        // 复用临时 Map，避免每次 new HashMap
-        Map<UUID, String> current = new HashMap<>();
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+        java.util.List<ServerPlayer> players = server.getPlayerList().getPlayers();
+
+        // 复用临时 Map：先清空再填充，避免 new HashMap
+        Map<UUID, String> current = new HashMap<>(players.size() * 2);
+        for (ServerPlayer player : players) {
             current.put(player.getUUID(), getOnlineDurationText(player));
         }
 
@@ -459,12 +461,16 @@ public final class NeoTabService {
 
     /**
      * 向全服客户端同步血量数据（优化版本）。
-     * 只在数据变化时才发包。
+     *
+     * <p>P1 优化：指定初始容量避免 HashMap 扩容，只在数据变化时才发包。</p>
      */
     private void syncPlayerHealthsToAllOptimized(MinecraftServer server) {
-        Map<UUID, Float> current    = new HashMap<>();
-        Map<UUID, Float> currentMax = new HashMap<>();
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+        java.util.List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        int capacity = players.size() * 2;
+
+        Map<UUID, Float> current    = new HashMap<>(capacity);
+        Map<UUID, Float> currentMax = new HashMap<>(capacity);
+        for (ServerPlayer player : players) {
             current.put(player.getUUID(), player.getHealth());
             currentMax.put(player.getUUID(), player.getMaxHealth());
         }
