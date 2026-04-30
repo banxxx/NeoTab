@@ -1,6 +1,8 @@
 package com.poso.neotab.client;
 
+import com.poso.neotab.config.PlayerTabConfig;
 import com.poso.neotab.config.TabConfig;
+import com.poso.neotab.permission.PlayerCustomizePolicy;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +23,19 @@ public final class NeoTabClientState {
     private static Map<UUID, String> onlineDurations = new HashMap<>();
     private static Map<UUID, Float> playerHealths    = new HashMap<>();
     private static Map<UUID, Float> playerMaxHealths = new HashMap<>();
+
+    /**
+     * 当前玩家的有效自定义策略。
+     * 由服务端通过 {@code SyncCustomizePolicyPayload} 下发，已经过 resolvePolicy 计算。
+     * 默认全部锁定，防止服务端未同步时客户端误判。
+     */
+    private static PlayerCustomizePolicy currentPolicy = PlayerCustomizePolicy.locked();
+
+    /**
+     * 当前玩家的个人配置（原始值，未合并）。
+     * 由服务端通过 {@code OpenCustomizeScreenPayload} 下发。
+     */
+    private static PlayerTabConfig personalConfig = null;
     /** TAB 列表是否被固定常显（Tab+右键触发）。 */
     private static boolean tabPinned = false;
 
@@ -89,6 +104,8 @@ public final class NeoTabClientState {
         onlineDurations.clear();
         playerHealths.clear();
         playerMaxHealths.clear();
+        currentPolicy  = PlayerCustomizePolicy.locked();
+        personalConfig = null;
         tabPinned   = false;
         currentPage = 0;
         totalPages  = 1;
@@ -98,6 +115,22 @@ public final class NeoTabClientState {
     public static void setTabPinned(boolean pinned) { tabPinned = pinned; }
     /** 切换固定状态，返回切换后的值。 */
     public static boolean toggleTabPinned() { tabPinned = !tabPinned; return tabPinned; }
+
+    // ── 自定义策略 ────────────────────────────────────────────────────────────
+
+    /** 获取当前玩家的有效自定义策略。 */
+    public static PlayerCustomizePolicy getCurrentPolicy() { return currentPolicy; }
+
+    /** 更新当前玩家的有效自定义策略（由 SyncCustomizePolicyPayload 调用）。 */
+    public static void setCurrentPolicy(PlayerCustomizePolicy policy) {
+        currentPolicy = policy != null ? policy : PlayerCustomizePolicy.locked();
+    }
+
+    /** 获取当前玩家的个人配置（原始值，未合并）。 */
+    public static PlayerTabConfig getPersonalConfig() { return personalConfig; }
+
+    /** 更新当前玩家的个人配置（由 OpenCustomizeScreenPayload 调用）。 */
+    public static void setPersonalConfig(PlayerTabConfig config) { personalConfig = config; }
 
     public static int getCurrentPage()  { return currentPage; }
     public static int getTotalPages()   { return totalPages; }

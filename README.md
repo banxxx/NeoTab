@@ -83,6 +83,7 @@
 |------|------|------|
 | `/neotab config` | 打开图形化配置界面 | 管理员 |
 | `/neotab reload` | 从磁盘重新加载配置并立即刷新 | 管理员 |
+| `/neotab customize` | 打开个人自定义界面 | 所有玩家（默认） |
 
 ### 快速开始
 
@@ -94,7 +95,7 @@
 
 ## 配置界面
 
-配置界面分为两个标签页：
+配置界面分为三个标签页：
 
 ### 页面配置
 
@@ -115,7 +116,16 @@
 
 ### 主题样式
 
-预留标签页，后续版本将支持界面主题自定义。
+主题切换及自定义主题配置。
+
+### 权限配置（仅管理员可见）
+
+管理员可在此标签页配置玩家自定义权限策略：
+
+- **全局策略**：对所有普通玩家生效，逐项开放或锁定 15 个可自定义选项
+- **个人专属策略**：搜索指定玩家名，为该玩家单独配置策略，优先级高于全局策略
+
+> 点击"权限配置"标签时会再次验证管理员权限（OP 2 级）。
 
 ---
 
@@ -273,11 +283,43 @@ TPS: %tps%  MSPT: %mspt%
 
 ## 权限系统
 
+### 管理员权限
+
 | 权限节点 | 说明 | 默认 |
 |---------|------|------|
 | `neotab:configure` | 允许使用 `/neotab config` 和 `/neotab reload` | OP 2级 |
 
-如果服务器安装了支持 NeoForge 权限 API 的权限管理模组，可以通过 `neotab:configure` 节点精细控制权限。未安装权限模组时，自动回退到原版 OP 2 级判断。
+### 玩家自定义权限
+
+| 权限节点 | 说明 | 默认 |
+|---------|------|------|
+| `neotab:customize` | 允许使用 `/neotab customize` 打开个人自定义界面 | 所有玩家 |
+| `neotab:customize.top_title.toggle` | 允许玩家开关顶部标题 | false |
+| `neotab:customize.top_title.edit` | 允许玩家编辑顶部标题内容 | false |
+| `neotab:customize.top_content.toggle` | 允许玩家开关顶部内容 | false |
+| `neotab:customize.top_content.edit` | 允许玩家编辑顶部内容文字 | false |
+| `neotab:customize.ping` | 允许玩家开关延迟显示 | false |
+| `neotab:customize.duration` | 允许玩家开关在线时长显示 | false |
+| `neotab:customize.title` | 允许玩家开关称号功能 | false |
+| `neotab:customize.health.toggle` | 允许玩家开关血量显示 | false |
+| `neotab:customize.health.mode` | 允许玩家切换血量显示模式 | false |
+| `neotab:customize.footer.custom` | 允许玩家编辑底部自定义文字 | false |
+| `neotab:customize.footer.tps` | 允许玩家开关底部 TPS | false |
+| `neotab:customize.footer.mspt` | 允许玩家开关底部 MSPT | false |
+| `neotab:customize.footer.online` | 允许玩家开关底部在线人数 | false |
+| `neotab:customize.theme` | 允许玩家切换主题 | false |
+
+### 权限判断优先级
+
+1. **OP ≥ 2**：完全自由，跳过所有限制（兼容单人世界）
+2. **个人专属策略**（管理员在权限配置界面为特定玩家设置）：直接使用，不再叠加权限节点
+3. **全局策略 AND 权限节点**：两者都允许才开放
+
+### 受限 UI 行为
+
+普通玩家打开个人自定义界面时，被锁定的选项会显示为灰色（不可点击），鼠标悬停时显示提示"此选项由服务器管理员控制"。功能存在但被锁定，玩家可以看到有哪些功能，但无法操作。
+
+如果服务器安装了支持 NeoForge 权限 API 的权限管理模组（如 LuckPerms），可以通过上述权限节点精细控制。未安装权限模组时，仅由管理员在配置界面设置的全局/个人策略生效。
 
 ---
 

@@ -45,6 +45,11 @@ public final class NeoTabServerEvents {
     @SubscribeEvent
     public static void onPermissionNodesGathered(PermissionGatherEvent.Nodes event) {
         event.addNodes(NeoTabPermissions.CONFIGURE);
+        // 注册所有玩家自定义权限节点
+        for (net.neoforged.neoforge.server.permission.nodes.PermissionNode<Boolean> node
+                : NeoTabPermissions.ALL_CUSTOMIZE_NODES) {
+            event.addNodes(node);
+        }
     }
 
     /** 服务端启动完成后载入配置。 */

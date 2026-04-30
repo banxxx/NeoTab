@@ -5,9 +5,13 @@ import com.poso.neotab.client.widget.ColorPickerWidget;
 import com.poso.neotab.client.widget.ImprovedRichTextEditBox;
 import com.poso.neotab.client.widget.ImprovedRichTextMultiLineEditBox;
 import com.poso.neotab.config.HealthDisplayMode;
+import com.poso.neotab.config.PlayerTabConfig;
 import com.poso.neotab.config.TabConfig;
+import com.poso.neotab.permission.PlayerCustomizePolicy;
 import com.poso.neotab.theme.TabThemeRegistry;
 import com.poso.neotab.network.payload.SaveConfigPayload;
+import com.poso.neotab.network.payload.SavePlayerConfigPayload;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -15,6 +19,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -22,13 +27,22 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** NeoTab 闂佹澘绉堕悿鍡涙偩瀹€鍕〃闁挎稑鑻稊蹇旂瑹?Tab 闁哄秴绻愰崹蹇涘箲椤厾鐟忓☉鎿冧簻閸ㄥ酣宕犻幁鎺嗗亾?*/
 public class NeoTabConfigScreen extends Screen {
     // Tab 闁哄鐭俊?
+    /**
+     * Screen mode.
+     * ADMIN: full config + permissions tab (only visible to admins).
+     * PLAYER: personal customization, restricted by policy (locked widgets shown greyed out).
+     */
+    public enum ScreenMode { ADMIN, PLAYER }
+
     private enum ConfigTab {
         PAGE_CONFIG("screen.neotab.tab.page_config"),
-        THEME("screen.neotab.tab.theme");
+        THEME("screen.neotab.tab.theme"),
+        PERMISSIONS("screen.neotab.tab.permissions");  // admin only
         final String langKey;
         ConfigTab(String langKey) { this.langKey = langKey; }
         Component label() { return Component.translatable(langKey); }
@@ -128,10 +142,58 @@ public class NeoTabConfigScreen extends Screen {
     private int dragStartY = 0;
     private int dragStartScrollOffset = 0;
 
+    /** Current screen mode (ADMIN or PLAYER). */
+    private final ScreenMode screenMode;
+    /** Effective customize policy for this player (used in PLAYER mode). */
+    private final PlayerCustomizePolicy policy;
+    /** Player's personal config (used in PLAYER mode). */
+    private final com.poso.neotab.config.PlayerTabConfig personalConfig;
+
+    // ── Permissions tab widgets ───────────────────────────────────────────────
+    /** 权限开关列表（15个，对应 PlayerCustomizePolicy 的所有字段）。 */
+    private final List<CycleButton<Boolean>> globalPolicyToggles = new ArrayList<>();
+    /** 目标模式切换按钮：所有玩家 / 指定玩家。 */
+    private Button permTargetModeButton;
+    /** 当前目标模式：true = 指定玩家，false = 所有玩家。 */
+    private boolean permTargetIsPlayer = false;
+    /** 玩家名称输入框（指定玩家模式下可用）。 */
+    private EditBox playerSearchBox;
+    /** 添加按钮。 */
+    private Button permAddButton;
+    /** 联想下拉列表中的候选玩家名（最多5个）。 */
+    private final List<String> playerSuggestions = new ArrayList<>();
+    /** 已添加到指定玩家列表的 UUID → 名称映射（保持插入顺序）。 */
+    private final java.util.LinkedHashMap<java.util.UUID, String> targetPlayers = new java.util.LinkedHashMap<>();
+    /** 指定玩家列表中每个玩家的删除按钮。 */
+    private final List<Button> targetPlayerRemoveButtons = new ArrayList<>();
+    /** 当前正在编辑的玩家 UUID（null = 所有玩家模式）。 */
+    private java.util.UUID editingPlayerUUID = null;
+    /** 个人策略开关（与 globalPolicyToggles 共用，根据 permTargetIsPlayer 决定读写哪套数据）。 */
+    private final List<CycleButton<Boolean>> personalPolicyToggles = new ArrayList<>();
+    /** 权限配置保存按钮。 */
+    private Button permSaveButton;
+
+    /** Admin constructor (full config, no restrictions). */
     public NeoTabConfigScreen(Screen parent, TabConfig config) {
         super(Component.translatable("screen.neotab.title"));
         this.parent = parent;
         this.initialConfig = config;
+        this.screenMode = ScreenMode.ADMIN;
+        this.policy = com.poso.neotab.permission.PlayerCustomizePolicy.unlocked();
+        this.personalConfig = null;
+    }
+
+    /** Player constructor (personal customization, restricted by policy). */
+    public NeoTabConfigScreen(Screen parent, TabConfig serverConfig,
+                              ScreenMode mode, PlayerCustomizePolicy policy,
+                              com.poso.neotab.config.PlayerTabConfig personalConfig) {
+        super(Component.translatable(
+            mode == ScreenMode.PLAYER ? "screen.neotab.title.player" : "screen.neotab.title"));
+        this.parent = parent;
+        this.initialConfig = serverConfig;
+        this.screenMode = mode;
+        this.policy = policy != null ? policy : com.poso.neotab.permission.PlayerCustomizePolicy.locked();
+        this.personalConfig = personalConfig;
     }
 
     @Override
@@ -139,32 +201,57 @@ public class NeoTabConfigScreen extends Screen {
         clearWidgets();
         this.themeOptionButtons.clear();
         this.themeOptionIds.clear();
-        this.selectedThemeId = TabThemeRegistry.get(initialConfig.tabTheme()).id();
+        this.globalPolicyToggles.clear();
+        this.personalPolicyToggles.clear();
+        this.playerSuggestions.clear();
+        this.targetPlayerRemoveButtons.clear();
+        this.permSaveButton = null;
+        // 重置 activeTab 到合法值（防止 resize 时 PERMISSIONS tab 在 PLAYER 模式下残留）
+        if (activeTab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) {
+            activeTab = ConfigTab.PAGE_CONFIG;
+        }
+        // In PLAYER mode, use personal config values where available; fall back to server config
+        com.poso.neotab.config.TabConfig effectiveInit = (screenMode == ScreenMode.PLAYER && personalConfig != null)
+            ? personalConfig.mergeInto(initialConfig, policy)
+            : initialConfig;
+        this.selectedThemeId = TabThemeRegistry.get(effectiveInit.tabTheme()).id();
         Layout layout = buildLayout();
-        initPageConfigWidgets(layout);
+        initPageConfigWidgets(layout, effectiveInit);
         initThemeWidgets(layout);
-        initFooterAndFinalize(layout);
+        if (screenMode == ScreenMode.ADMIN) {
+            initPermissionsWidgets(layout);
+        }
+        initFooterAndFinalize(layout, effectiveInit);
     }
 
 
-    private void initPageConfigWidgets(Layout layout) {
-        this.topTitleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.topTitleEnabled()));
+    private void initPageConfigWidgets(Layout layout, com.poso.neotab.config.TabConfig cfg) {
+        this.topTitleEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.topTitleEnabled()));
+        applyPolicyToWidget(topTitleEnabled, policy.allowTopTitleToggle());
         this.topTitleInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), TITLE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.top.title")));
         this.topTitleInput.setMaxVisibleLength(TabConfig.MAX_TOP_TITLE_LENGTH);
-        this.topTitleInput.setValue(initialConfig.topTitleText());
-        this.topContentEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.topContentEnabled()));
+        this.topTitleInput.setValue(cfg.topTitleText());
+        applyPolicyToWidget(topTitleInput, policy.allowTopTitleEdit());
+        this.topContentEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.topContentEnabled()));
+        applyPolicyToWidget(topContentEnabled, policy.allowTopContentToggle());
         this.topContentInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.top.content")));
         this.topContentInput.setMaxVisibleLength(TabConfig.MAX_TOP_CONTENT_LENGTH);
         this.topContentInput.setAutoResize(true);
         this.topContentInput.setMaxHeight(MULTILINE_INPUT_HEIGHT * 2);
-        this.topContentInput.setValue(initialConfig.topContentText());
-        this.betterPingEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.betterPingEnabled()));
-        this.onlineDurationEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.onlineDurationEnabled()));
-        this.titleEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.titleEnabled()));
-        this.healthDisplayEnabled = addRenderableWidget(newToggle(layout.toggleX(), initialConfig.healthDisplayEnabled()));
-        this.healthDisplayMode = addRenderableWidget(newHealthModeButton(layout.toggleX(), initialConfig.healthDisplayMode()));
+        this.topContentInput.setValue(cfg.topContentText());
+        applyPolicyToWidget(topContentInput, policy.allowTopContentEdit());
+        this.betterPingEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.betterPingEnabled()));
+        applyPolicyToWidget(betterPingEnabled, policy.allowPingDisplayToggle());
+        this.onlineDurationEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.onlineDurationEnabled()));
+        applyPolicyToWidget(onlineDurationEnabled, policy.allowDurationToggle());
+        this.titleEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.titleEnabled()));
+        applyPolicyToWidget(titleEnabled, policy.allowTitleToggle());
+        this.healthDisplayEnabled = addRenderableWidget(newToggle(layout.toggleX(), cfg.healthDisplayEnabled()));
+        applyPolicyToWidget(healthDisplayEnabled, policy.allowHealthDisplayToggle());
+        this.healthDisplayMode = addRenderableWidget(newHealthModeButton(layout.toggleX(), cfg.healthDisplayMode()));
+        applyPolicyToWidget(healthDisplayMode, policy.allowHealthModeChange());
         // 布局分列配置按钮 - 并排显示，无文字标签
         com.poso.neotab.config.TabLayoutConfig layoutCfg = com.poso.neotab.config.TabLayoutConfig.get();
         // 布局分列开关 - 放在 section header 行右侧（toggleX 位置）
@@ -173,9 +260,9 @@ public class NeoTabConfigScreen extends Screen {
                 .displayOnlyValue()
                 .create(layout.toggleX(), 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
                     (button, enabled) -> {
-                        com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
-                        cfg.setEnabled(enabled);
-                        com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                        com.poso.neotab.config.TabLayoutConfig layoutCfgInner = com.poso.neotab.config.TabLayoutConfig.get();
+                        layoutCfgInner.setEnabled(enabled);
+                        com.poso.neotab.config.TabLayoutConfig.save(layoutCfgInner);
                         // 同步列/行按钮的可交互状态
                         if (layoutColumnsButton != null) layoutColumnsButton.active = enabled;
                         if (layoutRowsButton    != null) layoutRowsButton.active    = enabled;
@@ -183,13 +270,13 @@ public class NeoTabConfigScreen extends Screen {
         this.layoutColumnsButton = addRenderableWidget(Button.builder(
                 Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()),
                 button -> {
-                    com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
-                    int current = cfg.getColumns();
-                    int maxColumns = cfg.getMaxColumns();
+                    com.poso.neotab.config.TabLayoutConfig layoutCfgInner = com.poso.neotab.config.TabLayoutConfig.get();
+                    int current = layoutCfgInner.getColumns();
+                    int maxColumns = layoutCfgInner.getMaxColumns();
                     // 循环递增，超过最大值时回到1
                     int next = current >= maxColumns ? 1 : current + 1;
-                    cfg.setColumns(next);
-                    com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                    layoutCfgInner.setColumns(next);
+                    com.poso.neotab.config.TabLayoutConfig.save(layoutCfgInner);
                     button.setMessage(Component.translatable("screen.neotab.layout.columns", next));
                 })
             .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
@@ -198,9 +285,9 @@ public class NeoTabConfigScreen extends Screen {
         this.layoutRowsButton = addRenderableWidget(Button.builder(
                 Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()),
                 button -> {
-                    com.poso.neotab.config.TabLayoutConfig cfg = com.poso.neotab.config.TabLayoutConfig.get();
-                    int current = cfg.getRowsPerColumn();
-                    int maxRows = cfg.getMaxRows();
+                    com.poso.neotab.config.TabLayoutConfig layoutCfgInner = com.poso.neotab.config.TabLayoutConfig.get();
+                    int current = layoutCfgInner.getRowsPerColumn();
+                    int maxRows = layoutCfgInner.getMaxRows();
                     // 循环：5 → 10 → 15 → 20 → 25 → 30 → 35 → 40 → 5
                     // 但不超过当前最大值
                     int next = switch (current) {
@@ -218,8 +305,8 @@ public class NeoTabConfigScreen extends Screen {
                     if (next == current && current >= maxRows) {
                         next = 5;
                     }
-                    cfg.setRowsPerColumn(next);
-                    com.poso.neotab.config.TabLayoutConfig.save(cfg);
+                    layoutCfgInner.setRowsPerColumn(next);
+                    com.poso.neotab.config.TabLayoutConfig.save(layoutCfgInner);
                     button.setMessage(Component.translatable("screen.neotab.layout.rows", next));
                 })
             .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
@@ -395,16 +482,285 @@ public class NeoTabConfigScreen extends Screen {
         
     }
 
-    private void initFooterAndFinalize(Layout layout) {
+    // ── Policy helper ─────────────────────────────────────────────────────────
+
+    /**
+     * Apply policy restriction to a widget.
+     * If allowed = false (PLAYER mode and policy locked), the widget is disabled and
+     * a tooltip is shown explaining it is controlled by the server administrator.
+     * In ADMIN mode, widgets are always active regardless of policy.
+     */
+    private void applyPolicyToWidget(AbstractWidget widget, boolean allowed) {
+        if (screenMode == ScreenMode.ADMIN) return; // admin always has full access
+        if (!allowed) {
+            widget.active = false;
+            widget.setTooltip(Tooltip.create(
+                Component.translatable("screen.neotab.locked_by_server")));
+        }
+    }
+
+    // ── Permissions tab ───────────────────────────────────────────────────────
+
+    /**
+     * Initialize the permissions configuration tab widgets.
+     * Only called in ADMIN mode.
+     *
+     * Layout:
+     *   Section: Global Policy
+     *     [toggle] Top title toggle
+     *     [toggle] Top title edit
+     *     ... (15 policy fields total)
+     *   Section: Personal Policy
+     *     [search box] Player name  [Search button]
+     *     (if player found: same 15 toggles for that player)
+     */
+    /**
+     * 权限配置界面初始化（重构版）。
+     *
+     * 顶部区域：
+     *   [所有玩家/指定玩家 切换] [输入框（指定玩家时可用）] [添加]
+     *   [指定玩家列表（指定玩家模式下显示）]
+     *
+     * 权限列表：
+     *   每行两个权限项，每项用边框背景围起来，格式：[名称] [ON/OFF]
+     */
+    private void initPermissionsWidgets(Layout layout) {
+        com.poso.neotab.permission.PlayerCustomizePolicy global = initialConfig.globalPolicy();
+
+        // ── 目标模式切换按钮 ──────────────────────────────────────────────────
+        this.permTargetModeButton = addRenderableWidget(Button.builder(
+            Component.translatable(permTargetIsPlayer
+                ? "screen.neotab.policy.mode_player"
+                : "screen.neotab.policy.mode_all"),
+            btn -> {
+                permTargetIsPlayer = !permTargetIsPlayer;
+                btn.setMessage(Component.translatable(permTargetIsPlayer
+                    ? "screen.neotab.policy.mode_player"
+                    : "screen.neotab.policy.mode_all"));
+                // 切换到"所有玩家"时禁用输入框
+                if (playerSearchBox != null) {
+                    playerSearchBox.active = permTargetIsPlayer;
+                    playerSearchBox.setEditable(permTargetIsPlayer);
+                    if (!permTargetIsPlayer) {
+                        playerSearchBox.setValue("");
+                        playerSearchBox.setHint(Component.translatable("screen.neotab.policy.input_disabled"));
+                    } else {
+                        playerSearchBox.setHint(Component.translatable("screen.neotab.policy.search_hint"));
+                    }
+                }
+                if (permAddButton != null) permAddButton.active = permTargetIsPlayer;
+                // 切换时重新加载开关值
+                loadPolicyToggles();
+                syncTabWidgetVisibility();
+                Layout l = buildLayout();
+                applyWidgetLayout(l);
+            })
+            .bounds(layout.left(), 0, 80, INPUT_HEIGHT)
+            .build());
+        this.permTargetModeButton.visible = false;
+
+        // ── 玩家名称输入框（联想搜索）────────────────────────────────────────
+        int modeButtonWidth = 80;
+        int addButtonWidth  = 40;
+        int searchBoxWidth  = layout.contentWidth() - modeButtonWidth - addButtonWidth - 12;
+        this.playerSearchBox = addRenderableWidget(
+            new EditBox(this.font, layout.left() + modeButtonWidth + 4, 0,
+                searchBoxWidth, INPUT_HEIGHT,
+                Component.translatable("screen.neotab.policy.search_hint")));
+        this.playerSearchBox.setMaxLength(40);
+        this.playerSearchBox.setHint(Component.translatable("screen.neotab.policy.search_hint"));
+        this.playerSearchBox.active = permTargetIsPlayer;
+        this.playerSearchBox.setEditable(permTargetIsPlayer);
+        this.playerSearchBox.visible = false;
+        // 输入时更新联想列表
+        this.playerSearchBox.setResponder(text -> {
+            playerSuggestions.clear();
+            if (!text.isBlank()) {
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                if (mc.getConnection() != null) {
+                    String lower = text.toLowerCase();
+                    mc.getConnection().getOnlinePlayers().stream()
+                        .map(p -> p.getProfile().getName())
+                        .filter(name -> name.toLowerCase().contains(lower))
+                        .limit(5)
+                        .forEach(playerSuggestions::add);
+                }
+            }
+        });
+
+        // ── 添加按钮 ──────────────────────────────────────────────────────────
+        this.permAddButton = addRenderableWidget(Button.builder(
+            Component.translatable("screen.neotab.policy.add"),
+            btn -> {
+                if (!permTargetIsPlayer || playerSearchBox == null) return;
+                String name = playerSearchBox.getValue().trim();
+                if (name.isEmpty()) return;
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                if (mc.getConnection() != null) {
+                    mc.getConnection().getOnlinePlayers().stream()
+                        .filter(p -> p.getProfile().getName().equalsIgnoreCase(name))
+                        .findFirst()
+                        .ifPresent(p -> {
+                            java.util.UUID uuid = p.getProfile().getId();
+                            if (!targetPlayers.containsKey(uuid)) {
+                                targetPlayers.put(uuid, p.getProfile().getName());
+                                rebuildTargetPlayerButtons(buildLayout());
+                                syncTabWidgetVisibility();
+                                applyWidgetLayout(buildLayout());
+                            }
+                            playerSearchBox.setValue("");
+                            playerSuggestions.clear();
+                        });
+                }
+            })
+            .bounds(layout.left() + modeButtonWidth + 4 + searchBoxWidth + 4, 0, addButtonWidth, INPUT_HEIGHT)
+            .build());
+        this.permAddButton.active = permTargetIsPlayer;
+        this.permAddButton.visible = false;
+
+        // ── 权限开关（15个，每行两个）────────────────────────────────────────
+        boolean[] globalValues = {
+            global.allowTopTitleToggle(),    global.allowTopTitleEdit(),
+            global.allowTopContentToggle(),  global.allowTopContentEdit(),
+            global.allowPingDisplayToggle(), global.allowDurationToggle(),
+            global.allowTitleToggle(),       global.allowHealthDisplayToggle(),
+            global.allowHealthModeChange(),  global.allowFooterCustomEdit(),
+            global.allowFooterTpsToggle(),   global.allowFooterMsptToggle(),
+            global.allowFooterOnlineToggle(), global.allowThemeChange(),
+            global.allowRefreshIntervalChange()
+        };
+        for (boolean val : globalValues) {
+            CycleButton<Boolean> toggle = addRenderableWidget(
+                CycleButton.onOffBuilder(val)
+                    .displayOnlyValue()
+                    .create(layout.toggleX(), 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                        (btn, v) -> { /* value read on save */ }));
+            toggle.visible = false;
+            globalPolicyToggles.add(toggle);
+        }
+
+        // ── 保存权限按钮 ──────────────────────────────────────────────────────
+        this.permSaveButton = addRenderableWidget(Button.builder(
+            Component.translatable("screen.neotab.policy.save"),
+            btn -> savePermissions())
+            .bounds(layout.left(), 0, 120, INPUT_HEIGHT)
+            .build());
+        this.permSaveButton.visible = false;
+    }
+
+    /**
+     * 保存权限配置并发送到服务端。
+     * 只更新策略字段，不改变其他 TAB 配置。
+     */
+    private void savePermissions() {
+        com.poso.neotab.config.TabConfig config = new com.poso.neotab.config.TabConfig(
+            initialConfig.topTitleEnabled(),
+            initialConfig.topTitleText(),
+            initialConfig.topContentEnabled(),
+            initialConfig.topContentText(),
+            initialConfig.betterPingEnabled(),
+            initialConfig.onlineDurationEnabled(),
+            initialConfig.titleEnabled(),
+            initialConfig.healthDisplayEnabled(),
+            initialConfig.healthDisplayMode(),
+            initialConfig.tabTheme(),
+            initialConfig.footerCustomText(),
+            initialConfig.footerTpsEnabled(),
+            initialConfig.footerMsptEnabled(),
+            initialConfig.footerOnlineEnabled(),
+            initialConfig.refreshIntervalTicks(),
+            buildGlobalPolicyFromToggles(),
+            buildPlayerPoliciesFromToggles()
+        ).sanitized();
+        PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        // 不关闭界面，让管理员继续操作
+        net.minecraft.client.Minecraft.getInstance().player.sendSystemMessage(
+            net.minecraft.network.chat.Component.translatable("message.neotab.permissions_saved"));
+    }
+
+    /**
+     * 重建指定玩家列表的删除按钮。
+     */
+    private void rebuildTargetPlayerButtons(Layout layout) {
+        for (Button btn : targetPlayerRemoveButtons) removeWidget(btn);
+        targetPlayerRemoveButtons.clear();
+        boolean perms = activeTab == ConfigTab.PERMISSIONS;
+        for (java.util.UUID uuid : targetPlayers.keySet()) {
+            Button removeBtn = addRenderableWidget(Button.builder(
+                Component.literal("×"),
+                btn -> {
+                    targetPlayers.remove(uuid);
+                    if (uuid.equals(editingPlayerUUID)) {
+                        editingPlayerUUID = null;
+                        loadPolicyToggles();
+                    }
+                    rebuildTargetPlayerButtons(buildLayout());
+                    syncTabWidgetVisibility();
+                    applyWidgetLayout(buildLayout());
+                })
+                .bounds(layout.left(), 0, 18, INPUT_HEIGHT)
+                .build());
+            // 根据当前 tab 状态直接设置 visible，不统一设为 false
+            removeBtn.visible = perms && permTargetIsPlayer;
+            targetPlayerRemoveButtons.add(removeBtn);
+        }
+    }
+
+    /**
+     * 将当前目标（全局或指定玩家）的策略值加载到开关中。
+     */
+    private void loadPolicyToggles() {
+        com.poso.neotab.permission.PlayerCustomizePolicy p;
+        if (permTargetIsPlayer && editingPlayerUUID != null) {
+            p = initialConfig.playerPolicies().getOrDefault(editingPlayerUUID,
+                com.poso.neotab.permission.PlayerCustomizePolicy.locked());
+        } else {
+            p = initialConfig.globalPolicy();
+        }
+        boolean[] values = {
+            p.allowTopTitleToggle(),    p.allowTopTitleEdit(),
+            p.allowTopContentToggle(),  p.allowTopContentEdit(),
+            p.allowPingDisplayToggle(), p.allowDurationToggle(),
+            p.allowTitleToggle(),       p.allowHealthDisplayToggle(),
+            p.allowHealthModeChange(),  p.allowFooterCustomEdit(),
+            p.allowFooterTpsToggle(),   p.allowFooterMsptToggle(),
+            p.allowFooterOnlineToggle(), p.allowThemeChange(),
+            p.allowRefreshIntervalChange()
+        };
+        for (int i = 0; i < Math.min(values.length, globalPolicyToggles.size()); i++) {
+            CycleButton<Boolean> toggle = globalPolicyToggles.get(i);
+            if (!toggle.getValue().equals(values[i])) toggle.onPress();
+        }
+    }
+    /**
+     * Refresh personal policy toggles for the given player UUID.
+     * Called when the admin searches for a player and selects them.
+     */
+    /**
+     * 已废弃，逻辑已合并到 loadPolicyToggles()。
+     * 保留此方法签名以防其他地方有调用。
+     */
+    private void refreshPersonalPolicyToggles(java.util.UUID uuid) {
+        this.editingPlayerUUID = uuid;
+        loadPolicyToggles();
+        Layout layout = buildLayout();
+        applyWidgetLayout(layout);
+    }
+
+    private void initFooterAndFinalize(Layout layout, com.poso.neotab.config.TabConfig cfg) {
         this.footerCustomInput = addRenderableWidget(new ImprovedRichTextMultiLineEditBox(this.font, layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
             CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
         this.footerCustomInput.setAutoResize(true);
         this.footerCustomInput.setMaxHeight(MULTILINE_INPUT_HEIGHT * 2);
-        this.footerCustomInput.setValue(initialConfig.footerCustomText());
-        this.footerTpsEnabled = addRenderableWidget(newLabeledToggle(layout.footerFirstColumnX(), layout.footerColumnWidth(), initialConfig.footerTpsEnabled(), Component.translatable("screen.neotab.footer.tps")));
-        this.footerMsptEnabled = addRenderableWidget(newLabeledToggle(layout.footerSecondColumnX(), layout.footerColumnWidth(), initialConfig.footerMsptEnabled(), Component.translatable("screen.neotab.footer.mspt")));
-        this.footerOnlineEnabled = addRenderableWidget(newLabeledToggle(layout.footerThirdColumnX(), layout.footerColumnWidth(), initialConfig.footerOnlineEnabled(), Component.translatable("screen.neotab.footer.online")));
+        this.footerCustomInput.setValue(cfg.footerCustomText());
+        applyPolicyToWidget(footerCustomInput, policy.allowFooterCustomEdit());
+        this.footerTpsEnabled = addRenderableWidget(newLabeledToggle(layout.footerFirstColumnX(), layout.footerColumnWidth(), cfg.footerTpsEnabled(), Component.translatable("screen.neotab.footer.tps")));
+        applyPolicyToWidget(footerTpsEnabled, policy.allowFooterTpsToggle());
+        this.footerMsptEnabled = addRenderableWidget(newLabeledToggle(layout.footerSecondColumnX(), layout.footerColumnWidth(), cfg.footerMsptEnabled(), Component.translatable("screen.neotab.footer.mspt")));
+        applyPolicyToWidget(footerMsptEnabled, policy.allowFooterMsptToggle());
+        this.footerOnlineEnabled = addRenderableWidget(newLabeledToggle(layout.footerThirdColumnX(), layout.footerColumnWidth(), cfg.footerOnlineEnabled(), Component.translatable("screen.neotab.footer.online")));
+        applyPolicyToWidget(footerOnlineEnabled, policy.allowFooterOnlineToggle());
         this.doneButton = addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> save())
             .bounds(layout.doneButtonX(), layout.buttonY(), layout.buttonWidth(), INPUT_HEIGHT)
             .build());
@@ -426,6 +782,14 @@ public class NeoTabConfigScreen extends Screen {
     private void syncTabWidgetVisibility() {
         boolean page  = activeTab == ConfigTab.PAGE_CONFIG;
         boolean theme = activeTab == ConfigTab.THEME;
+        boolean perms = activeTab == ConfigTab.PERMISSIONS;
+        // Permissions tab widgets
+        for (CycleButton<Boolean> btn : globalPolicyToggles) btn.visible = perms;
+        if (permTargetModeButton != null) permTargetModeButton.visible = perms;
+        if (playerSearchBox != null) playerSearchBox.visible = perms;
+        if (permAddButton != null) permAddButton.visible = perms;
+        for (Button btn : targetPlayerRemoveButtons) btn.visible = perms && permTargetIsPlayer;
+        if (permSaveButton != null) permSaveButton.visible = perms;
         topTitleEnabled.visible       = page;
         topTitleInput.visible         = page;
         topContentEnabled.visible     = page;
@@ -652,6 +1016,46 @@ public class NeoTabConfigScreen extends Screen {
             }
         }
         
+        // 处理权限 tab 联想下拉列表点击
+        if (activeTab == ConfigTab.PERMISSIONS && permTargetIsPlayer
+                && playerSearchBox != null && playerSearchBox.isFocused()
+                && !playerSuggestions.isEmpty() && button == 0) {
+            int dropX = playerSearchBox.getX();
+            int dropY = playerSearchBox.getY() + INPUT_HEIGHT + 1;
+            int dropW = playerSearchBox.getWidth();
+            int itemH = INPUT_HEIGHT - 2;
+            for (int i = 0; i < playerSuggestions.size(); i++) {
+                int itemY = dropY + 1 + i * itemH;
+                if (mouseX >= dropX && mouseX < dropX + dropW
+                        && mouseY >= itemY && mouseY < itemY + itemH) {
+                    playerSearchBox.setValue(playerSuggestions.get(i));
+                    playerSuggestions.clear();
+                    return true;
+                }
+            }
+        }
+
+        // 处理指定玩家列表中的玩家名点击（切换编辑目标）
+        if (activeTab == ConfigTab.PERMISSIONS && permTargetIsPlayer && button == 0) {
+            Layout permLayout = buildLayout();
+            int permY = CONTENT_TOP_PADDING + ROW_HEIGHT + ROW_GAP;
+            if (!targetPlayers.isEmpty()) {
+                permY += ROW_HEIGHT; // 列表标题
+                for (java.util.Map.Entry<java.util.UUID, String> entry : targetPlayers.entrySet()) {
+                    int rowY = permLayout.toScreenY(permY);
+                    int nameX = permLayout.left() + 22;
+                    int nameW = permLayout.right() - nameX - 6;
+                    if (mouseX >= nameX && mouseX < nameX + nameW
+                            && mouseY >= rowY && mouseY < rowY + INPUT_HEIGHT) {
+                        editingPlayerUUID = entry.getKey();
+                        loadPolicyToggles();
+                        return true;
+                    }
+                    permY += ROW_HEIGHT + 2;
+                }
+            }
+        }
+
         // 然后让其他子组件处理点击事件
         boolean handled = super.mouseClicked(mouseX, mouseY, button);
         if (handled) return true;
@@ -661,13 +1065,23 @@ public class NeoTabConfigScreen extends Screen {
             int tabBtnX = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;
             int tabBtnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;
             if (mouseX >= tabBtnX && mouseX <= tabBtnX + tabBtnW) {
-                ConfigTab[] tabs = ConfigTab.values();
-                for (int i = 0; i < tabs.length; i++) {
-                    int btnY = VIEWPORT_TOP + i * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
+                int tabIndex = 0;
+                for (ConfigTab tab : ConfigTab.values()) {
+                    if (tab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) continue;
+                    int btnY = VIEWPORT_TOP + tabIndex * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
                     if (mouseY >= btnY && mouseY <= btnY + TAB_BUTTON_HEIGHT) {
-                        switchTab(tabs[i]);
+                        // Extra permission check when clicking PERMISSIONS tab
+                        if (tab == ConfigTab.PERMISSIONS) {
+                            Minecraft mc = Minecraft.getInstance();
+                            if (mc.player == null || !mc.player.hasPermissions(2)) {
+                                mc.player.sendSystemMessage(Component.translatable("message.neotab.no_permission"));
+                                return true;
+                            }
+                        }
+                        switchTab(tab);
                         return true;
                     }
+                    tabIndex++;
                 }
             }
         }
@@ -764,12 +1178,44 @@ public class NeoTabConfigScreen extends Screen {
         renderScrollableContent(g, mouseX, mouseY, partialTick, layout);
         renderButtonBar(g, layout);
         renderFixedWidgets(g, mouseX, mouseY, partialTick);
+        // 联想下拉列表在所有内容之上渲染（不受 scissor 裁剪）
+        renderPlayerSuggestionDropdown(g, mouseX, mouseY);
         renderHoveredTooltip(g, mouseX, mouseY, layout);
     }
 
     /** 缂備焦锚閸╂顔忛敂鎸庢珷 Tab 闁哄秴楠忕槐姗滶2 濡炲瀛╅悧鎼佹晬婢跺牃锟?*/
+    /**
+     * 在所有内容之上渲染联想下拉列表（不受 scissor 裁剪，始终在最上层）。
+     */
+    private void renderPlayerSuggestionDropdown(GuiGraphics g, int mouseX, int mouseY) {
+        if (activeTab != ConfigTab.PERMISSIONS) return;
+        if (!permTargetIsPlayer || playerSearchBox == null) return;
+        if (!playerSearchBox.isFocused() || playerSuggestions.isEmpty()) return;
+
+        int dropX = playerSearchBox.getX();
+        int dropY = playerSearchBox.getY() + INPUT_HEIGHT + 1;
+        int dropW = playerSearchBox.getWidth();
+        int itemH = INPUT_HEIGHT - 2;
+        int totalH = playerSuggestions.size() * itemH + 2;
+
+        // 背景
+        g.fill(dropX - 1, dropY - 1, dropX + dropW + 1, dropY + totalH + 1,
+            AEStyleRenderer.COLOR_OUTLINE);
+        g.fill(dropX, dropY, dropX + dropW, dropY + totalH, 0xFF2A2A2A);
+
+        for (int i = 0; i < playerSuggestions.size(); i++) {
+            int itemY = dropY + 1 + i * itemH;
+            boolean hovered = mouseX >= dropX && mouseX < dropX + dropW
+                && mouseY >= itemY && mouseY < itemY + itemH;
+            if (hovered) g.fill(dropX, itemY, dropX + dropW, itemY + itemH, 0xFF334466);
+            g.drawString(this.font, playerSuggestions.get(i),
+                dropX + 4, itemY + (itemH - this.font.lineHeight) / 2,
+                hovered ? 0xFF55FF55 : AEStyleRenderer.COLOR_LABEL, false);
+        }
+    }
+
     private void renderTabBar(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
-        Renderer.renderTabBar(g, this.font, this.activeTab, layout, mouseX, mouseY);
+        Renderer.renderTabBar(g, this.font, this.activeTab, layout, mouseX, mouseY, this.screenMode);
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, Layout layout) {
@@ -857,13 +1303,144 @@ public class NeoTabConfigScreen extends Screen {
                     layout.left() + THEME_LIST_INSET, layout.toScreenY(customConfigY - 12), 
                     AEStyleRenderer.COLOR_SECTION_TEXT, false);
             }
+        } else if (activeTab == ConfigTab.PERMISSIONS) {
+            renderPermissionsContent(g, mouseX, mouseY, layout);
         }
-        // Render scrollable widgets inside the clipped viewport
+        // 渲染所有可滚动 widget（开关、输入框、按钮等）
         renderScrollableWidgets(g, mouseX, mouseY, partialTick);
         g.disableScissor();
         renderScrollbar(g, layout);
     }
 
+    /**
+     * Render the permissions configuration tab content.
+     * Shows section headers and labels for each policy field.
+     * The actual toggle widgets are rendered by renderScrollableWidgets.
+     */
+    /**
+     * 渲染权限配置界面内容（重构版）。
+     *
+     * 顶部：目标模式切换 + 输入框 + 添加按钮
+     * 指定玩家列表（指定玩家模式下）
+     * 权限列表：每行两个权限项，每项用边框背景围起来
+     */
+    private void renderPermissionsContent(GuiGraphics g, int mouseX, int mouseY, Layout layout) {
+        String[] policyKeys = {
+            "screen.neotab.policy.top_title_toggle",   "screen.neotab.policy.top_title_edit",
+            "screen.neotab.policy.top_content_toggle", "screen.neotab.policy.top_content_edit",
+            "screen.neotab.policy.ping_toggle",        "screen.neotab.policy.duration_toggle",
+            "screen.neotab.policy.title_toggle",       "screen.neotab.policy.health_toggle",
+            "screen.neotab.policy.health_mode",        "screen.neotab.policy.footer_custom",
+            "screen.neotab.policy.footer_tps",         "screen.neotab.policy.footer_mspt",
+            "screen.neotab.policy.footer_online",      "screen.neotab.policy.theme",
+            "screen.neotab.policy.refresh_interval"
+        };
+
+        int y = CONTENT_TOP_PADDING;
+
+        // ── 顶部行（目标模式切换 + 输入框 + 添加按钮）由 widget 自己渲染 ──────
+        // 联想下拉列表由 renderPlayerSuggestionDropdown 在最上层单独渲染
+        y += ROW_HEIGHT + ROW_GAP;
+
+        // ── 指定玩家列表（始终预留空间，指定玩家模式下显示内容）────────────────
+        {
+            // 列表标题行
+            int titleY = layout.toScreenY(y) + (INPUT_HEIGHT - this.font.lineHeight) / 2;
+            if (permTargetIsPlayer) {
+                g.drawString(this.font,
+                    Component.translatable("screen.neotab.policy.target_list"),
+                    layout.left(), titleY, AEStyleRenderer.COLOR_SECTION_TEXT, false);
+            } else {
+                // 所有玩家模式：显示灰色占位文字
+                g.drawString(this.font,
+                    Component.translatable("screen.neotab.policy.target_list_hint"),
+                    layout.left(), titleY, 0xFF666666, false);
+            }
+            y += ROW_HEIGHT;
+
+            // 玩家标签区域（固定高度，流式横向排列）
+            int tagAreaY = layout.toScreenY(y);
+            int tagAreaH = INPUT_HEIGHT;  // 紧凑高度，与 buildLayout 保持一致
+            // 绘制标签区域背景
+            AEStyleRenderer.drawSunkenPanel(g, layout.left(), tagAreaY,
+                layout.contentWidth() - 6, tagAreaH, AEStyleRenderer.COLOR_CONTENT_BG, 1);
+
+            if (permTargetIsPlayer) {
+                if (targetPlayers.isEmpty()) {
+                    // 空列表提示
+                    int hintY = tagAreaY + (tagAreaH - this.font.lineHeight) / 2;
+                    g.drawString(this.font,
+                        Component.translatable("screen.neotab.policy.no_targets"),
+                        layout.left() + 4, hintY, 0xFF888888, false);
+                } else {
+                    // 流式横向排列玩家标签
+                    int tagX = layout.left() + 3;
+                    int tagY = tagAreaY + 2;
+                    int tagH = tagAreaH - 2;  // 留出 1px 上下边距
+                    int tagPadX = 4;
+                    int removeW = 14;  // 与 applyWidgetLayout 保持一致
+                    for (java.util.Map.Entry<java.util.UUID, String> entry : targetPlayers.entrySet()) {
+                        boolean isEditing = entry.getKey().equals(editingPlayerUUID);
+                        String name = entry.getValue();
+                        int nameW = this.font.width(name);
+                        int tagW = nameW + tagPadX * 2 + removeW + 2;
+                        // 超出右边界换行（简单处理：截断显示）
+                        if (tagX + tagW > layout.right() - 8) break;
+                        // 标签背景
+                        int tagBg = isEditing ? 0xFF334466 : 0xFF4A4E58;
+                        g.fill(tagX, tagY, tagX + tagW, tagY + tagH, tagBg);
+                        AEStyleRenderer.drawOutline(g, tagX, tagY, tagW, tagH,
+                            isEditing ? 0xFF5577AA : AEStyleRenderer.COLOR_OUTLINE, 1);
+                        // 玩家名
+                        int nameColor = isEditing ? 0xFF55FF55 : AEStyleRenderer.COLOR_LABEL;
+                        g.drawString(this.font, name,
+                            tagX + tagPadX, tagY + (tagH - this.font.lineHeight) / 2,
+                            nameColor, false);
+                        // × 符号（删除按钮由 widget 渲染，这里只画文字位置参考）
+                        tagX += tagW + 3;
+                    }
+                }
+            }
+            y += tagAreaH + 4;  // 与 buildLayout 的 permTargetListHeight 保持一致
+        }
+
+        // ── 权限列表分区标题 ──────────────────────────────────────────────────
+        String sectionKey = permTargetIsPlayer && editingPlayerUUID != null
+            ? "screen.neotab.policy.section_player"
+            : "screen.neotab.policy.section_all";
+        AEStyleRenderer.drawSectionHeader(g, this.font,
+            Component.translatable(sectionKey),
+            layout.left(), layout.toScreenY(y), layout.right());
+        y += SECTION_HEADER_HEIGHT;
+
+        // ── 权限项（每行两个，每项用边框背景围起来）──────────────────────────
+        // 每个权限项宽度 = (contentWidth - gap) / 2
+        int itemGap = 4;
+        int itemW = (layout.contentWidth() - 6 - itemGap) / 2;
+        int itemH = INPUT_HEIGHT + 2;  // 与 applyWidgetLayout 保持一致
+        int labelPad = 4;
+
+        for (int i = 0; i < policyKeys.length; i++) {
+            int col = i % 2;
+            int row = i / 2;
+            if (col == 0 && i > 0) y += itemH + 2;  // 换行间距（与 applyWidgetLayout 的 itemRowGap 一致）
+
+            int itemX = layout.left() + col * (itemW + itemGap);
+            int itemY = layout.toScreenY(y);
+
+            // 边框背景（AE2 凸起面板风格）
+            AEStyleRenderer.drawRaisedPanelNoOutline(g, itemX, itemY, itemW, itemH,
+                AEStyleRenderer.COLOR_BUTTON_BG, 1);
+
+            // 权限名称标签
+            Component label = Component.translatable(policyKeys[i]);
+            int textY = itemY + (itemH - this.font.lineHeight) / 2;
+            g.drawString(this.font, label, itemX + labelPad, textY,
+                AEStyleRenderer.COLOR_LABEL, false);
+
+            // 开关由 widget 自己渲染，这里只需要确保位置正确（在 applyWidgetLayout 中设置）
+        }
+    }
     private void renderScrollableWidgets(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         for (Renderable r : this.renderables) {
             if (r == this.doneButton || r == this.cancelButton) continue;
@@ -895,6 +1472,11 @@ public class NeoTabConfigScreen extends Screen {
                     // 使用 AE 风格渲染其他按钮（包括重置按钮和确认/取消按钮）
                     renderAEButton(g, button, mouseX, mouseY);
                 } else if (button == layoutColumnsButton || button == layoutRowsButton) {
+                    renderAEButton(g, button, mouseX, mouseY);
+                } else if (button == permTargetModeButton || button == permAddButton
+                        || button == permSaveButton
+                        || targetPlayerRemoveButtons.contains(button)) {
+                    // 权限配置界面按钮使用 AE 风格
                     renderAEButton(g, button, mouseX, mouseY);
                 } else {
                     r.render(g, mouseX, mouseY, partialTick);
@@ -1078,7 +1660,8 @@ public class NeoTabConfigScreen extends Screen {
     private AbstractWidget hoveredScrollableWidget(double mouseX, double mouseY) {
         for (Renderable r : this.renderables) {
             if (r == this.doneButton || r == this.cancelButton) continue;
-            if (r instanceof AbstractWidget w && w.isMouseOver(mouseX, mouseY)) return w;
+            // 不可见的 widget 不参与鼠标事件检测，防止遮挡其他 tab 的组件
+            if (r instanceof AbstractWidget w && w.visible && w.isMouseOver(mouseX, mouseY)) return w;
         }
         return null;
     }
@@ -1261,6 +1844,96 @@ public class NeoTabConfigScreen extends Screen {
         placeScrollableWidget(this.footerTpsEnabled,     layout.footerFirstColumnX(),  layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerMsptEnabled,    layout.footerSecondColumnX(), layout.toScreenY(layout.footerRowY()));
         placeScrollableWidget(this.footerOnlineEnabled,  layout.footerThirdColumnX(),  layout.toScreenY(layout.footerRowY()));
+
+        // ── Permissions tab layout ────────────────────────────────────────────
+        // 只在权限 tab 激活时才计算布局，避免影响其他 tab
+        if (!globalPolicyToggles.isEmpty() && activeTab == ConfigTab.PERMISSIONS) {
+            int modeButtonWidth = 80;
+            int addButtonWidth  = 40;
+            int searchBoxWidth  = layout.contentWidth() - modeButtonWidth - addButtonWidth - 12;
+
+            int permY = CONTENT_TOP_PADDING;
+
+            // 目标模式切换按钮
+            if (permTargetModeButton != null) {
+                permTargetModeButton.setX(layout.left());
+                permTargetModeButton.setY(layout.toScreenY(permY));
+                permTargetModeButton.setWidth(modeButtonWidth);
+            }
+            // 输入框
+            if (playerSearchBox != null) {
+                playerSearchBox.setX(layout.left() + modeButtonWidth + 4);
+                playerSearchBox.setY(layout.toScreenY(permY));
+                playerSearchBox.setWidth(searchBoxWidth);
+            }
+            // 添加按钮
+            if (permAddButton != null) {
+                permAddButton.setX(layout.left() + modeButtonWidth + 4 + searchBoxWidth + 4);
+                permAddButton.setY(layout.toScreenY(permY));
+            }
+            permY += ROW_HEIGHT + ROW_GAP;
+
+            // 指定玩家列表（始终预留空间）
+            permY += ROW_HEIGHT; // 列表标题行
+            int tagAreaH2 = INPUT_HEIGHT;  // 紧凑标签区域，与 buildLayout 保持一致
+            // 删除按钮：流式横向排列，与标签对齐
+            if (permTargetIsPlayer && !targetPlayers.isEmpty()) {
+                int tagX2 = layout.left() + 3;
+                int tagY2 = layout.toScreenY(permY) + 2;
+                int tagH2 = tagAreaH2 - 2;  // 留出 1px 上下边距
+                int tagPadX2 = 4;
+                int removeW2 = 14;  // 稍大一点，更容易点击
+                int btnIdx = 0;
+                for (java.util.UUID uuid : targetPlayers.keySet()) {
+                    if (btnIdx >= targetPlayerRemoveButtons.size()) break;
+                    String name = targetPlayers.get(uuid);
+                    int nameW2 = this.font.width(name);
+                    int tagW2 = nameW2 + tagPadX2 * 2 + removeW2 + 2;
+                    if (tagX2 + tagW2 > layout.right() - 8) break;
+                    Button removeBtn = targetPlayerRemoveButtons.get(btnIdx);
+                    removeBtn.setX(tagX2 + tagPadX2 + nameW2 + 2);
+                    removeBtn.setY(tagY2 + (tagH2 - INPUT_HEIGHT) / 2);
+                    removeBtn.setWidth(removeW2);
+                    removeBtn.setHeight(INPUT_HEIGHT);
+                    tagX2 += tagW2 + 3;
+                    btnIdx++;
+                }
+            }
+            permY += tagAreaH2 + 4;  // 与 buildLayout 的 permTargetListHeight 保持一致
+
+            // 权限列表分区标题
+            permY += SECTION_HEADER_HEIGHT;
+
+            // 权限项（每行两个，开关放在每个 item 右侧）
+            int itemGap = 4;
+            int itemW = (layout.contentWidth() - 6 - itemGap) / 2;
+            int itemH = INPUT_HEIGHT + 2;  // 紧凑高度
+            int itemRowGap = 2;
+            int togglePad = 3;
+
+            for (int i = 0; i < globalPolicyToggles.size(); i++) {
+                int col = i % 2;
+                int row = i / 2;
+                // 正确计算：permY 是当前行起始内容坐标，row * (itemH + itemRowGap) 是行偏移
+                int rowContentY = permY + row * (itemH + itemRowGap);
+                int itemX = layout.left() + col * (itemW + itemGap);
+                int itemScreenY = layout.toScreenY(rowContentY);
+                // 开关放在 item 右侧，垂直居中
+                int toggleX = itemX + itemW - TOGGLE_WIDTH - togglePad;
+                int toggleY = itemScreenY + (itemH - INPUT_HEIGHT) / 2;
+                placeScrollableWidget(globalPolicyToggles.get(i), toggleX, toggleY);
+            }
+
+            // 保存权限按钮（放在权限列表下方）
+            int permRowCount2 = (globalPolicyToggles.size() + 1) / 2;
+            int saveButtonY = permY + permRowCount2 * (itemH + itemRowGap) + ROW_GAP;
+            if (permSaveButton != null) {
+                permSaveButton.setX(layout.left());
+                permSaveButton.setY(layout.toScreenY(saveButtonY));
+                permSaveButton.setWidth(120);
+            }
+        }
+
         this.doneButton.setX(layout.doneButtonX());
         this.doneButton.setY(layout.buttonY());
         this.cancelButton.setX(layout.cancelButtonX());
@@ -1370,25 +2043,108 @@ public class NeoTabConfigScreen extends Screen {
     }
     
     private void save() {
-        TabConfig config = new TabConfig(
-            this.topTitleEnabled.getValue(),
-            this.topTitleInput.getValue(),
-            this.topContentEnabled.getValue(),
-            this.topContentInput.getValue(),
-            this.betterPingEnabled.getValue(),
-            this.onlineDurationEnabled.getValue(),
-            this.titleEnabled.getValue(),
-            this.healthDisplayEnabled.getValue(),
-            this.healthDisplayMode.getValue(),
-            this.selectedThemeId,
-            this.footerCustomInput.getValue(),
-            this.footerTpsEnabled.getValue(),
-            this.footerMsptEnabled.getValue(),
-            this.footerOnlineEnabled.getValue(),
-            this.initialConfig.refreshIntervalTicks()
-        ).sanitized();
-        PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        if (screenMode == ScreenMode.PLAYER) {
+            // PLAYER mode: build and send personal config
+            com.poso.neotab.config.PlayerTabConfig playerCfg = new com.poso.neotab.config.PlayerTabConfig(
+                Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : java.util.UUID.randomUUID(),
+                policy.allowTopTitleToggle()      ? this.topTitleEnabled.getValue()      : null,
+                policy.allowTopTitleEdit()        ? this.topTitleInput.getValue()        : null,
+                policy.allowTopContentToggle()    ? this.topContentEnabled.getValue()    : null,
+                policy.allowTopContentEdit()      ? this.topContentInput.getValue()      : null,
+                policy.allowPingDisplayToggle()   ? this.betterPingEnabled.getValue()    : null,
+                policy.allowDurationToggle()      ? this.onlineDurationEnabled.getValue() : null,
+                policy.allowTitleToggle()         ? this.titleEnabled.getValue()         : null,
+                policy.allowHealthDisplayToggle() ? this.healthDisplayEnabled.getValue() : null,
+                policy.allowHealthModeChange()    ? this.healthDisplayMode.getValue()    : null,
+                policy.allowFooterCustomEdit()    ? this.footerCustomInput.getValue()    : null,
+                policy.allowFooterTpsToggle()     ? this.footerTpsEnabled.getValue()     : null,
+                policy.allowFooterMsptToggle()    ? this.footerMsptEnabled.getValue()    : null,
+                policy.allowFooterOnlineToggle()  ? this.footerOnlineEnabled.getValue()  : null,
+                policy.allowThemeChange()         ? this.selectedThemeId                : null
+            );
+            PacketDistributor.sendToServer(new SavePlayerConfigPayload(playerCfg));
+        } else {
+            // ADMIN mode: build and send server config (includes policy from permissions tab)
+            TabConfig config = new TabConfig(
+                this.topTitleEnabled.getValue(),
+                this.topTitleInput.getValue(),
+                this.topContentEnabled.getValue(),
+                this.topContentInput.getValue(),
+                this.betterPingEnabled.getValue(),
+                this.onlineDurationEnabled.getValue(),
+                this.titleEnabled.getValue(),
+                this.healthDisplayEnabled.getValue(),
+                this.healthDisplayMode.getValue(),
+                this.selectedThemeId,
+                this.footerCustomInput.getValue(),
+                this.footerTpsEnabled.getValue(),
+                this.footerMsptEnabled.getValue(),
+                this.footerOnlineEnabled.getValue(),
+                this.initialConfig.refreshIntervalTicks(),
+                buildGlobalPolicyFromToggles(),
+                buildPlayerPoliciesFromToggles()
+            ).sanitized();
+            PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        }
         onClose();
+    }
+
+    /**
+     * Build global policy from the permissions tab toggles.
+     * Falls back to initialConfig.globalPolicy() if no toggles exist (e.g. permissions tab not opened).
+     */
+    private com.poso.neotab.permission.PlayerCustomizePolicy buildGlobalPolicyFromToggles() {
+        if (globalPolicyToggles.size() < 15) {
+            return initialConfig.globalPolicy();
+        }
+        com.poso.neotab.permission.PlayerCustomizePolicy built = new com.poso.neotab.permission.PlayerCustomizePolicy(
+            globalPolicyToggles.get(0).getValue(),  globalPolicyToggles.get(1).getValue(),
+            globalPolicyToggles.get(2).getValue(),  globalPolicyToggles.get(3).getValue(),
+            globalPolicyToggles.get(4).getValue(),  globalPolicyToggles.get(5).getValue(),
+            globalPolicyToggles.get(6).getValue(),  globalPolicyToggles.get(7).getValue(),
+            globalPolicyToggles.get(8).getValue(),  globalPolicyToggles.get(9).getValue(),
+            globalPolicyToggles.get(10).getValue(), globalPolicyToggles.get(11).getValue(),
+            globalPolicyToggles.get(12).getValue(), globalPolicyToggles.get(13).getValue(),
+            globalPolicyToggles.get(14).getValue()
+        );
+        // 如果当前正在编辑某个玩家，开关值属于该玩家的个人策略，不是全局策略
+        // 全局策略保持 initialConfig 中的值
+        if (permTargetIsPlayer && editingPlayerUUID != null) {
+            return initialConfig.globalPolicy();
+        }
+        return built;
+    }
+
+    /**
+     * 构建玩家策略 Map。
+     * 在指定玩家模式下，将当前开关值应用到所有 targetPlayers 中的玩家。
+     * 在所有玩家模式下，保持 initialConfig 中的 playerPolicies 不变。
+     */
+    private java.util.Map<java.util.UUID, com.poso.neotab.permission.PlayerCustomizePolicy> buildPlayerPoliciesFromToggles() {
+        java.util.Map<java.util.UUID, com.poso.neotab.permission.PlayerCustomizePolicy> policies =
+            new java.util.HashMap<>(initialConfig.playerPolicies());
+
+        if (!permTargetIsPlayer || globalPolicyToggles.size() < 15) {
+            return policies;
+        }
+
+        // 从开关读取当前策略值
+        com.poso.neotab.permission.PlayerCustomizePolicy current = new com.poso.neotab.permission.PlayerCustomizePolicy(
+            globalPolicyToggles.get(0).getValue(),  globalPolicyToggles.get(1).getValue(),
+            globalPolicyToggles.get(2).getValue(),  globalPolicyToggles.get(3).getValue(),
+            globalPolicyToggles.get(4).getValue(),  globalPolicyToggles.get(5).getValue(),
+            globalPolicyToggles.get(6).getValue(),  globalPolicyToggles.get(7).getValue(),
+            globalPolicyToggles.get(8).getValue(),  globalPolicyToggles.get(9).getValue(),
+            globalPolicyToggles.get(10).getValue(), globalPolicyToggles.get(11).getValue(),
+            globalPolicyToggles.get(12).getValue(), globalPolicyToggles.get(13).getValue(),
+            globalPolicyToggles.get(14).getValue()
+        );
+
+        // 将当前策略应用到所有指定玩家
+        for (java.util.UUID uuid : targetPlayers.keySet()) {
+            policies.put(uuid, current);
+        }
+        return policies;
     }
 
     /**
@@ -1504,9 +2260,25 @@ public class NeoTabConfigScreen extends Screen {
         int layoutButtonsY       = layoutSectionHeaderY + SECTION_HEADER_HEIGHT;  // 直接放按钮，无文字标签
 
         // Content height for the active tab
+        // 权限 tab 内容高度：顶部行 + 指定玩家列表（可变）+ 分区标题 + 权限项（8行，每行两个）
+        // 指定玩家列表：始终预留固定高度（标题行 + 标签区域 + 间距）
+        // 使用紧凑高度，减少占用空间
+        int permTagAreaH = INPUT_HEIGHT;  // 紧凑标签区域
+        int permTargetListHeight = ROW_HEIGHT + permTagAreaH + 4;  // 标题 + 标签区域 + 小间距
+        int permItemH = INPUT_HEIGHT + 2;  // 与 applyWidgetLayout 保持一致
+        int permRowCount = (15 + 1) / 2; // 8行（15个权限，每行2个）
+        int permissionsContentHeight = CONTENT_TOP_PADDING
+            + (ROW_HEIGHT + ROW_GAP)       // 顶部行
+            + permTargetListHeight          // 指定玩家列表
+            + SECTION_HEADER_HEIGHT         // 分区标题
+            + permRowCount * (permItemH + 2) // 权限项（itemRowGap=2）
+            + ROW_GAP + INPUT_HEIGHT + 4;   // 保存权限按钮
+
         int contentHeight;
         if (activeTab == ConfigTab.PAGE_CONFIG) {
             contentHeight = footerRowY + ROW_HEIGHT;
+        } else if (activeTab == ConfigTab.PERMISSIONS) {
+            contentHeight = permissionsContentHeight;
         } else {
             // Theme tab: 主题选择器 + 自定义配置（如有）+ 血量显示section + 布局分列section
             contentHeight = layoutButtonsY + INPUT_HEIGHT;
@@ -1619,13 +2391,15 @@ public class NeoTabConfigScreen extends Screen {
 
         static void renderTabBar(GuiGraphics g, net.minecraft.client.gui.Font font,
                                  ConfigTab activeTab, Layout layout,
-                                 int mouseX, int mouseY) {
+                                 int mouseX, int mouseY, ScreenMode screenMode) {
             int x    = layout.tabBarX() + TAB_BUTTON_LEFT_PADDING;
             int btnW = TAB_BAR_WIDTH - TAB_BUTTON_LEFT_PADDING;
 
-            for (int i = 0; i < ConfigTab.values().length; i++) {
-                ConfigTab tab = ConfigTab.values()[i];
-                int btnY    = VIEWPORT_TOP + i * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
+            int tabIndex = 0;
+            for (ConfigTab tab : ConfigTab.values()) {
+                // PERMISSIONS tab is only visible in ADMIN mode
+                if (tab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) continue;
+                int btnY    = VIEWPORT_TOP + tabIndex * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
                 boolean active  = activeTab == tab;
                 boolean hovered = !active
                         && mouseX >= x && mouseX <= x + btnW - 1
@@ -1639,6 +2413,7 @@ public class NeoTabConfigScreen extends Screen {
                 int textX = x + (btnW - textW) / 2;
                 int textY = btnY + (TAB_BUTTON_HEIGHT - font.lineHeight) / 2;
                 g.drawString(font, label, textX, textY, textColor, false);
+                tabIndex++;
             }
         }
 
