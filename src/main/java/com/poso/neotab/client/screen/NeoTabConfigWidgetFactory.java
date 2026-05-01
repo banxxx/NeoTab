@@ -1,58 +1,54 @@
 package com.poso.neotab.client.screen;
 
 import com.poso.neotab.config.HealthDisplayMode;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 
 /**
- * NeoTab 配置界面 Widget 工厂。
- *
- * <p>将 {@link NeoTabConfigScreen} 中所有 Widget 创建方法集中到此处，
- * 使主屏幕类专注于状态管理和事件处理。</p>
- *
- * <p>所有方法均为静态，不持有任何状态。</p>
+ * Factory class for creating widgets used in NeoTabConfigScreen.
  */
-final class NeoTabConfigWidgetFactory {
-
-    // 与 NeoTabConfigScreen 中保持一致的常量（避免跨类访问 private 成员）
-    private static final int TOGGLE_WIDTH = 56;
+public class NeoTabConfigWidgetFactory {
     private static final int INPUT_HEIGHT = 20;
+    private static final int TOGGLE_WIDTH = 56;
 
     private NeoTabConfigWidgetFactory() {}
 
     /**
-     * 创建 ON/OFF 切换按钮（仅显示值，无标签）。
+     * Create a simple ON/OFF toggle button.
      */
-    static CycleButton<Boolean> newToggle(int x, boolean initialValue) {
+    public static CycleButton<Boolean> newToggle(int x, boolean initialValue) {
         return CycleButton.onOffBuilder(initialValue)
-                .displayOnlyValue()
-                .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY);
+            .displayOnlyValue()
+            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                (button, value) -> { /* value read on save */ });
     }
 
     /**
-     * 创建带标签的 ON/OFF 切换按钮。
+     * Create a labeled ON/OFF toggle button.
      */
-    static CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {
+    public static CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {
         return CycleButton.onOffBuilder(initialValue)
-                .create(x, 0, width, INPUT_HEIGHT, label);
+            .displayOnlyValue()
+            .create(x, 0, width, INPUT_HEIGHT, label,
+                (button, value) -> { /* value read on save */ });
     }
 
     /**
-     * 创建血量显示模式选择按钮（FULL / COMPACT 循环切换）。
-     *
-     * @param onModeChanged 模式变化时的回调（通常用于调整布局配置到新的限制范围）
+     * Create a health display mode cycle button.
      */
-    static CycleButton<HealthDisplayMode> newHealthModeButton(int x, HealthDisplayMode initialValue,
-                                                               Runnable onModeChanged) {
-        return CycleButton.<HealthDisplayMode>builder(mode -> Component.translatable(
-                        mode == HealthDisplayMode.FULL
-                                ? "screen.neotab.theme.health_mode.full"
-                                : "screen.neotab.theme.health_mode.compact"))
-                .withValues(HealthDisplayMode.FULL, HealthDisplayMode.COMPACT)
-                .withInitialValue(initialValue)
-                .displayOnlyValue()
-                .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
-                        (button, newMode) -> onModeChanged.run());
+    public static CycleButton<HealthDisplayMode> newHealthModeButton(int x, HealthDisplayMode initialValue, Runnable onValueChange) {
+        return CycleButton.builder((HealthDisplayMode mode) ->
+                Component.translatable("screen.neotab.health_mode." + mode.toId()))
+            .withValues(HealthDisplayMode.values())
+            .withInitialValue(initialValue)
+            .displayOnlyValue()
+            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                (button, value) -> {
+                    if (onValueChange != null) {
+                        onValueChange.run();
+                    }
+                });
     }
 }
