@@ -21,7 +21,7 @@ public class NoCountMultiLineEditBox extends MultiLineEditBox {
     private static final int SCROLLBAR_WIDTH = 4;  // 滚动条宽度
     private static final int SCROLLBAR_PADDING = 2;  // 滚动条与边框的间距
     private static final int SCROLLBAR_TOTAL_WIDTH = SCROLLBAR_WIDTH + SCROLLBAR_PADDING * 2;  // 滚动条总宽度（包括左右padding）
-    
+
     private final int fullWidth;  // 完整宽度（包括滚动条区域）
     private boolean isDraggingScrollbar = false;  // 是否正在拖动滚动条
 
