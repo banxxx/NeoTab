@@ -40,14 +40,19 @@ import net.minecraft.network.chat.TextColor;
  */
 public final class RichTextEngine {
     /**
+     * 缓存键记录类型（性能优化：避免字符串拼接）。
+     * 
+     * <p>使用 record 类型自动实现 equals/hashCode，性能优于字符串拼接。</p>
+     */
+    private record CacheKey(String template, boolean singleLine) {}
+    
+    /**
      * 富文本解析结果缓存。
      * 
      * <p>性能优化：缓存已解析的富文本，避免重复解析相同的模板。
-     * 使用 ConcurrentHashMap 保证线程安全，因为可能在多个线程中调用。</p>
-     * 
-     * <p>缓存键格式：rawText + "|" + singleLine</p>
+     * 使用 CacheKey record 替代字符串拼接，减少临时对象分配。</p>
      */
-    private static final Map<String, Component> PARSE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<CacheKey, Component> PARSE_CACHE = new ConcurrentHashMap<>();
     
     /**
      * 缓存大小限制，防止内存泄漏。
@@ -83,7 +88,7 @@ public final class RichTextEngine {
             return Component.empty();
         }
 
-        String key = cacheKey + "|false";
+        CacheKey key = new CacheKey(cacheKey, false);
         Component cached = PARSE_CACHE.get(key);
         if (cached != null) {
             // 缓存命中：直接返回上一次的解析结果
@@ -126,7 +131,7 @@ public final class RichTextEngine {
         }
 
         String normalized = rawText.replace('\n', ' ').replace('\r', ' ');
-        String key = cacheKey + "|true";
+        CacheKey key = new CacheKey(cacheKey, true);
 
         Component cached = PARSE_CACHE.get(key);
         if (cached != null) {

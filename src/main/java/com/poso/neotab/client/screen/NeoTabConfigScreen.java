@@ -34,7 +34,6 @@ public class NeoTabConfigScreen extends Screen {
 
     //  Constants 
     private static final int MAX_CONTENT_WIDTH      = 600;  // 增加最大内容宽度，适应横向布局
-    private static final int CONTENT_SIDE_PADDING   = 32;
     private static final int ROW_HEIGHT              = 24;
     private static final int INPUT_HEIGHT            = 20;
     private static final int TITLE_INPUT_HEIGHT      = 60;
@@ -60,21 +59,7 @@ public class NeoTabConfigScreen extends Screen {
     private static final int TAB_BUTTON_HEIGHT       = 24;
     private static final int TAB_BUTTON_GAP          = 4;
     private static final int TAB_BUTTON_LEFT_PADDING = 6;
-    private static final int SECTION_LINE_COLOR   = 0x80FFFFFF;
-    private static final int SECTION_TITLE_COLOR  = 0xFF2A2A2A;
-    private static final int LABEL_COLOR          = 0xFF2A2A2A;
-    private static final int LABEL_HOVER_COLOR    = 0xFFFFFF55;
-    private static final int BUTTON_BAR_COLOR     = 0x90000000;
-    private static final int SCROLL_TRACK_COLOR   = 0x60303030;
-    private static final int SCROLL_THUMB_COLOR   = 0xB0FFFFFF;
-    private static final int TAB_BAR_BG_COLOR     = 0x60000000;
-    private static final int TAB_ACTIVE_BG_COLOR  = 0xB0334466;
-    private static final int TAB_HOVER_BG_COLOR   = 0x60505070;
-    private static final int TAB_DIVIDER_COLOR    = 0x80AAAAAA;
-    private static final int TAB_TEXT_ACTIVE      = 0xFFE8ECF0;
-    private static final int TAB_TEXT_INACTIVE    = 0xFF3A3A3A;
     private static final int SCROLL_TRACK_W = 14;
-    private static final int TOOLTIP_MAX_WIDTH = 200;
 
     //  Fields 
     private final Screen parent;
@@ -185,7 +170,6 @@ public class NeoTabConfigScreen extends Screen {
         boolean perms = activeTab == ConfigTab.PERMISSIONS;
         // Permissions tab widgets
         for (CycleButton<Boolean> btn : permissions.globalPolicyToggles) btn.visible = perms;
-        // permTargetModeButton 已在新设计中移除
         if (permissions.playerSearchBox != null) permissions.playerSearchBox.visible = perms;
         if (permissions.permAddButton != null) permissions.permAddButton.visible = perms;
         for (Button btn : permissions.targetPlayerRemoveButtons) btn.visible = perms;
@@ -551,25 +535,6 @@ public class NeoTabConfigScreen extends Screen {
                 return permissions.applyToAddedButton.mouseClicked(mouseX, mouseY, button);
             }
         }
-        // Permissions player name click (暂时禁用，新设计中不需要)
-        // if (activeTab == ConfigTab.PERMISSIONS && button == 0) {
-        //     NeoTabConfigScreenLayout.Layout permLayout = buildLayoutImpl();
-        //     int permY = CONTENT_TOP_PADDING + ROW_HEIGHT + ROW_GAP;
-        //     if (!permissions.targetPlayers.isEmpty()) {
-        //         permY += ROW_HEIGHT;
-        //         for (java.util.Map.Entry<java.util.UUID, String> entry : permissions.targetPlayers.entrySet()) {
-        //             int rowY = permLayout.toScreenY(permY);
-        //             int nameX = permLayout.left() + 22;
-        //             int nameW = permLayout.right() - nameX - 6;
-        //             if (mouseX >= nameX && mouseX < nameX + nameW && mouseY >= rowY && mouseY < rowY + INPUT_HEIGHT) {
-        //                 permissions.editingPlayerUUID = entry.getKey();
-        //                 permissions.loadPolicyToggles(initialConfig);
-        //                 return true;
-        //             }
-        //             permY += ROW_HEIGHT + 2;
-        //         }
-        //     }
-        // }
         boolean handled = super.mouseClicked(mouseX, mouseY, button);
         if (handled) return true;
         // Tab bar click
@@ -672,8 +637,7 @@ public class NeoTabConfigScreen extends Screen {
 
         net.minecraft.network.chat.Component boldTitle = this.title.copy()
                 .withStyle(net.minecraft.ChatFormatting.BOLD);
-        int titleTextW = this.font.width(boldTitle);
-        int titleTextX = panelX + (panelW - titleTextW) / 2;
+        int titleTextX = panelX + 10;  // 左对齐，距离左边框10像素
         g.drawString(this.font, boldTitle, titleTextX, panelY + 6, AEStyleRenderer.COLOR_TITLE_TEXT, false);
 
         // 标题栏底部分隔线（在标题下方，分隔标题栏和主体区域）

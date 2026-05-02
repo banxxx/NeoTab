@@ -70,6 +70,9 @@ public abstract class PlayerTabOverlayMixin {
     private boolean lastOnlineDurationEnabled = false;
     private boolean lastHealthDisplayEnabled  = false;
     private com.poso.neotab.config.HealthDisplayMode lastHealthDisplayMode = null;
+    
+    // ── 队伍快照缓冲区（性能优化：复用数组，避免重复分配）──────────────────────
+    private String[] neotab$teamSnapshotBuffer = new String[80];
 
     // ── 玩家列表排序缓存 ───────────────────────────────────────────────────────
     private List<PlayerInfo> neotab$cachedSortedPlayers  = null;
@@ -144,10 +147,21 @@ public abstract class PlayerTabOverlayMixin {
         }
 
         if (needRebuild) {
-            neotab$cachedSortedPlayers = online.stream()
-                    .sorted(PLAYER_COMPARATOR)
-                    .limit(80L)
-                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+            // 性能优化：复用 ArrayList，避免每次重建都分配新对象
+            if (neotab$cachedSortedPlayers == null) {
+                neotab$cachedSortedPlayers = new ArrayList<>(80);
+            } else {
+                neotab$cachedSortedPlayers.clear();
+            }
+            
+            // 手动排序并添加，避免 Stream 的额外开销
+            List<PlayerInfo> temp = new ArrayList<>(online);
+            temp.sort(PLAYER_COMPARATOR);
+            int limit = Math.min(80, temp.size());
+            for (int i = 0; i < limit; i++) {
+                neotab$cachedSortedPlayers.add(temp.get(i));
+            }
+            
             neotab$lastCachedPlayerCount = currentCount;
         }
 
@@ -182,16 +196,42 @@ public abstract class PlayerTabOverlayMixin {
         return all.subList(from, to);
     }
 
-    /** 构建队伍快照字符串，用于检测玩家队伍变化（每 20 帧调用一次）。 */
+    /** 
+     * 构建队伍快照字符串，用于检测玩家队伍变化（每 20 帧调用一次）。
+     * 
+     * <p>性能优化：</p>
+     * <ul>
+     *   <li>复用缓冲区数组，避免每次分配新数组</li>
+     *   <li>使用 UUID.hashCode() 替代 toString()，减少字符串分配</li>
+     *   <li>使用 StringBuilder 替代 String.join()，减少临时对象</li>
+     * </ul>
+     */
     private String neotab$buildTeamSnapshot(Collection<PlayerInfo> players) {
-        String[] entries = new String[players.size()];
+        int size = players.size();
+        
+        // 扩容缓冲区（如果需要）
+        if (neotab$teamSnapshotBuffer.length < size) {
+            neotab$teamSnapshotBuffer = new String[Math.max(size, 80)];
+        }
+        
+        // 构建快照条目
         int i = 0;
         for (PlayerInfo pi : players) {
             String team = pi.getTeam() != null ? ((PlayerTeam) pi.getTeam()).getName() : "";
-            entries[i++] = pi.getProfile().getId().toString() + ':' + team;
+            // 使用 hashCode 替代 toString()，减少字符串分配
+            neotab$teamSnapshotBuffer[i++] = pi.getProfile().getId().hashCode() + ":" + team;
         }
-        Arrays.sort(entries);
-        return String.join("|", entries);
+        
+        // 排序（只排序有效部分）
+        Arrays.sort(neotab$teamSnapshotBuffer, 0, size);
+        
+        // 使用 StringBuilder 拼接，避免 String.join() 的额外开销
+        StringBuilder sb = new StringBuilder(size * 40);
+        for (int j = 0; j < size; j++) {
+            if (j > 0) sb.append('|');
+            sb.append(neotab$teamSnapshotBuffer[j]);
+        }
+        return sb.toString();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

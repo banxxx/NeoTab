@@ -69,6 +69,7 @@ public final class PlaceholderEngine {
      * <ul>
      *   <li>使用静态 KEYS 数组 + 按需构建 values 数组，避免每次 new LinkedHashMap</li>
      *   <li>使用 StringBuilder 避免多次字符串拼接产生的临时对象</li>
+     *   <li>预估替换后的长度，减少 StringBuilder 扩容次数</li>
      *   <li>只在模板中实际出现某个占位符时才计算对应的值（懒求值）</li>
      * </ul>
      */
@@ -77,7 +78,11 @@ public final class PlaceholderEngine {
             return "";
         }
 
-        StringBuilder result = new StringBuilder(template);
+        // 预估替换后的长度：模板长度 + 128 字节预留空间（用于占位符替换）
+        int estimatedLength = template.length() + 128;
+        StringBuilder result = new StringBuilder(estimatedLength);
+        result.append(template);
+        
         // 懒求值：只在模板中出现对应占位符时才计算值，避免无用的格式化调用
         String[] values = null;
 

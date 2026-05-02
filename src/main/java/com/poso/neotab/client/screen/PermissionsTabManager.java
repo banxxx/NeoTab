@@ -32,7 +32,6 @@ public class PermissionsTabManager {
 
     // ── Permissions tab fields ────────────────────────────────────────────────
     final List<CycleButton<Boolean>> globalPolicyToggles = new ArrayList<>();
-    Button permTargetModeButton;
     boolean permTargetIsPlayer = false;
     EditBox playerSearchBox;
     Button permAddButton;
@@ -48,6 +47,7 @@ public class PermissionsTabManager {
 
     PermissionsTabManager(NeoTabConfigScreen screen) {
         this.screen = screen;
+
     }
 
     void clear() {
@@ -529,10 +529,6 @@ public class PermissionsTabManager {
         if (permSaveButton != null) {
             permSaveButton.visible = false;  // 隐藏旧的保存按钮
         }
-        
-        // 隐藏不再使用的控件
-        if (permTargetModeButton != null) permTargetModeButton.visible = false;
-        if (permSaveButton != null) permSaveButton.visible = false;
     }
 
 }

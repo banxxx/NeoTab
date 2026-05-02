@@ -92,6 +92,16 @@ public final class NeoTabService {
      */
     private Map<UUID, Float> lastPlayerHealths    = new HashMap<>();
     private Map<UUID, Float> lastPlayerMaxHealths = new HashMap<>();
+    
+    /**
+     * 在线时长同步计数器。
+     * 
+     * <p>性能优化：在线时长不需要每个刷新间隔都同步，每秒同步一次即可。</p>
+     */
+    private int onlineDurationSyncCounter = 0;
+    
+    /** 在线时长同步间隔（tick）：每秒同步一次 */
+    private static final int ONLINE_DURATION_SYNC_INTERVAL = 20;
 
     // ── 公共 API ──────────────────────────────────────────────────────────────
 
@@ -183,6 +193,7 @@ public final class NeoTabService {
     public void reload(MinecraftServer server) {
         this.config = repository.load(server).sanitized();
         this.tickCounter = 0;
+        this.onlineDurationSyncCounter = 0; // 重置在线时长同步计数器
         this.currentServer = server;
 
         // 清空缓存，确保使用新配置
@@ -213,6 +224,7 @@ public final class NeoTabService {
      */
     public void onServerStopped() {
         this.tickCounter = 0;
+        this.onlineDurationSyncCounter = 0; // 重置在线时长同步计数器
         this.config = TabConfig.defaults();
         this.cachedMetrics = null;
         this.currentServer = null;
@@ -279,6 +291,8 @@ public final class NeoTabService {
 
     /**
      * 服务端每 tick 调用一次。
+     * 
+     * <p>性能优化：在线时长同步频率降低到每秒一次，减少网络包发送和 HashMap 分配。</p>
      */
     public void onServerTick(MinecraftServer server) {
         tickCounter++;
@@ -295,12 +309,18 @@ public final class NeoTabService {
         applyAll(server);
         refreshAllNames(server);
 
-        // 如果启用了在线时长显示，同步在线时长数据到客户端
+        // 在线时长每秒同步一次即可（不需要每个刷新间隔都同步）
         if (config.onlineDurationEnabled()) {
-            syncOnlineDurationsToAllOptimized(server);
+            onlineDurationSyncCounter++;
+            if (onlineDurationSyncCounter >= ONLINE_DURATION_SYNC_INTERVAL) {
+                onlineDurationSyncCounter = 0;
+                syncOnlineDurationsToAllOptimized(server);
+            }
+        } else {
+            onlineDurationSyncCounter = 0; // 重置计数器
         }
 
-        // 如果启用了血量显示，同步血量数据到客户端
+        // 血量需要实时同步（每个刷新间隔）
         if (config.healthDisplayEnabled()) {
             syncPlayerHealthsToAllOptimized(server);
         }
@@ -323,6 +343,7 @@ public final class NeoTabService {
 
         // 清空缓存，确保使用新配置
         this.cachedMetrics = null;
+        this.onlineDurationSyncCounter = 0; // 重置在线时长同步计数器
         this.lastOnlineDurations.clear();
         this.lastPlayerHealths.clear();
         this.lastPlayerMaxHealths.clear();
