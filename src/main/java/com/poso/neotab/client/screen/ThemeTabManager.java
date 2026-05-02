@@ -275,9 +275,7 @@ public class ThemeTabManager {
                     rebuildCustomBorderColorButtons();
                     NeoTabConfigScreenLayout.Layout newLayout = screen.buildLayout();
                     screen.applyLayout(newLayout);
-                    if (newLayout.maxScroll() > 0) {
-                        screen.setScrollOffset(newLayout.maxScroll(), newLayout);
-                    }
+                    // 移除自动滚动到底部的代码，保持当前滚动位置
                 }
             ).bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT).build());
         }
@@ -293,63 +291,135 @@ public class ThemeTabManager {
     }
     /** Apply layout positions to all theme tab widgets. */
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) {
+        int CARD_PADDING = 10;
+        int TITLE_LINE_HEIGHT = 9;  // 约等于font.lineHeight
+        int SUBTITLE_LINE_HEIGHT = 9;
+        
+        // 主题选择器按钮定位到卡片内（标题+副标题下方）
+        int themeListStartY = layout.themeSelectorY() + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
         for (int i = 0; i < themeOptionButtons.size(); i++) {
             Button btn = themeOptionButtons.get(i);
-            btn.setX(layout.left() + THEME_LIST_INSET);
-            btn.setY(layout.toScreenY(layout.themeSelectorY() + THEME_LIST_INSET + i * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP)));
-            btn.setWidth(layout.themeSelectorWidth() - THEME_LIST_INSET * 2);
+            btn.setX(layout.left() + CARD_PADDING);
+            btn.setY(layout.toScreenY(themeListStartY + i * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP)));
+            btn.setWidth(layout.contentWidth() - CARD_PADDING * 2);
         }
-        int customConfigStartY = layout.themeSelectorY() + layout.themeSelectorHeight() + THEME_LIST_TOP_GAP;
-        int customConfigY = customConfigStartY;
-        int customButtonWidth = cachedCustomButtonWidth;
-        if (resetToDefaultButton != null) {
-            resetToDefaultButton.setX(layout.left() + THEME_LIST_INSET);
-            resetToDefaultButton.setY(layout.toScreenY(customConfigY));
-            resetToDefaultButton.setWidth(customButtonWidth);
-        }
-        if (showResetConfirmation && resetToDefaultButton != null) {
-            int cw = 50, ch = 18;
-            int baseX = resetToDefaultButton.getX() + resetToDefaultButton.getWidth();
-            int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight();
-            if (resetCancelButton != null) { resetCancelButton.setX(baseX - cw * 2); resetCancelButton.setY(baseY); resetCancelButton.setWidth(cw); resetCancelButton.setHeight(ch); }
-            if (resetConfirmButton != null) { resetConfirmButton.setX(baseX - cw); resetConfirmButton.setY(baseY); resetConfirmButton.setWidth(cw); resetConfirmButton.setHeight(ch); }
-        }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 15;
-        int animHalfW = (customButtonWidth - 4) / 2;
-        if (customAnimationToggle != null) { customAnimationToggle.setX(layout.left() + THEME_LIST_INSET); customAnimationToggle.setY(layout.toScreenY(customConfigY)); customAnimationToggle.setWidth(animHalfW); }
-        if (customAnimationSpeedButton != null) { customAnimationSpeedButton.setX(layout.left() + THEME_LIST_INSET + animHalfW + 4); customAnimationSpeedButton.setY(layout.toScreenY(customConfigY)); customAnimationSpeedButton.setWidth(animHalfW); }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8;
-        if (customBackgroundColorButton != null) { customBackgroundColorButton.setX(layout.left() + THEME_LIST_INSET); customBackgroundColorButton.setY(layout.toScreenY(customConfigY)); customBackgroundColorButton.setWidth(customButtonWidth); }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8;
-        if (customBorderOuterFactorButton != null) { customBorderOuterFactorButton.setX(layout.left() + THEME_LIST_INSET); customBorderOuterFactorButton.setY(layout.toScreenY(customConfigY)); customBorderOuterFactorButton.setWidth(customButtonWidth); }
-        customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP + 5 + 8;
-        if (embeddedColorPicker != null) {
-            int gap = 10, maxRight = layout.right() - THEME_LIST_INSET;
-            int candidateX = layout.left() + THEME_LIST_INSET + customButtonWidth + gap;
-            boolean fits = (candidateX + cachedColorPickerWidth <= maxRight);
-            int pickerX, pickerY, pickerWidth;
-            if (fits) { pickerX = candidateX; pickerY = layout.toScreenY(customConfigStartY); pickerWidth = cachedColorPickerWidth; }
-            else { pickerX = layout.left() + THEME_LIST_INSET; pickerY = layout.toScreenY(customConfigY); pickerWidth = Math.min(maxRight - pickerX, cachedColorPickerWidth); customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP; }
-            embeddedColorPicker.setX(pickerX); embeddedColorPicker.setY(pickerY); embeddedColorPicker.setWidth(pickerWidth);
-        }
-        java.util.List<Integer> borderColors = customThemeConfig != null ? customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
-        for (int i = 0; i < borderColors.size(); i++) {
-            int bi = i * 2;
-            if (bi < customBorderColorButtons.size()) {
-                int colorBtnW = customButtonWidth - 25;
-                Button colorBtn = customBorderColorButtons.get(bi);
-                colorBtn.setX(layout.left() + THEME_LIST_INSET); colorBtn.setY(layout.toScreenY(customConfigY)); colorBtn.setWidth(colorBtnW);
-                if (bi + 1 < customBorderColorButtons.size()) {
-                    Button delBtn = customBorderColorButtons.get(bi + 1);
-                    delBtn.setX(layout.left() + THEME_LIST_INSET + colorBtnW + 5); delBtn.setY(layout.toScreenY(customConfigY)); delBtn.setWidth(20);
-                }
-                customConfigY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+        
+        // 自定义主题配置控件定位
+        if ("custom".equals(selectedThemeId)) {
+            // 重置为默认按钮（独立卡片，右上角）
+            if (resetToDefaultButton != null) {
+                resetToDefaultButton.setX(layout.toggleX());
+                resetToDefaultButton.setY(layout.toScreenY(layout.customResetRowY() + CARD_PADDING));
+                resetToDefaultButton.setWidth(56);
             }
-        }
-        if (addCustomBorderColorButton != null) {
-            addCustomBorderColorButton.setX(layout.left() + THEME_LIST_INSET);
-            addCustomBorderColorButton.setY(layout.toScreenY(customConfigY));
-            addCustomBorderColorButton.setWidth(customButtonWidth);
+            
+            // 动画效果卡片内的控件（动画开关和速度按钮在同一行，各占一半）
+            int animY = layout.customAnimationRowY() + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
+            // 计算可用宽度：从卡片左边到右边，减去padding
+            int animAvailableWidth = layout.contentWidth() - CARD_PADDING * 2;
+            int animGap = 4;  // 两个按钮之间的间距
+            int animButtonWidth = (animAvailableWidth - animGap) / 2;  // 每个按钮占一半
+            
+            // 动画开关（左半部分）
+            if (customAnimationToggle != null) {
+                customAnimationToggle.setX(layout.left() + CARD_PADDING);
+                customAnimationToggle.setY(layout.toScreenY(animY));
+                customAnimationToggle.setWidth(animButtonWidth);
+            }
+            
+            // 动画速度按钮（右半部分）
+            if (customAnimationSpeedButton != null) {
+                customAnimationSpeedButton.setX(layout.left() + CARD_PADDING + animButtonWidth + animGap);
+                customAnimationSpeedButton.setY(layout.toScreenY(animY));
+                customAnimationSpeedButton.setWidth(animButtonWidth);
+            }
+            
+            // 颜色配置卡片内的控件（左右分栏布局）
+            // 计算左右分栏尺寸
+            int leftColumnWidth = (int)(layout.contentWidth() * 0.45f);  // 左侧占45%
+            int rightColumnWidth = layout.contentWidth() - leftColumnWidth - CARD_PADDING * 3;  // 右侧占剩余空间
+            int leftColumnX = layout.left() + CARD_PADDING;
+            int rightColumnX = leftColumnX + leftColumnWidth + CARD_PADDING;
+            
+            // 左侧列起始Y坐标
+            int leftY = layout.customBgColorRowY() + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
+            
+            // 背景颜色按钮（左侧）
+            if (customBackgroundColorButton != null) {
+                customBackgroundColorButton.setX(leftColumnX);
+                customBackgroundColorButton.setY(layout.toScreenY(leftY));
+                customBackgroundColorButton.setWidth(leftColumnWidth);
+                leftY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+            }
+            
+            // 外层边框颜色按钮（左侧）
+            if (customBorderOuterFactorButton != null) {
+                customBorderOuterFactorButton.setX(leftColumnX);
+                customBorderOuterFactorButton.setY(layout.toScreenY(leftY));
+                customBorderOuterFactorButton.setWidth(leftColumnWidth);
+                leftY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+            }
+            
+            // 边框颜色标题（左侧）
+            leftY += TITLE_LINE_HEIGHT + 4;
+            
+            // 边框颜色按钮（左侧，每个颜色一行，带删除按钮）
+            java.util.List<Integer> borderColors = customThemeConfig != null ? 
+                customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
+            for (int i = 0; i < borderColors.size(); i++) {
+                int bi = i * 2;
+                if (bi < customBorderColorButtons.size()) {
+                    // 颜色选择按钮（左侧，占大部分宽度）
+                    Button colorBtn = customBorderColorButtons.get(bi);
+                    int colorBtnWidth = leftColumnWidth - 25;
+                    colorBtn.setX(leftColumnX);
+                    colorBtn.setY(layout.toScreenY(leftY));
+                    colorBtn.setWidth(colorBtnWidth);
+                    
+                    // 删除按钮（颜色按钮右侧）
+                    if (bi + 1 < customBorderColorButtons.size()) {
+                        Button delBtn = customBorderColorButtons.get(bi + 1);
+                        delBtn.setX(leftColumnX + colorBtnWidth + 2);
+                        delBtn.setY(layout.toScreenY(leftY));
+                        delBtn.setWidth(20);
+                    }
+                    leftY += THEME_OPTION_HEIGHT + THEME_OPTION_GAP;
+                }
+            }
+            
+            // 添加边框颜色按钮（左侧）
+            if (addCustomBorderColorButton != null) {
+                addCustomBorderColorButton.setX(leftColumnX);
+                addCustomBorderColorButton.setY(layout.toScreenY(leftY));
+                addCustomBorderColorButton.setWidth(leftColumnWidth);
+            }
+            
+            // 颜色选择器（右侧列）
+            if (embeddedColorPicker != null) {
+                int pickerY = layout.customBgColorRowY() + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
+                embeddedColorPicker.setX(rightColumnX);
+                embeddedColorPicker.setY(layout.toScreenY(pickerY));
+                // visible属性由syncTabWidgetVisibility()管理，不在这里设置
+            }
+            
+            // 重置确认/取消按钮（弹出式）
+            if (showResetConfirmation && resetToDefaultButton != null) {
+                int cw = 50, ch = 18;
+                int baseX = resetToDefaultButton.getX() + resetToDefaultButton.getWidth();
+                int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight();
+                if (resetCancelButton != null) { 
+                    resetCancelButton.setX(baseX - cw * 2); 
+                    resetCancelButton.setY(baseY); 
+                    resetCancelButton.setWidth(cw); 
+                    resetCancelButton.setHeight(ch); 
+                }
+                if (resetConfirmButton != null) { 
+                    resetConfirmButton.setX(baseX - cw); 
+                    resetConfirmButton.setY(baseY); 
+                    resetConfirmButton.setWidth(cw); 
+                    resetConfirmButton.setHeight(ch); 
+                }
+            }
         }
     }
 

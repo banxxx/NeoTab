@@ -339,6 +339,9 @@ public class ColorPickerWidget extends AbstractWidget {
     
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // 如果不可见，直接返回
+        if (!this.visible) return;
+        
         // 绘制外边框背景 - 使用AE风格的内容区背景色
         graphics.fill(getX(), getY(), getX() + width, getY() + height, 0xFF9AA0AC);
         // 使用AE风格的轮廓色

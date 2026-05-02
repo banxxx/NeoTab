@@ -50,13 +50,17 @@ public class PageConfigTabManager {
     }
 
     void initPageConfigWidgets(NeoTabConfigScreenLayout.Layout layout, TabConfig cfg, PlayerCustomizePolicy policy) {
+        int CARD_PADDING = 10;  // 卡片内边距
+        int inputWidth = layout.contentWidth() - CARD_PADDING * 2;  // 输入框宽度 = 卡片宽度 - 左右padding
+        
         this.topTitleEnabled = screen.addWidget(
             NeoTabConfigWidgetFactory.newToggle(layout.toggleX(), cfg.topTitleEnabled()));
         applyPolicyToWidget(topTitleEnabled, policy.allowTopTitleToggle(), screen.getScreenMode(), policy);
 
         this.topTitleInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
-            screen.font(), layout.left(), 0, layout.contentWidth(), TITLE_INPUT_HEIGHT,
-            CommonComponents.EMPTY, Component.translatable("screen.neotab.top.title")));
+            screen.font(), layout.left(), 0, inputWidth, TITLE_INPUT_HEIGHT,
+            Component.literal("支持富文本标签，如 &6金色文字\n最多 32 个可见字符"), 
+            Component.translatable("screen.neotab.top.title")));
         this.topTitleInput.setMaxVisibleLength(TabConfig.MAX_TOP_TITLE_LENGTH);
         this.topTitleInput.setValue(cfg.topTitleText());
         applyPolicyToWidget(topTitleInput, policy.allowTopTitleEdit(), screen.getScreenMode(), policy);
@@ -66,8 +70,9 @@ public class PageConfigTabManager {
         applyPolicyToWidget(topContentEnabled, policy.allowTopContentToggle(), screen.getScreenMode(), policy);
 
         this.topContentInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
-            screen.font(), layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
-            CommonComponents.EMPTY, Component.translatable("screen.neotab.top.content")));
+            screen.font(), layout.left(), 0, inputWidth, MULTILINE_INPUT_HEIGHT,
+            Component.literal("支持占位符，如 %server_tps%\n最多 256 个可见字符"), 
+            Component.translatable("screen.neotab.top.content")));
         this.topContentInput.setMaxVisibleLength(TabConfig.MAX_TOP_CONTENT_LENGTH);
         this.topContentInput.setAutoResize(true);
         this.topContentInput.setMaxHeight(MULTILINE_INPUT_HEIGHT * 2);
@@ -121,7 +126,7 @@ public class PageConfigTabManager {
                     com.poso.neotab.config.TabLayoutConfig.save(lc);
                     button.setMessage(Component.translatable("screen.neotab.layout.columns", next));
                 })
-            .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
+            .bounds(layout.left(), 0, TOGGLE_WIDTH, INPUT_HEIGHT)
             .build());
         this.layoutColumnsButton.active = layoutCfg.isEnabled();
 
@@ -149,34 +154,35 @@ public class PageConfigTabManager {
                     com.poso.neotab.config.TabLayoutConfig.save(lc);
                     button.setMessage(Component.translatable("screen.neotab.layout.rows", next));
                 })
-            .bounds(layout.left(), 0, LAYOUT_BUTTON_WIDTH, INPUT_HEIGHT)
+            .bounds(layout.left(), 0, TOGGLE_WIDTH, INPUT_HEIGHT)
             .build());
         this.layoutRowsButton.active = layoutCfg.isEnabled();
     }
 
     void initFooterWidgets(NeoTabConfigScreenLayout.Layout layout, TabConfig cfg, PlayerCustomizePolicy policy) {
+        int CARD_PADDING = 10;  // 卡片内边距
+        int inputWidth = layout.contentWidth() - CARD_PADDING * 2;
+        
         this.footerCustomInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
-            screen.font(), layout.left(), 0, layout.contentWidth(), MULTILINE_INPUT_HEIGHT,
-            CommonComponents.EMPTY, Component.translatable("screen.neotab.footer.custom")));
+            screen.font(), layout.left(), 0, inputWidth, MULTILINE_INPUT_HEIGHT,
+            Component.literal("输入自定义文本，支持占位符\n例如：%server_tps%、%online_players%"), 
+            Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
         this.footerCustomInput.setAutoResize(true);
         this.footerCustomInput.setMaxHeight(MULTILINE_INPUT_HEIGHT * 2);
         this.footerCustomInput.setValue(cfg.footerCustomText());
         applyPolicyToWidget(footerCustomInput, policy.allowFooterCustomEdit(), screen.getScreenMode(), policy);
 
-        this.footerTpsEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newLabeledToggle(
-            layout.footerFirstColumnX(), layout.footerColumnWidth(), cfg.footerTpsEnabled(),
-            Component.translatable("screen.neotab.footer.tps")));
+        this.footerTpsEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newToggle(
+            layout.toggleX(), cfg.footerTpsEnabled()));
         applyPolicyToWidget(footerTpsEnabled, policy.allowFooterTpsToggle(), screen.getScreenMode(), policy);
 
-        this.footerMsptEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newLabeledToggle(
-            layout.footerSecondColumnX(), layout.footerColumnWidth(), cfg.footerMsptEnabled(),
-            Component.translatable("screen.neotab.footer.mspt")));
+        this.footerMsptEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newToggle(
+            layout.toggleX(), cfg.footerMsptEnabled()));
         applyPolicyToWidget(footerMsptEnabled, policy.allowFooterMsptToggle(), screen.getScreenMode(), policy);
 
-        this.footerOnlineEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newLabeledToggle(
-            layout.footerThirdColumnX(), layout.footerColumnWidth(), cfg.footerOnlineEnabled(),
-            Component.translatable("screen.neotab.footer.online")));
+        this.footerOnlineEnabled = screen.addWidget(NeoTabConfigWidgetFactory.newToggle(
+            layout.toggleX(), cfg.footerOnlineEnabled()));
         applyPolicyToWidget(footerOnlineEnabled, policy.allowFooterOnlineToggle(), screen.getScreenMode(), policy);
     }
 
@@ -224,22 +230,35 @@ public class PageConfigTabManager {
     }
     /** Apply layout positions to all page config and footer widgets. */
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) {
-        p(topTitleEnabled,       layout.toggleX(),            layout.toScreenY(layout.topTitleRowY()));
-        p(topTitleInput,         layout.left(),               layout.toScreenY(layout.topTitleInputY()));
-        p(topContentEnabled,     layout.toggleX(),            layout.toScreenY(layout.topContentRowY()));
-        p(topContentInput,       layout.left(),               layout.toScreenY(layout.topContentInputY()));
-        p(betterPingEnabled,     layout.toggleX(),            layout.toScreenY(layout.betterPingRowY()));
-        p(onlineDurationEnabled, layout.toggleX(),            layout.toScreenY(layout.onlineDurationRowY()));
-        p(titleEnabled,          layout.toggleX(),            layout.toScreenY(layout.titleRowY()));
-        p(healthDisplayEnabled,  layout.toggleX(),            layout.toScreenY(layout.healthDisplayRowY()));
-        p(footerCustomInput,     layout.left(),               layout.toScreenY(layout.footerCustomInputY()));
-        p(healthDisplayMode,     layout.toggleX(),            layout.toScreenY(layout.healthModeRowY()));
-        if (layoutEnabledToggle != null) p(layoutEnabledToggle, layout.left(), layout.toScreenY(layout.layoutButtonsY()));
-        if (layoutColumnsButton != null) p(layoutColumnsButton, layout.left() + TOGGLE_WIDTH + 6, layout.toScreenY(layout.layoutButtonsY()));
-        if (layoutRowsButton    != null) p(layoutRowsButton,    layout.left() + TOGGLE_WIDTH + 6 + LAYOUT_BUTTON_WIDTH + 10, layout.toScreenY(layout.layoutButtonsY()));
-        p(footerTpsEnabled,      layout.footerFirstColumnX(),  layout.toScreenY(layout.footerRowY()));
-        p(footerMsptEnabled,     layout.footerSecondColumnX(), layout.toScreenY(layout.footerRowY()));
-        p(footerOnlineEnabled,   layout.footerThirdColumnX(),  layout.toScreenY(layout.footerRowY()));
+        int CARD_PADDING = 10;  // 卡片内边距
+        
+        // 标题信息卡片：开关在标题行右侧，输入框在副标题下方
+        p(topTitleEnabled,       layout.toggleX(),            layout.toScreenY(layout.topTitleRowY() + CARD_PADDING));
+        p(topTitleInput,         layout.left() + CARD_PADDING, layout.toScreenY(layout.topTitleInputY()));
+        
+        // 内容信息卡片
+        p(topContentEnabled,     layout.toggleX(),            layout.toScreenY(layout.topContentRowY() + CARD_PADDING));
+        p(topContentInput,       layout.left() + CARD_PADDING, layout.toScreenY(layout.topContentInputY()));
+        
+        // 玩家列表卡片（只有开关，无输入框）
+        p(betterPingEnabled,     layout.toggleX(),            layout.toScreenY(layout.betterPingRowY() + CARD_PADDING));
+        p(onlineDurationEnabled, layout.toggleX(),            layout.toScreenY(layout.onlineDurationRowY() + CARD_PADDING));
+        p(titleEnabled,          layout.toggleX(),            layout.toScreenY(layout.titleRowY() + CARD_PADDING));
+        p(healthDisplayEnabled,  layout.toggleX(),            layout.toScreenY(layout.healthDisplayRowY() + CARD_PADDING));
+        
+        // 底部自定义信息卡片
+        p(footerCustomInput,     layout.left() + CARD_PADDING, layout.toScreenY(layout.footerCustomInputY()));
+        
+        // 主题页面的控件（卡片内定位）
+        p(healthDisplayMode,     layout.toggleX(),            layout.toScreenY(layout.healthModeRowY() + CARD_PADDING));
+        if (layoutEnabledToggle != null) p(layoutEnabledToggle, layout.toggleX(), layout.toScreenY(layout.layoutEnabledRowY() + CARD_PADDING));
+        if (layoutColumnsButton != null) p(layoutColumnsButton, layout.toggleX(), layout.toScreenY(layout.layoutColumnsRowY() + CARD_PADDING));
+        if (layoutRowsButton    != null) p(layoutRowsButton,    layout.toggleX(), layout.toScreenY(layout.layoutRowsRowY() + CARD_PADDING));
+        
+        // 底部三个卡片中的开关（位置在卡片内的右上角）
+        p(footerTpsEnabled,      layout.toggleX(),            layout.toScreenY(layout.footerTpsRowY() + CARD_PADDING));
+        p(footerMsptEnabled,     layout.toggleX(),            layout.toScreenY(layout.footerMsptRowY() + CARD_PADDING));
+        p(footerOnlineEnabled,   layout.toggleX(),            layout.toScreenY(layout.footerOnlineRowY() + CARD_PADDING));
     }
 
     private void p(net.minecraft.client.gui.components.AbstractWidget w, int x, int y) { w.setX(x); w.setY(y); }

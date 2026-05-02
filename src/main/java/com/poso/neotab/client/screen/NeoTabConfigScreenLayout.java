@@ -19,7 +19,8 @@ public final class NeoTabConfigScreenLayout {
         int topSectionHeaderY, int topTitleRowY, int topTitleInputY,
         int topContentRowY, int topContentInputY,
         int listSectionHeaderY, int betterPingRowY, int onlineDurationRowY, int titleRowY, int healthDisplayRowY,
-        int footerSectionHeaderY, int footerCustomRowY, int footerCustomInputY, int footerRowY,
+        int footerSectionHeaderY, int footerCustomRowY, int footerCustomInputY, 
+        int footerTpsRowY, int footerMsptRowY, int footerOnlineRowY, int footerRowY,
         int footerFirstColumnX, int footerSecondColumnX, int footerThirdColumnX,
         int footerFirstToggleX, int footerSecondToggleX, int footerThirdToggleX,
         int footerColumnWidth,
@@ -27,8 +28,11 @@ public final class NeoTabConfigScreenLayout {
         int doneButtonX, int cancelButtonX,
         int tabBarX,
         int themeSectionHeaderY, int themeSelectorY, int themeSelectorWidth, int themeSelectorHeight,
+        int customAnimationRowY, int customAnimSpeedRowY, int customBgColorRowY, 
+        int customOuterBorderRowY, int customResetRowY, int customAddBorderColorRowY,
         int healthSectionHeaderY, int healthModeRowY,
         int layoutSectionHeaderY, int layoutButtonsY,
+        int layoutEnabledRowY, int layoutColumnsRowY, int layoutRowsRowY, int layoutHintRowY,
         LabelBounds topTitleLabelBounds, LabelBounds topContentLabelBounds,
         LabelBounds betterPingLabelBounds, LabelBounds onlineDurationLabelBounds,
         LabelBounds titleLabelBounds, LabelBounds healthDisplayLabelBounds,
@@ -45,6 +49,16 @@ public final class NeoTabConfigScreenLayout {
         public int scissorLeft() { return Math.max(0, this.left - 2); }
 
         public int scissorRight() { return this.right + 10; }
+        
+        /** 获取边框颜色行的Y坐标（动态计算） */
+        public int customBorderColorRowY(int index) {
+            int CARD_PADDING = 10;
+            int TITLE_LINE_HEIGHT = 9;
+            int SUBTITLE_LINE_HEIGHT = 9;
+            int CARD_GAP = 8;
+            int cardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+            return customOuterBorderRowY + cardHeight + CARD_GAP + index * (cardHeight + CARD_GAP);
+        }
     }
 
     /**

@@ -24,18 +24,32 @@ public final class AEStyleRenderer {
 
     // ── 颜色常量 ──────────────────────────────────────────────────────────────
 
-    /** 主面板背景色 */
-    public static final int COLOR_PANEL_BG        = 0xFFC0C4CC;
+    /** 主面板背景色（莫奈浅蓝灰） */
+    public static final int COLOR_PANEL_BG        = 0xFFE8EDF4;
+    /** 主面板外层深色轮廓 */
+    public static final int COLOR_PANEL_OUTLINE   = 0xFF2C3E50;
+    /** 主面板中间灰蓝色边框 */
+    public static final int COLOR_PANEL_BORDER    = 0xFF7A8A9E;
     /** 内容区（大凹陷区域）背景色 */
-    public static final int COLOR_CONTENT_BG      = 0xFF9AA0AC;
+    public static final int COLOR_CONTENT_BG      = 0xFFC8D5E5;
     /** 按钮/Tab非激活背景色 */
-    public static final int COLOR_BUTTON_BG       = 0xFF8A8E98;
+    public static final int COLOR_BUTTON_BG       = 0xFFB8C5D6;
     /** 按钮悬浮背景色 */
-    public static final int COLOR_BUTTON_HOVER    = 0xFF9AA0AC;
-    /** Tab 激活背景色（与面板同色） */
-    public static final int COLOR_TAB_ACTIVE_BG   = 0xFFC0C4CC;
-    /** Tab 非激活背景色 */
-    public static final int COLOR_TAB_INACTIVE_BG = 0xFF8A8E98;
+    public static final int COLOR_BUTTON_HOVER    = 0xFFC8D5E5;
+    /** 按钮凸起高光（顶/左） */
+    public static final int COLOR_BUTTON_HL       = 0xFFE8EDF4;
+    /** 按钮凸起阴影（底/右） */
+    public static final int COLOR_BUTTON_SH       = 0xFF7A8A9E;
+    /** Tab 栏背景色 */
+    public static final int COLOR_TAB_BAR_BG      = 0xFFD4DFEC;
+    /** Tab 非激活背景色（与Tab栏同色） */
+    public static final int COLOR_TAB_INACTIVE_BG = 0xFFD4DFEC;
+    /** Tab 悬浮背景色 */
+    public static final int COLOR_TAB_HOVER_BG    = 0xFFE8EDF4;
+    /** Tab 激活背景色 */
+    public static final int COLOR_TAB_ACTIVE_BG   = 0xFFC8D5E5;
+    /** Tab 激活左侧蓝色竖条 */
+    public static final int COLOR_TAB_ACTIVE_BAR  = 0xFF6B9BD1;
 
     /** 凸起：顶/左高光 */
     public static final int COLOR_RAISED_HL       = 0xFFC8CCD4;
@@ -51,7 +65,11 @@ public final class AEStyleRenderer {
     /** 主面板上的标题文字色（面板背景浅灰，用深色） */
     public static final int COLOR_TITLE_TEXT      = 0xFF2A2A2A;
     /** 分区标题文字色（内容区背景深灰蓝，用白色对比清晰） */
-    public static final int COLOR_SECTION_TEXT    = 0xFFFFFFFF;
+    public static final int COLOR_SECTION_TEXT    = 0xFFF0F4F8;
+    /** 模块标题文字色（卡片背景，用深色） */
+    public static final int COLOR_MODULE_TITLE    = 0xFF2C3E50;
+    /** 模块副标题文字色（卡片背景，用灰色） */
+    public static final int COLOR_MODULE_SUBTITLE = 0xFF5A6C7E;
     /** 普通标签文字色（内容区背景深灰蓝，用白色） */
     public static final int COLOR_LABEL           = 0xFFE8ECF0;
     /** 悬浮标签文字色（MC §e 黄色） */
@@ -71,10 +89,10 @@ public final class AEStyleRenderer {
     /** 分区分隔线高光（线下方 1px） */
     public static final int COLOR_SECTION_LINE_HL = 0x60FFFFFF;
 
-    /** 底部按钮栏背景色 */
-    public static final int COLOR_BUTTON_BAR_BG   = 0xFFC0C4CC;
-    /** 底部按钮栏顶部分隔线 */
-    public static final int COLOR_BUTTON_BAR_LINE = 0xFF6A6E78;
+    /** 底部按钮栏背景色（与面板背景同色） */
+    public static final int COLOR_BUTTON_BAR_BG   = 0xFFE8EDF4;
+    /** 底部按钮栏顶部分隔线（2px 灰蓝色） */
+    public static final int COLOR_BUTTON_BAR_LINE = 0xFF9AABC0;
 
     /** 滚动条轨道背景（改为 #9AA0AC） */
     public static final int COLOR_SCROLL_TRACK    = 0xFF9AA0AC;
@@ -161,56 +179,96 @@ public final class AEStyleRenderer {
     // ── 复合组件 ──────────────────────────────────────────────────────────────
 
     /**
-     * 绘制 AE2 风格的主面板背景。
-     * 包含：外层轮廓 + 凸起边框 + 背景填充。
+     * 绘制主面板背景。
+     * 结构（从外到内）：
+     * <ol>
+     *   <li>最外层 1px 深色轮廓 {@code #2C3E50}</li>
+     *   <li>中间 2px 灰蓝色边框 {@code #7A8A9E}</li>
+     *   <li>面板背景填充 {@code #E8EDF4}</li>
+     * </ol>
      */
     public static void drawMainPanel(GuiGraphics g, int x, int y, int w, int h) {
-        // 外层 1px 深色轮廓
-        drawOutline(g, x, y, w, h, COLOR_OUTLINE, 1);
+        // 最外层 1px 深色轮廓
+        drawOutline(g, x, y, w, h, COLOR_PANEL_OUTLINE, 1);
+        // 中间 2px 灰蓝色边框
+        drawOutline(g, x + 1, y + 1, w - 2, h - 2, COLOR_PANEL_BORDER, 2);
         // 面板背景
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, COLOR_PANEL_BG);
+        g.fill(x + 3, y + 3, x + w - 3, y + h - 3, COLOR_PANEL_BG);
     }
 
     /**
-     * 绘制 AE2 风格的内容区（大凹陷区域）。
+     * 绘制内容区（平面填充，无边框）。
+     * 背景色 {@code #C8D5E5}。
      */
     public static void drawContentArea(GuiGraphics g, int x, int y, int w, int h) {
-        drawSunkenPanel(g, x, y, w, h, COLOR_CONTENT_BG, 1);
+        g.fill(x, y, x + w, y + h, COLOR_CONTENT_BG);
     }
 
     /**
-     * 绘制 AE2 风格的按钮（凸起，带外层轮廓）。
+     * 绘制按钮（凸起，带外层轮廓）。
+     * 结构：1px 深色轮廓 → 凸起边框（高光 #E8EDF4 / 阴影 #7A8A9E）→ 背景填充。
      *
      * @param hovered 是否悬浮
      */
     public static void drawButton(GuiGraphics g, int x, int y, int w, int h, boolean hovered) {
         // 外层 1px 轮廓
-        drawOutline(g, x, y, w, h, COLOR_OUTLINE, 1);
-        // 凸起边框
-        drawRaisedBorder(g, x + 1, y + 1, w - 2, h - 2, 1);
+        drawOutline(g, x, y, w, h, COLOR_PANEL_OUTLINE, 1);
+        // 凸起边框（使用按钮专属高光/阴影）
+        g.fill(x + 1,     y + 1,     x + w - 1, y + 2,     COLOR_BUTTON_HL); // 顶高光
+        g.fill(x + 1,     y + 1,     x + 2,     y + h - 1, COLOR_BUTTON_HL); // 左高光
+        g.fill(x + 1,     y + h - 2, x + w - 1, y + h - 1, COLOR_BUTTON_SH); // 底阴影
+        g.fill(x + w - 2, y + 1,     x + w - 1, y + h - 1, COLOR_BUTTON_SH); // 右阴影
         // 背景
         int bg = hovered ? COLOR_BUTTON_HOVER : COLOR_BUTTON_BG;
         g.fill(x + 2, y + 2, x + w - 2, y + h - 2, bg);
     }
 
     /**
-     * 绘制 AE2 风格的 Tab 按钮。
+     * 绘制标题栏底部分隔线。
+     * 1px 灰蓝色分隔线 {@code #9AABC0}。
+     */
+    public static void drawTitleBarDivider(GuiGraphics g, int x, int y, int w) {
+        g.fill(x, y, x + w, y + 1, COLOR_PANEL_BORDER);
+    }
+
+    /**
+     * 绘制Tab栏背景和右侧分隔线。
+     * 背景色 {@code #D4DFEC}，右侧 1px 分隔线 {@code #9AABC0}。
+     * 传入的宽度 w 包含右侧分隔线，实际背景宽度为 w-1。
+     */
+    public static void drawTabBarBackground(GuiGraphics g, int x, int y, int w, int h) {
+        // 背景填充（不包含右侧分隔线）
+        g.fill(x, y, x + w - 1, y + h, COLOR_TAB_BAR_BG);
+        // 右侧分隔线（最后1px）
+        g.fill(x + w - 1, y, x + w, y + h, COLOR_PANEL_BORDER);
+    }
+
+    /**
+     * 绘制Tab按钮（平面风格，无边框）。
+     * <ul>
+     *   <li>非激活：背景 {@code #D4DFEC}，文字 {@code #7A8A9E}</li>
+     *   <li>悬浮：背景 {@code #E8EDF4}，文字 {@code #2C3E50}</li>
+     *   <li>激活：背景 {@code #C8D5E5}，文字 {@code #2C3E50} 加粗，左侧 3px 蓝色竖条 {@code #6B9BD1}</li>
+     * </ul>
      *
      * @param active  是否激活
      * @param hovered 是否悬浮
      */
     public static void drawTabButton(GuiGraphics g, int x, int y, int w, int h, boolean active, boolean hovered) {
-        // 外层 1px 轮廓
-        drawOutline(g, x, y, w, h, COLOR_OUTLINE, 1);
+        // 背景填充（平面，无边框）
+        int bg;
         if (active) {
-            // 激活：凸起，与面板同色
-            drawRaisedBorder(g, x + 1, y + 1, w - 2, h - 2, 1);
-            g.fill(x + 2, y + 2, x + w - 2, y + h - 2, COLOR_TAB_ACTIVE_BG);
+            bg = COLOR_TAB_ACTIVE_BG;
+        } else if (hovered) {
+            bg = COLOR_TAB_HOVER_BG;
         } else {
-            // 非激活：凸起，深灰色
-            drawRaisedBorder(g, x + 1, y + 1, w - 2, h - 2, 1);
-            int bg = hovered ? COLOR_BUTTON_HOVER : COLOR_TAB_INACTIVE_BG;
-            g.fill(x + 2, y + 2, x + w - 2, y + h - 2, bg);
+            bg = COLOR_TAB_INACTIVE_BG;
+        }
+        g.fill(x, y, x + w, y + h, bg);
+
+        // 激活Tab：左侧3px蓝色竖条
+        if (active) {
+            g.fill(x, y, x + 3, y + h, COLOR_TAB_ACTIVE_BAR);
         }
     }
 
@@ -233,13 +291,73 @@ public final class AEStyleRenderer {
     }
 
     /**
-     * 绘制 AE2 风格的分区标题行（文字加粗 + 右侧分隔线）。
-     * 文字不带阴影，分隔线为单像素深灰 + 下方高光。
+     * 绘制滑块式开关按钮（HTML原型样式）。
+     * ON状态：绿色滑块在右侧，OFF状态：灰色滑块在左侧。
+     */
+    public static void drawSliderToggle(GuiGraphics g, int x, int y, int w, int h, boolean isOn, boolean hovered) {
+        // 背景凹陷区域
+        g.fill(x, y, x + w, y + h, 0xFFA8B5C6);  // 凹陷背景色
+        // 凹陷边框（顶/左深色）
+        g.fill(x, y, x + w, y + 1, 0xFF7A8A9E);  // 顶
+        g.fill(x, y, x + 1, y + h, 0xFF7A8A9E);  // 左
+        // 凹陷边框（底/右浅色）
+        g.fill(x, y + h - 1, x + w, y + h, 0xFFE8EDF4);  // 底
+        g.fill(x + w - 1, y, x + w, y + h, 0xFFE8EDF4);  // 右
+
+        // 滑块（24x14px，距离边缘2px）
+        int sliderW = 24;
+        int sliderH = 14;
+        int sliderX = isOn ? (x + w - sliderW - 2) : (x + 2);
+        int sliderY = y + 2;
+
+        if (isOn) {
+            // ON状态：深绿色滑块
+            int sliderBg = hovered ? 0xFF1E421E : 0xFF1A3A1A;
+            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, sliderBg);
+            // 滑块边框（凸起效果）
+            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + 1, 0xFF2A5A2A);  // 顶
+            g.fill(sliderX, sliderY, sliderX + 1, sliderY + sliderH, 0xFF2A5A2A);  // 左
+            g.fill(sliderX, sliderY + sliderH - 1, sliderX + sliderW, sliderY + sliderH, 0xFF0A1A0A);  // 底
+            g.fill(sliderX + sliderW - 1, sliderY, sliderX + sliderW, sliderY + sliderH, 0xFF0A1A0A);  // 右
+
+            // "ON"文字（左侧，绿色）
+            g.drawString(net.minecraft.client.Minecraft.getInstance().font, "ON", 
+                x + 6, y + (h - 8) / 2, COLOR_ON, false);
+        } else {
+            // OFF状态：灰色滑块
+            int sliderBg = hovered ? 0xFF9AABC0 : 0xFF5A6C7E;
+            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, sliderBg);
+            // 滑块边框（凸起效果）
+            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + 1, 0xFFE8EDF4);  // 顶
+            g.fill(sliderX, sliderY, sliderX + 1, sliderY + sliderH, 0xFFE8EDF4);  // 左
+            g.fill(sliderX, sliderY + sliderH - 1, sliderX + sliderW, sliderY + sliderH, 0xFF2C3E50);  // 底
+            g.fill(sliderX + sliderW - 1, sliderY, sliderX + sliderW, sliderY + sliderH, 0xFF2C3E50);  // 右
+
+            // "OFF"文字（右侧，深色）
+            g.drawString(net.minecraft.client.Minecraft.getInstance().font, "OFF", 
+                x + w - 22, y + (h - 8) / 2, 0xFF2C3E50, false);
+        }
+    }
+
+    /**
+     * 绘制配置模块卡片背景。
+     * 背景色 {@code #B8C5D6}，带 1px 边框 {@code #9AABC0}。
+     */
+    public static void drawConfigModuleCard(GuiGraphics g, int x, int y, int w, int h) {
+        // 1px 边框
+        drawOutline(g, x, y, w, h, COLOR_PANEL_BORDER, 1);
+        // 背景填充
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, COLOR_BUTTON_BG);
+    }
+
+    /**
+     * 绘制分区标题行（文字加粗 + 右侧单线分隔线）。
+     * 文字白色 {@code #F0F4F8}，分隔线灰蓝色 {@code #9AABC0}。
      */
     public static void drawSectionHeader(GuiGraphics g, net.minecraft.client.gui.Font font,
                                           net.minecraft.network.chat.Component title,
                                           int x, int y, int right) {
-        // 文字加粗（用 ChatFormatting.BOLD 包装）
+        // 文字加粗
         net.minecraft.network.chat.Component boldTitle = title.copy()
                 .withStyle(net.minecraft.ChatFormatting.BOLD);
         g.drawString(font, boldTitle, x, y, COLOR_SECTION_TEXT, false);
@@ -247,22 +365,36 @@ public final class AEStyleRenderer {
         int lineX = x + font.width(boldTitle) + 4;
         int lineY = y + font.lineHeight / 2;
         if (lineX < right - 2) {
-            // 主线：深灰
-            g.fill(lineX, lineY,     right, lineY + 1, COLOR_SECTION_LINE);
-            // 高光线：半透明白，在主线下方 1px
-            g.fill(lineX, lineY + 1, right, lineY + 2, COLOR_SECTION_LINE_HL);
+            // 单线：灰蓝色
+            g.fill(lineX, lineY, right, lineY + 1, COLOR_PANEL_BORDER);
         }
     }
 
     /**
-     * 绘制 AE2 风格的底部按钮栏背景。
+     * 绘制底部按钮栏背景。
+     * 传入的 x/y/w/h 是按钮栏在主面板最外层轮廓内侧的区域（即 panelX+1, ..., panelW-2）。
+     * 方法内部会补回左/右/底三侧被覆盖的主面板边框：
+     * <ul>
+     *   <li>最外层 1px 深色轮廓（{@code COLOR_PANEL_OUTLINE}）</li>
+     *   <li>中间 2px 灰蓝色边框（{@code COLOR_PANEL_BORDER}）</li>
+     * </ul>
+     * 顶部用 2px 灰蓝色分隔线与内容区分隔。
      */
     public static void drawButtonBar(GuiGraphics g, int x, int y, int w, int h) {
-        // 顶部分隔线
-        g.fill(x, y,     x + w, y + 1, COLOR_BUTTON_BAR_LINE);
-        g.fill(x, y + 1, x + w, y + 2, COLOR_SECTION_LINE_HL);
+        // 顶部 2px 分隔线（与主面板中间边框同色）
+        g.fill(x, y,     x + w, y + 2, COLOR_BUTTON_BAR_LINE);
         // 背景
         g.fill(x, y + 2, x + w, y + h, COLOR_BUTTON_BAR_BG);
+
+        // 补回左/右/底三侧被覆盖的主面板边框
+        // 中间 2px 灰蓝色边框（左/右/底）
+        g.fill(x,             y, x + 2,         y + h, COLOR_PANEL_BORDER); // 左
+        g.fill(x + w - 2,     y, x + w,         y + h, COLOR_PANEL_BORDER); // 右
+        g.fill(x,     y + h - 2, x + w,         y + h, COLOR_PANEL_BORDER); // 底
+        // 最外层 1px 深色轮廓（左/右/底），在灰蓝边框外侧 —— 坐标偏移 -1
+        g.fill(x - 1,         y, x,             y + h + 1, COLOR_PANEL_OUTLINE); // 左
+        g.fill(x + w,         y, x + w + 1,     y + h + 1, COLOR_PANEL_OUTLINE); // 右
+        g.fill(x - 1, y + h,     x + w + 1,     y + h + 1, COLOR_PANEL_OUTLINE); // 底
     }
 
     /**

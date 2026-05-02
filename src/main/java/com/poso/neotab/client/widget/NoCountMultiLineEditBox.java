@@ -18,33 +18,128 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class NoCountMultiLineEditBox extends MultiLineEditBox {
     private static final ResourceLocation SCROLLER_SPRITE = ResourceLocation.withDefaultNamespace("widget/scroller");
-    private static final int SCROLLBAR_SPACE = 6;  // 为滚动条预留的空间
+    private static final int SCROLLBAR_WIDTH = 4;  // 滚动条宽度
+    private static final int SCROLLBAR_PADDING = 2;  // 滚动条与边框的间距
+    private static final int SCROLLBAR_TOTAL_WIDTH = SCROLLBAR_WIDTH + SCROLLBAR_PADDING * 2;  // 滚动条总宽度（包括左右padding）
+    
+    private final int fullWidth;  // 完整宽度（包括滚动条区域）
+    private boolean isDraggingScrollbar = false;  // 是否正在拖动滚动条
 
     public NoCountMultiLineEditBox(Font font, int x, int y, int width, int height, Component placeholder, Component message) {
-        // 为滚动条预留空间，减小输入框的实际宽度
-        super(font, x, y, width - SCROLLBAR_SPACE, height, placeholder, message);
+        // 为文本区域减去滚动条宽度，避免文字被遮挡
+        super(font, x, y, width - SCROLLBAR_TOTAL_WIDTH, height, placeholder, message);
+        this.fullWidth = width;
+    }
+    
+    /**
+     * 检查鼠标是否在滚动条区域内。
+     */
+    private boolean isMouseOverScrollbar(double mouseX, double mouseY) {
+        if (!this.scrollbarVisible()) {
+            return false;
+        }
+        int scrollbarX = this.getX() + this.fullWidth - SCROLLBAR_WIDTH - SCROLLBAR_PADDING;
+        return mouseX >= scrollbarX && mouseX <= scrollbarX + SCROLLBAR_WIDTH
+            && mouseY >= this.getY() && mouseY <= this.getY() + this.getHeight();
+    }
+    
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (isMouseOverScrollbar(mouseX, mouseY)) {
+            // 在滚动条区域点击，处理滚动条拖动
+            isDraggingScrollbar = true;
+            // 计算点击位置对应的滚动偏移
+            int verticalPadding = 2;
+            int availableHeight = this.getHeight() - verticalPadding * 2;
+            int scrollbarHeight = Math.max(32, Math.min(
+                (int) ((float) (availableHeight * availableHeight) / (float) (this.getInnerHeight() + 4)), 
+                availableHeight));
+            int relativeY = (int) mouseY - this.getY() - verticalPadding;
+            int maxScroll = this.getMaxScrollAmount();
+            if (maxScroll > 0) {
+                int newScroll = (int) ((relativeY - scrollbarHeight / 2.0) * maxScroll / (availableHeight - scrollbarHeight));
+                this.setScrollAmount(Math.max(0, Math.min(newScroll, maxScroll)));
+            }
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (isDraggingScrollbar && button == 0) {
+            // 拖动滚动条
+            int verticalPadding = 2;
+            int availableHeight = this.getHeight() - verticalPadding * 2;
+            int scrollbarHeight = Math.max(32, Math.min(
+                (int) ((float) (availableHeight * availableHeight) / (float) (this.getInnerHeight() + 4)), 
+                availableHeight));
+            int relativeY = (int) mouseY - this.getY() - verticalPadding;
+            int maxScroll = this.getMaxScrollAmount();
+            if (maxScroll > 0) {
+                int newScroll = (int) ((relativeY - scrollbarHeight / 2.0) * maxScroll / (availableHeight - scrollbarHeight));
+                this.setScrollAmount(Math.max(0, Math.min(newScroll, maxScroll)));
+            }
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+    
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (isDraggingScrollbar && button == 0) {
+            isDraggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     /**
      * 重写背景渲染，用 AE2 风格凹陷背景替代原版黑色 sprite。
+     * 同时为滚动条区域预留空间。
      */
     @Override
     protected void renderBackground(GuiGraphics guiGraphics) {
-        int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-        // 凹陷边框（顶/左深色，底/右高光）
-        AEStyleRenderer.drawSunkenBorder(guiGraphics, x, y, w, h, 1);
-        // 内部填充 AE2 输入框背景色
-        guiGraphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, 0xFF7A8090);
+        int x = getX(), y = getY(), w = fullWidth, h = getHeight();
+        
+        // HTML中的输入框样式：背景 #A8B5C6，边框 #5A6C7E
+        int bgColor = 0xFFA8B5C6;  // HTML输入框背景色
+        int borderColor = 0xFF5A6C7E;  // HTML输入框边框色
+        
+        // 绘制边框
+        guiGraphics.fill(x, y, x + w, y + 1, borderColor);  // 顶部边框
+        guiGraphics.fill(x, y, x + 1, y + h, borderColor);  // 左侧边框
+        guiGraphics.fill(x + w - 1, y, x + w, y + h, borderColor);  // 右侧边框
+        guiGraphics.fill(x, y + h - 1, x + w, y + h, borderColor);  // 底部边框
+        
+        // 内部填充背景色
+        guiGraphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, bgColor);
+        
+        // 如果有滚动条，在滚动条区域绘制一个稍深的背景，避免文字被遮挡
+        if (this.scrollbarVisible()) {
+            int scrollbarAreaX = x + w - SCROLLBAR_TOTAL_WIDTH;
+            guiGraphics.fill(scrollbarAreaX, y + 1, x + w - 1, y + h - 1, 0xFF98A5B6);  // 稍深的背景
+        }
     }
 
     @Override
     protected void renderDecorations(GuiGraphics guiGraphics) {
         if (this.scrollbarVisible()) {
-            int scrollbarHeight = Math.max(32, Math.min((int) ((float) (this.getHeight() * this.getHeight()) / (float) (this.getInnerHeight() + 4)), this.getHeight()));
-            int scrollbarY = Math.max(this.getY(), (int) this.scrollAmount() * (this.getHeight() - scrollbarHeight) / Math.max(1, this.getMaxScrollAmount()) + this.getY());
+            int verticalPadding = 2;  // 滚动条与顶部和底部的间距
+            int availableHeight = this.getHeight() - verticalPadding * 2;  // 可用高度（减去上下间距）
+            
+            int scrollbarHeight = Math.max(32, Math.min(
+                (int) ((float) (availableHeight * availableHeight) / (float) (this.getInnerHeight() + 4)), 
+                availableHeight));
+            
+            int scrollbarY = Math.max(
+                this.getY() + verticalPadding, 
+                (int) this.scrollAmount() * (availableHeight - scrollbarHeight) / Math.max(1, this.getMaxScrollAmount()) + this.getY() + verticalPadding);
+            
             RenderSystem.enableBlend();
-            // 滚动条宽度为4像素，位置在预留空间内
-            guiGraphics.blitSprite(SCROLLER_SPRITE, this.getX() + this.getWidth() + 2, scrollbarY, 4, scrollbarHeight);
+            // 滚动条位置：使用fullWidth计算，距离右边框2px
+            int scrollbarX = this.getX() + this.fullWidth - SCROLLBAR_WIDTH - SCROLLBAR_PADDING;
+            guiGraphics.blitSprite(SCROLLER_SPRITE, scrollbarX, scrollbarY, SCROLLBAR_WIDTH, scrollbarHeight);
             RenderSystem.disableBlend();
         }
     }
