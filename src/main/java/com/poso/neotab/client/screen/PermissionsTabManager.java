@@ -66,9 +66,9 @@ public class PermissionsTabManager {
         this.playerSearchBox = screen.addWidget(
             new EditBox(screen.font(), layout.left(), 0,
                 layout.contentWidth(), INPUT_HEIGHT,
-                Component.literal("输入玩家名称...")));
+                Component.translatable("screen.neotab.input.player_search_hint")));
         this.playerSearchBox.setMaxLength(40);
-        this.playerSearchBox.setHint(Component.literal("输入玩家名称..."));
+        this.playerSearchBox.setHint(Component.translatable("screen.neotab.input.player_search_hint"));
         this.playerSearchBox.active = true;  // 始终可用
         this.playerSearchBox.setEditable(true);  // 始终可编辑
         this.playerSearchBox.visible = false;
@@ -89,7 +89,7 @@ public class PermissionsTabManager {
 
         // Add button
         this.permAddButton = screen.addWidget(Button.builder(
-            Component.literal("添加"),
+            Component.translatable("screen.neotab.policy.add"),
             btn -> {
                 if (playerSearchBox == null) return;
                 String name = playerSearchBox.getValue().trim();
@@ -140,7 +140,7 @@ public class PermissionsTabManager {
 
         // Save permissions button
         this.permSaveButton = screen.addWidget(Button.builder(
-            Component.literal("保存权限配置"),
+            Component.translatable("screen.neotab.permissions.save_config"),
             btn -> savePermissions(initialConfig))
             .bounds(layout.left(), 0, 120, INPUT_HEIGHT)
             .build());
@@ -149,7 +149,7 @@ public class PermissionsTabManager {
         
         // Apply to all players button (应用到全部玩家)
         this.applyToAllButton = screen.addWidget(Button.builder(
-            Component.literal("应用到全部玩家"),
+            Component.translatable("screen.neotab.permissions.apply_to_all"),
             btn -> applyToAllPlayers(initialConfig))
             .bounds(layout.left(), 0, 140, INPUT_HEIGHT)
             .build());
@@ -158,7 +158,7 @@ public class PermissionsTabManager {
         
         // Apply to added players button (应用到已添加玩家)
         this.applyToAddedButton = screen.addWidget(Button.builder(
-            Component.literal("应用到已添加玩家"),
+            Component.translatable("screen.neotab.permissions.apply_to_added"),
             btn -> applyToAddedPlayers(initialConfig))
             .bounds(layout.left(), 0, 140, INPUT_HEIGHT)
             .build());
@@ -219,7 +219,7 @@ public class PermissionsTabManager {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             mc.player.sendSystemMessage(
-                Component.literal("§a已应用权限设置到全部玩家"));
+                Component.translatable("message.neotab.permissions.applied_to_all"));
         }
     }
     
@@ -229,7 +229,7 @@ public class PermissionsTabManager {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null) {
                 mc.player.sendSystemMessage(
-                    Component.literal("§c请先添加玩家后再应用权限设置"));
+                    Component.translatable("message.neotab.permissions.no_players_added"));
             }
             return;
         }

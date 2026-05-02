@@ -749,7 +749,7 @@ public class NeoTabConfigScreen extends Screen {
             g.drawString(this.font, Component.translatable("screen.neotab.footer.tps"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
-            drawScaledText(g, Component.literal("显示服务器 TPS（每秒刻数）"),
+            drawScaledText(g, Component.translatable("screen.neotab.footer.tps.tooltip"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -760,7 +760,7 @@ public class NeoTabConfigScreen extends Screen {
             g.drawString(this.font, Component.translatable("screen.neotab.footer.mspt"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
-            drawScaledText(g, Component.literal("显示服务器 MSPT（每刻毫秒数）"),
+            drawScaledText(g, Component.translatable("screen.neotab.footer.mspt.tooltip"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -771,7 +771,7 @@ public class NeoTabConfigScreen extends Screen {
             g.drawString(this.font, Component.translatable("screen.neotab.footer.online"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
-            drawScaledText(g, Component.literal("显示当前在线玩家数量"),
+            drawScaledText(g, Component.translatable("screen.neotab.footer.online.tooltip"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         } else if (activeTab == ConfigTab.THEME) {
@@ -794,13 +794,13 @@ public class NeoTabConfigScreen extends Screen {
             
             // 标题文字（限制宽度，避免覆盖按钮）
             int titleMaxWidth = layout.contentWidth() - CARD_PADDING * 2;
-            Component titleText = Component.literal("预设主题");
+            Component titleText = Component.translatable("screen.neotab.theme.preset_title");
             g.drawString(this.font, titleText,
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
             // 副标题文字（限制宽度，自动换行）
-            drawScaledText(g, Component.literal("快速应用一套完整的视觉风格"),
+            drawScaledText(g, Component.translatable("screen.neotab.theme.preset_subtitle"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             // 主题选择器按钮由widget系统绘制
@@ -814,10 +814,10 @@ public class NeoTabConfigScreen extends Screen {
                 
                 // 标题（限制宽度）
                 int resetTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 56 - 8;  // 减去按钮宽度和间距
-                g.drawString(this.font, Component.literal("重置默认"),
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.reset_title"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
-                drawScaledText(g, Component.literal("将所有自定义设置恢复为默认值"),
+                drawScaledText(g, Component.translatable("screen.neotab.theme.reset_subtitle"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                         AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
                 
@@ -828,12 +828,12 @@ public class NeoTabConfigScreen extends Screen {
                 
                 // 标题（限制宽度，避免覆盖右侧按钮）
                 int animTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2;
-                g.drawString(this.font, Component.literal("动画效果"),
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.animation_title"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
                 
                 // 副标题（限制宽度，自动换行）
-                drawWrappedScaledText(g, "配置边框动画的开关和速度",
+                drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.animation_subtitle").getString(),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                         animTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
                 // 动画开关和速度按钮由widget系统绘制
@@ -865,10 +865,10 @@ public class NeoTabConfigScreen extends Screen {
                 AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), customConfigCardHeight);
                 
                 // 绘制卡片标题和副标题
-                g.drawString(this.font, Component.literal("颜色配置"),
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.color_config_title"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
-                drawScaledText(g, Component.literal("左侧选择要配置的项目，右侧使用颜色选择器调整颜色"),
+                drawScaledText(g, Component.translatable("screen.neotab.theme.color_config_subtitle"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                         AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
                 
@@ -877,13 +877,13 @@ public class NeoTabConfigScreen extends Screen {
                 int borderColorTitleY = cardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 +
                     THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 背景颜色
                     THEME_OPTION_HEIGHT + THEME_OPTION_GAP;   // 外层边框颜色
-                g.drawString(this.font, Component.literal("边框颜色"),
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.border_colors_title"),
                         layout.left() + CARD_PADDING, borderColorTitleY,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
             }
             
             // 血量显示分区标题
-            AEStyleRenderer.drawSectionHeader(g, this.font, Component.literal("血量显示"),
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.theme.health_section"),
                     layout.left(), layout.toScreenY(layout.healthSectionHeaderY()), layout.right());
             
             // 显示效果卡片
@@ -893,18 +893,18 @@ public class NeoTabConfigScreen extends Screen {
             
             // 标题（限制宽度）
             int healthTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 80 - 8;  // 减去按钮宽度
-            g.drawString(this.font, Component.literal("显示效果"),
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.health_mode_title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
             // 副标题（自动换行）
-            drawWrappedScaledText(g, "完整：最多显示 10 颗心 | 单独：只显示 1 颗心 + 数字",
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.health_mode_subtitle").getString(),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     healthTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             // 血量模式按钮由widget系统绘制
             
             // 布局分列分区标题
-            AEStyleRenderer.drawSectionHeader(g, this.font, Component.literal("布局分列"),
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.theme.layout_section"),
                     layout.left(), layout.toScreenY(layout.layoutSectionHeaderY()), layout.right());
             
             // 启用分列卡片
@@ -914,12 +914,12 @@ public class NeoTabConfigScreen extends Screen {
             
             // 标题（限制宽度）
             int layoutTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 56 - 8;
-            g.drawString(this.font, Component.literal("启用分列"),
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_enabled_title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
             // 副标题
-            drawWrappedScaledText(g, "开启后将 TAB 列表显示为多列布局，可自定义列数和行数",
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_enabled_subtitle").getString(),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -928,11 +928,11 @@ public class NeoTabConfigScreen extends Screen {
             int layoutColumnsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutColumnsCardHeight);
             
-            g.drawString(this.font, Component.literal("展示列数"),
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_columns_title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
-            drawWrappedScaledText(g, "设置 TAB 列表显示的列数，最大值根据屏幕宽度自动调整",
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_columns_subtitle").getString(),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -941,11 +941,11 @@ public class NeoTabConfigScreen extends Screen {
             int layoutRowsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutRowsCardHeight);
             
-            g.drawString(this.font, Component.literal("展示行数"),
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_rows_title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
-            drawWrappedScaledText(g, "设置 TAB 列表显示的行数，当玩家数超过容量时自动分页",
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_rows_subtitle").getString(),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -957,14 +957,14 @@ public class NeoTabConfigScreen extends Screen {
             int layoutHintCardHeight = CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * hintLines * 0.82f) + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutHintCardHeight);
             
-            g.drawString(this.font, Component.literal("提示"),
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_hint_title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             // 绘制多行副标题
-            drawScaledText(g, Component.literal("当玩家数超过容量时，TAB 列表将自动分页显示。"),
+            drawScaledText(g, Component.translatable("screen.neotab.theme.layout_hint_line1"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
-            drawScaledText(g, Component.literal("快捷键：TAB + 左/右箭头键翻页。"),
+            drawScaledText(g, Component.translatable("screen.neotab.theme.layout_hint_line2"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 0.82f),
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         } else if (activeTab == ConfigTab.PERMISSIONS) {
@@ -984,7 +984,7 @@ public class NeoTabConfigScreen extends Screen {
         int y = CONTENT_TOP_PADDING;
         
         // 全局策略分区标题
-        AEStyleRenderer.drawSectionHeader(g, this.font, Component.literal("全局策略（所有玩家）"),
+        AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.permissions.global_section"),
                 layout.left(), layout.toScreenY(y), layout.right());
         y += SECTION_HEADER_HEIGHT;
         
@@ -1048,7 +1048,7 @@ public class NeoTabConfigScreen extends Screen {
         }
         
         // 指定玩家策略分区标题
-        AEStyleRenderer.drawSectionHeader(g, this.font, Component.literal("指定玩家策略"),
+        AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.permissions.personal_section"),
                 layout.left(), layout.toScreenY(y), layout.right());
         y += SECTION_HEADER_HEIGHT;
         
@@ -1057,10 +1057,10 @@ public class NeoTabConfigScreen extends Screen {
         int addPlayerCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), addPlayerCardY, layout.contentWidth(), addPlayerCardHeight);
         
-        g.drawString(this.font, Component.literal("添加玩家"),
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.add_player_title"),
                 layout.left() + CARD_PADDING, addPlayerCardY + CARD_PADDING,
                 AEStyleRenderer.COLOR_MODULE_TITLE, false);
-        drawScaledText(g, Component.literal("为特定玩家设置独立的自定义权限"),
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.add_player_subtitle"),
                 layout.left() + CARD_PADDING, addPlayerCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         // 输入框和添加按钮由widget系统绘制
@@ -1100,10 +1100,10 @@ public class NeoTabConfigScreen extends Screen {
         int playerListCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + playerListContentHeight + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), playerListCardY, layout.contentWidth(), playerListCardHeight);
         
-        g.drawString(this.font, Component.literal("玩家列表显示"),
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.player_list_title"),
                 layout.left() + CARD_PADDING, playerListCardY + CARD_PADDING,
                 AEStyleRenderer.COLOR_MODULE_TITLE, false);
-        drawScaledText(g, Component.literal("已添加的玩家及其权限配置"),
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.player_list_subtitle"),
                 layout.left() + CARD_PADDING, playerListCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         
@@ -1111,7 +1111,7 @@ public class NeoTabConfigScreen extends Screen {
         int listContentY = playerListCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8;
         if (permissions.targetPlayers.isEmpty()) {
             // 空状态提示（居中显示）
-            drawScaledText(g, Component.literal("暂无玩家，添加后将在此处显示"),
+            drawScaledText(g, Component.translatable("screen.neotab.permissions.player_list_empty"),
                     layout.left() + CARD_PADDING, listContentY + 5,
                     0xFF5A6C7E, 0.82f);
         } else {
@@ -1161,13 +1161,13 @@ public class NeoTabConfigScreen extends Screen {
         int hintCardHeight = CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 2 * 0.82f) + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), hintCardY, layout.contentWidth(), hintCardHeight);
         
-        g.drawString(this.font, Component.literal("提示"),
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.hint_title"),
                 layout.left() + CARD_PADDING, hintCardY + CARD_PADDING,
                 AEStyleRenderer.COLOR_MODULE_TITLE, false);
-        drawScaledText(g, Component.literal("添加玩家后，可在上方权限列表中单独配置。"),
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.hint_line1"),
                 layout.left() + CARD_PADDING, hintCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
-        drawScaledText(g, Component.literal("玩家权限优先级高于全局策略。"),
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.hint_line2"),
                 layout.left() + CARD_PADDING, hintCardY + CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 0.82f),
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         
@@ -1178,10 +1178,10 @@ public class NeoTabConfigScreen extends Screen {
         int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), applySettingsCardY, layout.contentWidth(), applySettingsCardHeight);
         
-        g.drawString(this.font, Component.literal("应用权限设置"),
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.apply_title"),
                 layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING,
                 AEStyleRenderer.COLOR_MODULE_TITLE, false);
-        drawScaledText(g, Component.literal("点击下方按钮应用当前权限配置"),
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.apply_subtitle"),
                 layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
         // 两个应用按钮由widget系统绘制

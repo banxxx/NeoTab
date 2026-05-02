@@ -59,7 +59,7 @@ public class PageConfigTabManager {
 
         this.topTitleInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
             screen.font(), layout.left(), 0, inputWidth, TITLE_INPUT_HEIGHT,
-            Component.literal("支持富文本标签，如 &6金色文字\n最多 32 个可见字符"), 
+            Component.translatable("screen.neotab.input.top_title_hint"), 
             Component.translatable("screen.neotab.top.title")));
         this.topTitleInput.setMaxVisibleLength(TabConfig.MAX_TOP_TITLE_LENGTH);
         this.topTitleInput.setValue(cfg.topTitleText());
@@ -71,7 +71,7 @@ public class PageConfigTabManager {
 
         this.topContentInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
             screen.font(), layout.left(), 0, inputWidth, MULTILINE_INPUT_HEIGHT,
-            Component.literal("支持占位符，如 %server_tps%\n最多 256 个可见字符"), 
+            Component.translatable("screen.neotab.input.top_content_hint"), 
             Component.translatable("screen.neotab.top.content")));
         this.topContentInput.setMaxVisibleLength(TabConfig.MAX_TOP_CONTENT_LENGTH);
         this.topContentInput.setAutoResize(true);
@@ -165,7 +165,7 @@ public class PageConfigTabManager {
         
         this.footerCustomInput = screen.addWidget(new ImprovedRichTextMultiLineEditBox(
             screen.font(), layout.left(), 0, inputWidth, MULTILINE_INPUT_HEIGHT,
-            Component.literal("输入自定义文本，支持占位符\n例如：%server_tps%、%online_players%"), 
+            Component.translatable("screen.neotab.input.footer_custom_hint"), 
             Component.translatable("screen.neotab.footer.custom")));
         this.footerCustomInput.setMaxVisibleLength(TabConfig.MAX_FOOTER_CUSTOM_LENGTH);
         this.footerCustomInput.setAutoResize(true);
