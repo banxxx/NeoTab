@@ -19,12 +19,14 @@ public final class NeoTabConfigScreenRenderer {
     private static final int TAB_BUTTON_HEIGHT      = 24;
     private static final int TAB_BUTTON_GAP         = 4;
     private static final int TAB_BUTTON_LEFT_PADDING = 6;
-    private static final int TAB_BAR_WIDTH          = 84;  // HTML中Tab栏宽度（包含右侧1px分隔线）
+    private static final int TAB_BAR_WIDTH          = 120;  // Tab栏宽度，适中大小
     private static final int THEME_INDICATOR_SIZE   = 8;
     private static final int INPUT_HEIGHT           = 20;
     private static final int SCROLL_TRACK_W         = 14;
-    private static final int TAB_TEXT_ACTIVE        = 0xFF2C3E50;  // 激活/悬浮：深色
-    private static final int TAB_TEXT_INACTIVE      = 0xFF7A8A9E;  // 非激活：灰蓝色
+    // HTML原型 tab 文字颜色
+    private static final int TAB_TEXT_ACTIVE        = 0xFF3B3629;  // --text-primary（激活）
+    private static final int TAB_TEXT_HOVER         = 0xFF4A4233;  // 悬浮：深棕色
+    private static final int TAB_TEXT_INACTIVE      = 0xFF6B6454;  // 非激活：中棕色
 
     private NeoTabConfigScreenRenderer() {}
 
@@ -117,13 +119,17 @@ public final class NeoTabConfigScreenRenderer {
 
             AEStyleRenderer.drawTabButton(g, x, btnY, btnW, TAB_BUTTON_HEIGHT, active, hovered);
 
-            // 文字颜色：激活或悬浮时用深色，非激活用灰蓝色
-            int textColor = (active || hovered) ? TAB_TEXT_ACTIVE : TAB_TEXT_INACTIVE;
+            // 文字颜色：激活用深色加粗，悬浮用深棕色，非激活用中棕色
+            // 文字左对齐（距左侧4px边框+8px间距）
+            int textColor = active ? TAB_TEXT_ACTIVE : (hovered ? TAB_TEXT_HOVER : TAB_TEXT_INACTIVE);
             Component label = tab.label();
-            int textW = font.width(label);
-            int textX = x + (btnW - textW) / 2;
+            // 激活状态使用加粗文字
+            Component displayLabel = active
+                    ? label.copy().withStyle(net.minecraft.ChatFormatting.BOLD)
+                    : label;
+            int textX = x + 4 + 8;  // 4px左边框 + 8px间距
             int textY = btnY + (TAB_BUTTON_HEIGHT - font.lineHeight) / 2;
-            g.drawString(font, label, textX, textY, textColor, false);
+            g.drawString(font, displayLabel, textX, textY, textColor, false);
             tabIndex++;
         }
     }
@@ -207,9 +213,8 @@ public final class NeoTabConfigScreenRenderer {
         Component msg = cb.getMessage();
         String msgStr = msg.getString();
         
-        // 检查是否是ON/OFF开关（通过检测按钮宽度，ON/OFF按钮固定宽度56）
-        // 或者通过文本内容判断（支持多语言）
-        boolean isToggleButton = bw == 56;  // TOGGLE_WIDTH = 56
+        // 检查是否是ON/OFF开关（通过检测按钮宽度，ON/OFF按钮固定宽度26）
+        boolean isToggleButton = bw == 26;  // TOGGLE_WIDTH = 26
         
         if (isToggleButton) {
             // 判断是ON还是OFF状态
@@ -237,6 +242,32 @@ public final class NeoTabConfigScreenRenderer {
         int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
         AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
         int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
+        g.drawCenteredString(font, btn.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+    }
+
+    // ── 主要按钮（完成）────────────────────────────────────────────────────
+
+    public static void renderPrimaryButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                    Button btn, int mouseX, int mouseY) {
+        if (btn == null || !btn.visible) return;
+        boolean hovered = btn.isMouseOver(mouseX, mouseY);
+        int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
+        AEStyleRenderer.drawPrimaryButton(g, bx, by, bw, bh, hovered);
+        // 白色加粗文字
+        net.minecraft.network.chat.Component bold = btn.getMessage().copy()
+                .withStyle(net.minecraft.ChatFormatting.BOLD);
+        g.drawCenteredString(font, bold, bx + bw / 2, by + (bh - font.lineHeight) / 2, 0xFFFFFFFF);
+    }
+
+    // ── 次要按钮（取消）────────────────────────────────────────────────────
+
+    public static void renderSecondaryButton(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                      Button btn, int mouseX, int mouseY) {
+        if (btn == null || !btn.visible) return;
+        boolean hovered = btn.isMouseOver(mouseX, mouseY);
+        int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
+        AEStyleRenderer.drawSecondaryButton(g, bx, by, bw, bh, hovered);
+        int textColor = hovered ? 0xFF3B3629 : 0xFF4A4233;
         g.drawCenteredString(font, btn.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
     }
 

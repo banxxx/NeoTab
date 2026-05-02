@@ -102,9 +102,9 @@ public class NoCountMultiLineEditBox extends MultiLineEditBox {
     protected void renderBackground(GuiGraphics guiGraphics) {
         int x = getX(), y = getY(), w = fullWidth, h = getHeight();
         
-        // HTML中的输入框样式：背景 #A8B5C6，边框 #5A6C7E
-        int bgColor = 0xFFA8B5C6;  // HTML输入框背景色
-        int borderColor = 0xFF5A6C7E;  // HTML输入框边框色
+        // HTML原型中的输入框样式：白色背景，中等边框
+        int bgColor = 0xFFFFFFFF;  // 白色背景 (--bg-input)
+        int borderColor = 0xFFC8C0AD;  // 中等边框色 (--border-medium)
         
         // 绘制边框
         guiGraphics.fill(x, y, x + w, y + 1, borderColor);  // 顶部边框
@@ -112,13 +112,13 @@ public class NoCountMultiLineEditBox extends MultiLineEditBox {
         guiGraphics.fill(x + w - 1, y, x + w, y + h, borderColor);  // 右侧边框
         guiGraphics.fill(x, y + h - 1, x + w, y + h, borderColor);  // 底部边框
         
-        // 内部填充背景色
+        // 内部填充白色背景
         guiGraphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, bgColor);
         
-        // 如果有滚动条，在滚动条区域绘制一个稍深的背景，避免文字被遮挡
+        // 如果有滚动条，在滚动条区域绘制一个稍浅的背景，避免文字被遮挡
         if (this.scrollbarVisible()) {
             int scrollbarAreaX = x + w - SCROLLBAR_TOTAL_WIDTH;
-            guiGraphics.fill(scrollbarAreaX, y + 1, x + w - 1, y + h - 1, 0xFF98A5B6);  // 稍深的背景
+            guiGraphics.fill(scrollbarAreaX, y + 1, x + w - 1, y + h - 1, 0xFFF3EFE4);  // 浅米色背景
         }
     }
 

@@ -11,7 +11,8 @@ import net.minecraft.network.chat.Component;
  */
 public class NeoTabConfigWidgetFactory {
     private static final int INPUT_HEIGHT = 20;
-    private static final int TOGGLE_WIDTH = 56;
+    private static final int TOGGLE_WIDTH = 26;   // 适合Minecraft GUI比例的开关宽度
+    private static final int TOGGLE_HEIGHT = 14;  // 适合Minecraft GUI比例的开关高度
 
     private NeoTabConfigWidgetFactory() {}
 
@@ -21,7 +22,7 @@ public class NeoTabConfigWidgetFactory {
     public static CycleButton<Boolean> newToggle(int x, boolean initialValue) {
         return CycleButton.onOffBuilder(initialValue)
             .displayOnlyValue()
-            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+            .create(x, 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, CommonComponents.EMPTY,
                 (button, value) -> { /* value read on save */ });
     }
 
@@ -31,12 +32,13 @@ public class NeoTabConfigWidgetFactory {
     public static CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {
         return CycleButton.onOffBuilder(initialValue)
             .displayOnlyValue()
-            .create(x, 0, width, INPUT_HEIGHT, label,
+            .create(x, 0, width, TOGGLE_HEIGHT, label,
                 (button, value) -> { /* value read on save */ });
     }
 
     /**
      * Create a health display mode cycle button.
+     * Uses a wider width to show the mode text and distinguish from toggle buttons.
      */
     public static CycleButton<HealthDisplayMode> newHealthModeButton(int x, HealthDisplayMode initialValue, Runnable onValueChange) {
         return CycleButton.builder((HealthDisplayMode mode) ->
@@ -44,7 +46,7 @@ public class NeoTabConfigWidgetFactory {
             .withValues(HealthDisplayMode.values())
             .withInitialValue(initialValue)
             .displayOnlyValue()
-            .create(x, 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+            .create(x, 0, 60, INPUT_HEIGHT, CommonComponents.EMPTY,
                 (button, value) -> {
                     if (onValueChange != null) {
                         onValueChange.run();

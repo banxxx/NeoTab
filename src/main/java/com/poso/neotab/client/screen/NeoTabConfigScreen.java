@@ -33,13 +33,14 @@ public class NeoTabConfigScreen extends Screen {
     }
 
     //  Constants 
-    private static final int MAX_CONTENT_WIDTH      = 360;
+    private static final int MAX_CONTENT_WIDTH      = 600;  // 增加最大内容宽度，适应横向布局
     private static final int CONTENT_SIDE_PADDING   = 32;
     private static final int ROW_HEIGHT              = 24;
     private static final int INPUT_HEIGHT            = 20;
     private static final int TITLE_INPUT_HEIGHT      = 60;
     private static final int MULTILINE_INPUT_HEIGHT  = 60;
-    private static final int TOGGLE_WIDTH            = 56;
+    private static final int TOGGLE_WIDTH            = 26;   // 适合Minecraft GUI比例的开关宽度
+    private static final int TOGGLE_HEIGHT           = 14;   // 适合Minecraft GUI比例的开关高度
     private static final int LAYOUT_BUTTON_WIDTH     = 80;
     private static final int THEME_OPTION_HEIGHT     = 20;
     private static final int THEME_OPTION_GAP        = 4;
@@ -54,7 +55,7 @@ public class NeoTabConfigScreen extends Screen {
     private static final int VIEWPORT_BOTTOM_MARGIN  = 0;  // 内容区域直接贴近按钮栏顶部，与HTML原型一致
     private static final int SCROLL_STEP             = 18;
     private static final int CONTENT_TOP_PADDING     = 8;
-    private static final int TAB_BAR_WIDTH           = 84;  // HTML中Tab栏宽度
+    private static final int TAB_BAR_WIDTH           = 120;  // Tab栏宽度，适中大小
     private static final int TAB_CONTENT_GAP         = 8;
     private static final int TAB_BUTTON_HEIGHT       = 24;
     private static final int TAB_BUTTON_GAP          = 4;
@@ -212,20 +213,33 @@ public class NeoTabConfigScreen extends Screen {
         for (Button button : theme.themeOptionButtons) button.visible = themeTab;
         boolean isCustom = "custom".equals(theme.selectedThemeId);
         theme.customBackgroundColorButton.visible = themeTab && isCustom;
+        if (theme.customBackgroundHexInput != null) theme.customBackgroundHexInput.visible = themeTab && isCustom;
         theme.customBorderOuterFactorButton.visible = themeTab && isCustom;
+        if (theme.customBorderOuterHexInput != null) theme.customBorderOuterHexInput.visible = themeTab && isCustom;
         theme.customAnimationToggle.visible = themeTab && isCustom;
         if (theme.customAnimationSpeedButton != null) theme.customAnimationSpeedButton.visible = themeTab && isCustom;
         if (theme.resetToDefaultButton != null) theme.resetToDefaultButton.visible = themeTab && isCustom;
         if (theme.resetConfirmButton != null) theme.resetConfirmButton.visible = themeTab && isCustom && theme.showResetConfirmation;
         if (theme.resetCancelButton != null) theme.resetCancelButton.visible = themeTab && isCustom && theme.showResetConfirmation;
         for (Button button : theme.customBorderColorButtons) button.visible = themeTab && isCustom;
+        for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) {
+            box.visible = themeTab && isCustom;
+        }
+        for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) box.visible = themeTab && isCustom;
         if (theme.addCustomBorderColorButton != null) theme.addCustomBorderColorButton.visible = themeTab && isCustom;
-        if (theme.embeddedColorPicker != null) theme.embeddedColorPicker.visible = themeTab && isCustom;
+        if (theme.embeddedColorPicker != null) theme.embeddedColorPicker.visible = themeTab && isCustom && theme.currentSelectedColorType != null;
+        // 不再隐藏"添加边框颜色"按钮，而是通过颜色选择器的背景遮罩来遮挡
     }
 
     //  switchTab 
     private void switchTab(ConfigTab tab) {
         if (activeTab == tab) return;
+        
+        // 切换标签页时清除所有HEX输入框的焦点
+        for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+            hexBox.setFocused(false);
+        }
+        
         activeTab = tab;
         scrollOffset = 0;
         if (theme.showResetConfirmation) {
@@ -287,6 +301,22 @@ public class NeoTabConfigScreen extends Screen {
             if (onInputScrollbar) return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
         if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
+        // 滚动时隐藏颜色选择器（对所有颜色类型）
+        if (theme.currentSelectedColorType != null) {
+            theme.currentSelectedColorType = null;
+            theme.currentSelectedBorderIndex = -1;
+            // 清除所有HEX输入框的焦点
+            if (theme.customBackgroundHexInput != null) {
+                theme.customBackgroundHexInput.setFocused(false);
+            }
+            if (theme.customBorderOuterHexInput != null) {
+                theme.customBorderOuterHexInput.setFocused(false);
+            }
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                hexBox.setFocused(false);
+            }
+            syncTabWidgetVisibility();
+        }
         setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
         return true;
     }
@@ -295,6 +325,36 @@ public class NeoTabConfigScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        
+        // 优先检查玩家搜索框的清除按钮（在权限配置标签页）
+        if (activeTab == ConfigTab.PERMISSIONS && button == 0 && permissions.playerSearchBox != null) {
+            if (permissions.playerSearchBox instanceof com.poso.neotab.client.widget.CenteredEditBox centeredBox) {
+                if (centeredBox.handleClearButtonClick(mouseX, mouseY)) {
+                    permissions.playerSuggestions.clear();
+                    permissions.dropdownScrollOffset = 0;
+                    return true;
+                }
+            }
+        }
+        
+        // 优先检查HEX输入框的点击（在所有其他处理之前）
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId) && button == 0) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isMouseOver(mouseX, mouseY)) {
+                    // 清除其他输入框的焦点
+                    for (net.minecraft.client.gui.components.EditBox otherBox : theme.customBorderHexInputs) {
+                        if (otherBox != hexBox) {
+                            otherBox.setFocused(false);
+                        }
+                    }
+                    // 设置当前输入框焦点
+                    setFocused(hexBox);
+                    hexBox.setFocused(true);
+                    return hexBox.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+        }
+        
         // Bottom button bar
         if (mouseY >= layout.buttonBarTop()) {
             if (theme.showResetConfirmation) { theme.showResetConfirmation = false; syncTabWidgetVisibility(); }
@@ -346,6 +406,77 @@ public class NeoTabConfigScreen extends Screen {
             if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
                 boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
                 if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); return true; }
+            } else if (theme.currentSelectedColorType != null) {
+                // 点击颜色选择器外部时隐藏（对所有颜色类型：background, outer_border, border_*）
+                boolean clickedSwatch = false;
+                boolean clickedHexInput = false;
+                
+                // 检查是否点击了色块按钮本身（避免立即关闭）
+                if ("background".equals(theme.currentSelectedColorType)) {
+                    if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible 
+                            && theme.customBackgroundColorButton.isMouseOver(mouseX, mouseY)) {
+                        clickedSwatch = true;
+                    }
+                    // 检查是否点击了背景颜色HEX输入框
+                    if (theme.customBackgroundHexInput != null && theme.customBackgroundHexInput.visible 
+                            && theme.customBackgroundHexInput.isMouseOver(mouseX, mouseY)) {
+                        clickedHexInput = true;
+                        setFocused(theme.customBackgroundHexInput);
+                        theme.customBackgroundHexInput.setFocused(true);
+                    }
+                } else if ("outer_border".equals(theme.currentSelectedColorType)) {
+                    if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible 
+                            && theme.customBorderOuterFactorButton.isMouseOver(mouseX, mouseY)) {
+                        clickedSwatch = true;
+                    }
+                    // 检查是否点击了外层边框颜色HEX输入框
+                    if (theme.customBorderOuterHexInput != null && theme.customBorderOuterHexInput.visible 
+                            && theme.customBorderOuterHexInput.isMouseOver(mouseX, mouseY)) {
+                        clickedHexInput = true;
+                        setFocused(theme.customBorderOuterHexInput);
+                        theme.customBorderOuterHexInput.setFocused(true);
+                    }
+                } else if (theme.currentSelectedColorType.startsWith("border_")) {
+                    // 边框颜色项
+                    for (Button btn : theme.customBorderColorButtons) {
+                        if (btn.visible && btn.isMouseOver(mouseX, mouseY)) { clickedSwatch = true; break; }
+                    }
+                    // 检查是否点击了HEX输入框
+                    for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                        if (hexBox.visible && hexBox.isMouseOver(mouseX, mouseY)) { 
+                            clickedHexInput = true; 
+                            // 设置焦点到点击的输入框
+                            setFocused(hexBox);
+                            hexBox.setFocused(true);
+                            // 清除其他输入框的焦点
+                            for (net.minecraft.client.gui.components.EditBox otherBox : theme.customBorderHexInputs) {
+                                if (otherBox != hexBox) {
+                                    otherBox.setFocused(false);
+                                }
+                            }
+                            break; 
+                        }
+                    }
+                }
+                
+                if (!clickedSwatch && !clickedHexInput) {
+                    // 清除颜色选择器状态
+                    theme.currentSelectedColorType = null;
+                    theme.currentSelectedBorderIndex = -1;
+                    // 清除所有HEX输入框的焦点
+                    if (theme.customBackgroundHexInput != null) {
+                        theme.customBackgroundHexInput.setFocused(false);
+                    }
+                    if (theme.customBorderOuterHexInput != null) {
+                        theme.customBorderOuterHexInput.setFocused(false);
+                    }
+                    for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                        hexBox.setFocused(false);
+                    }
+                    syncTabWidgetVisibility();
+                    NeoTabConfigScreenLayout.Layout newLayout = buildLayoutImpl();
+                    applyWidgetLayout(newLayout);
+                }
             }
         }
         // Permissions dropdown
@@ -526,8 +657,18 @@ public class NeoTabConfigScreen extends Screen {
         int panelX = layout.tabBarX() - 2;
         int panelY = 8;
         int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
-        int panelH = this.height - panelY - 8;
+        
+        // 限制面板高度，使其更符合横向布局（宽度 > 高度）
+        // HTML中的比例是 820:600 ≈ 1.37:1
+        int maxPanelH = (int)(panelW / 1.37);  // 根据宽度计算最大高度
+        int availableH = this.height - panelY - 8;
+        int panelH = Math.min(maxPanelH, availableH);
+        
         AEStyleRenderer.drawMainPanel(g, panelX, panelY, panelW, panelH);
+
+        // 绘制标题栏渐变背景（在主面板边框内）
+        int titleBarHeight = 24;
+        AEStyleRenderer.drawTitleBarGradient(g, panelX + 3, panelY + 3, panelW - 6, titleBarHeight);
 
         net.minecraft.network.chat.Component boldTitle = this.title.copy()
                 .withStyle(net.minecraft.ChatFormatting.BOLD);
@@ -542,11 +683,13 @@ public class NeoTabConfigScreen extends Screen {
         NeoTabConfigScreenRenderer.renderTabBar(g, this.font, this.activeTab, layout, panelY, mouseX, mouseY, this.screenMode);
         renderScrollableContent(g, mouseX, mouseY, partialTick, layout);
         NeoTabConfigScreenRenderer.renderButtonBar(g, layout, this.height);
-        // Fixed widgets (done/cancel buttons)
-        NeoTabConfigScreenRenderer.renderAEButton(g, this.font, this.doneButton, mouseX, mouseY);
-        NeoTabConfigScreenRenderer.renderAEButton(g, this.font, this.cancelButton, mouseX, mouseY);
+        // Fixed widgets (done/cancel buttons) - 完成用主要样式（绿色），取消用次要样式（米色）
+        NeoTabConfigScreenRenderer.renderPrimaryButton(g, this.font, this.doneButton, mouseX, mouseY);
+        NeoTabConfigScreenRenderer.renderSecondaryButton(g, this.font, this.cancelButton, mouseX, mouseY);
         // Permissions dropdown on top
         renderPlayerSuggestionDropdown(g, mouseX, mouseY);
+        // ── 颜色相关浮动组件（最后渲染，确保在最上层）──
+        renderColorOverlay(g, mouseX, mouseY, partialTick, layout);
         NeoTabConfigScreenRenderer.renderHoveredTooltip(g, this.font, hoveredTarget(mouseX, mouseY, layout), mouseX, mouseY);
     }
 
@@ -582,9 +725,9 @@ public class NeoTabConfigScreen extends Screen {
         int totalH = visibleItems * itemH + 2;
         boolean needsScrollbar = permissions.playerSuggestions.size() > maxVisibleItems;
         
-        // 绘制下拉菜单背景和边框
-        g.fill(dropX - 1, dropY - 1, dropX + dropW + 1, dropY + totalH + 1, AEStyleRenderer.COLOR_OUTLINE);
-        g.fill(dropX, dropY, dropX + dropW, dropY + totalH, 0xFF2A2A2A);
+        // 绘制下拉菜单背景和边框（白色背景）
+        g.fill(dropX - 1, dropY - 1, dropX + dropW + 1, dropY + totalH + 1, 0xFFA0A0A0);  // 灰色边框
+        g.fill(dropX, dropY, dropX + dropW, dropY + totalH, 0xFFFFFFFF);  // 白色背景
         
         // 启用裁剪区域
         g.enableScissor(dropX, dropY, dropX + dropW, dropY + totalH);
@@ -601,10 +744,10 @@ public class NeoTabConfigScreen extends Screen {
             
             boolean hovered = mouseX >= dropX && mouseX < dropX + dropW - (needsScrollbar ? 8 : 0) 
                 && mouseY >= itemY && mouseY < itemY + itemH && mouseY >= dropY && mouseY < dropY + totalH;
-            if (hovered) g.fill(dropX, itemY, dropX + dropW - (needsScrollbar ? 8 : 0), itemY + itemH, 0xFF334466);
+            if (hovered) g.fill(dropX, itemY, dropX + dropW - (needsScrollbar ? 8 : 0), itemY + itemH, 0xFFB8D4A8);  // 莫奈绿色悬停背景
             g.drawString(this.font, permissions.playerSuggestions.get(i),
                 dropX + 4, itemY + (itemH - this.font.lineHeight) / 2,
-                hovered ? 0xFF55FF55 : AEStyleRenderer.COLOR_LABEL, false);
+                0xFF000000, false);  // 黑色文字
         }
         
         g.disableScissor();
@@ -618,11 +761,38 @@ public class NeoTabConfigScreen extends Screen {
             int thumbH = Math.max(20, scrollbarH * visibleItems / permissions.playerSuggestions.size());
             int thumbY = scrollbarH > thumbH ? (int)((float)scrollOffset / maxScroll * (scrollbarH - thumbH)) : 0;
             
-            // 滚动条轨道
-            g.fill(scrollbarX, dropY + 2, scrollbarX + scrollbarW, dropY + totalH - 2, 0x60303030);
-            // 滚动条滑块
-            g.fill(scrollbarX, dropY + 2 + thumbY, scrollbarX + scrollbarW, dropY + 2 + thumbY + thumbH, 0xB0FFFFFF);
+            // 滚动条轨道（浅灰色）
+            g.fill(scrollbarX, dropY + 2, scrollbarX + scrollbarW, dropY + totalH - 2, 0xFFD0D0D0);
+            // 滚动条滑块（深灰色，更明显）
+            g.fill(scrollbarX, dropY + 2 + thumbY, scrollbarX + scrollbarW, dropY + 2 + thumbY + thumbH, 0xFF808080);
         }
+    }
+
+    private void renderColorOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick,
+                                    NeoTabConfigScreenLayout.Layout layout) {
+        if (activeTab != ConfigTab.THEME) return;
+
+        if (theme.embeddedColorPicker == null || !theme.embeddedColorPicker.visible) return;
+
+        int py = theme.embeddedColorPicker.getY();
+        int ph = theme.embeddedColorPicker.getHeight();
+        int pw = theme.embeddedColorPicker.getWidth();
+        int cpX = theme.embeddedColorPicker.getX();
+
+        // 智能翻转：下方空间不足时向上展开
+        int renderY = py;
+        if (py + ph > layout.buttonBarTop()) {
+            renderY = Math.max(layout.viewportTop(), py - ph - 28);
+        }
+        theme.embeddedColorPicker.setY(renderY);
+
+        // 先铺不透明背景，彻底阻断下层文字/控件渗透
+        // 使用适中的边距，提供清晰的视觉边界
+        int bgPadding = 4;  // 适中的边距，既清晰又不会太宽
+        g.fill(cpX - bgPadding, renderY - bgPadding, cpX + pw + bgPadding, renderY + ph + bgPadding, AEStyleRenderer.COLOR_PANEL_BORDER);
+        g.fill(cpX - bgPadding + 1, renderY - bgPadding + 1, cpX + pw + bgPadding - 1, renderY + ph + bgPadding - 1, 0xFF2A2A2A);
+
+        theme.embeddedColorPicker.render(g, mouseX, mouseY, partialTick);
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, NeoTabConfigScreenLayout.Layout layout) {
@@ -688,7 +858,8 @@ public class NeoTabConfigScreen extends Screen {
             
             // 更好的延迟显示卡片
             cardY = layout.toScreenY(layout.betterPingRowY());
-            int simpleCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+            int toggleCardContentH = Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight);
+            int simpleCardHeight = CARD_PADDING + toggleCardContentH + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
             
             g.drawString(this.font, Component.translatable("screen.neotab.list.better_ping"),
@@ -711,7 +882,7 @@ public class NeoTabConfigScreen extends Screen {
             
             // 称号功能卡片（无副标题）
             cardY = layout.toScreenY(layout.titleRowY());
-            int noSubtitleCardHeight = CARD_PADDING + titleLineHeight + CARD_PADDING;
+            int noSubtitleCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight) + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), noSubtitleCardHeight);
             
             g.drawString(this.font, Component.translatable("screen.neotab.list.title"),
@@ -807,19 +978,25 @@ public class NeoTabConfigScreen extends Screen {
             
             // 如果选中了"自定义"主题，显示自定义配置卡片
             if ("custom".equals(theme.selectedThemeId)) {
-                // 重置为默认卡片（放在最上面）
+                // 自定义配置卡片（放在最上面，包含重置按钮）
                 cardY = layout.toScreenY(layout.customResetRowY());
-                int resetCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+                int resetCardHeight = CARD_PADDING * 2 + titleLineHeight + 2 + subtitleLineHeight + 8;  // 增加高度以容纳确认/取消按钮
                 AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), resetCardHeight);
                 
-                // 标题（限制宽度）
-                int resetTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 56 - 8;  // 减去按钮宽度和间距
-                g.drawString(this.font, Component.translatable("screen.neotab.theme.reset_title"),
-                        layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                // 计算文字垂直居中位置
+                int textBlockHeight = titleLineHeight + 2 + subtitleLineHeight;
+                int textStartY = cardY + (resetCardHeight - textBlockHeight) / 2;
+                
+                // 标题（左对齐，垂直居中）
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.config_title"),
+                        layout.left() + CARD_PADDING, textStartY,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
-                drawScaledText(g, Component.translatable("screen.neotab.theme.reset_subtitle"),
-                        layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                // 副标题（左对齐，垂直居中）
+                drawScaledText(g, Component.translatable("screen.neotab.custom_theme.config_subtitle"),
+                        layout.left() + CARD_PADDING, textStartY + titleLineHeight + 2,
                         AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+                // 重置按钮由widget系统绘制（靠右边框，基于卡片高度垂直居中）
+                // 确认/取消按钮在重置按钮下方，总宽度与重置按钮一致
                 
                 // 动画效果卡片（独立卡片）
                 cardY = layout.toScreenY(layout.customAnimationRowY());
@@ -838,48 +1015,153 @@ public class NeoTabConfigScreen extends Screen {
                         animTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
                 // 动画开关和速度按钮由widget系统绘制
                 
-                // 颜色配置卡片（左右分栏：左侧按钮，右侧颜色选择器）
-                cardY = layout.toScreenY(layout.customBgColorRowY());
-                
-                // 计算左侧按钮列表高度
+                // 颜色配置：每个颜色项独立卡片
                 java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
                     theme.customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
                 
-                int leftColumnHeight = CARD_PADDING + 
-                    titleLineHeight + 2 + subtitleLineHeight + 8 +  // 卡片标题+副标题
-                    THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 背景颜色
-                    THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 外层边框颜色
-                    titleLineHeight + 4;  // 边框颜色标题
+                int swatchSize = 24;  // 色块大小（缩小）
+                int hexInputH = 24;   // HEX输入框高度（缩小）
+                int previewH = 24;    // 预览块高度（缩小）
+                int contentGap = 8;   // 标题与内容之间的间距
+                int previewGap = 8;   // 颜色行与预览块之间的间距
                 
-                leftColumnHeight += borderColors.size() * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP);
-                if (borderColors.size() < 7) {
-                    leftColumnHeight += THEME_OPTION_HEIGHT;  // 添加按钮（最后一个不需要GAP）
-                }
-                leftColumnHeight += CARD_PADDING;
+                // 计算卡片高度（标题 + 间距 + 色块行 + 间距 + 预览块）
+                int colorCardH = CARD_PADDING + titleLineHeight + contentGap + swatchSize + previewGap + previewH + CARD_PADDING;
+                int CARD_GAP = 8;
                 
-                // 右侧颜色选择器高度
-                int colorPickerHeight = theme.embeddedColorPicker != null ? 
-                    (int)(theme.embeddedColorPicker.getHeight() * 1.2f) : 200;
+                // 背景颜色卡片
+                cardY = layout.toScreenY(layout.customBgColorRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), colorCardH);
                 
-                int customConfigCardHeight = Math.max(leftColumnHeight, colorPickerHeight + CARD_PADDING * 2);
-                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), customConfigCardHeight);
-                
-                // 绘制卡片标题和副标题
-                g.drawString(this.font, Component.translatable("screen.neotab.theme.color_config_title"),
+                // 绘制标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.background_color"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
-                drawScaledText(g, Component.translatable("screen.neotab.theme.color_config_subtitle"),
-                        layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                
+                // 绘制色块（由widget系统绘制customBackgroundColorButton）
+                if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible) {
+                    int swatchX = theme.customBackgroundColorButton.getX();
+                    int swatchY = theme.customBackgroundColorButton.getY();
+                    int bgColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBackgroundColor() : 0xFFFFFFFF;
+                    
+                    // 棋盘格背景（用于显示透明度）
+                    g.fill(swatchX, swatchY, swatchX + swatchSize / 2, swatchY + swatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + swatchSize / 2, swatchY, swatchX + swatchSize, swatchY + swatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + swatchSize / 2, swatchX + swatchSize / 2, swatchY + swatchSize, 0xFF999999);
+                    g.fill(swatchX + swatchSize / 2, swatchY + swatchSize / 2, swatchX + swatchSize, swatchY + swatchSize, 0xFFCCCCCC);
+                    // 实际颜色
+                    g.fill(swatchX, swatchY, swatchX + swatchSize, swatchY + swatchSize, bgColor);
+                    // 边框
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, swatchSize, swatchSize, 0xFFB7AF9B, 2);
+                }
+                
+                // HEX输入框由renderHexInputBox统一渲染，这里不需要绘制背景
+                
+                // 绘制预览块（在卡片底部）
+                int bgPreviewY = cardY + colorCardH - CARD_PADDING - previewH;
+                int previewX = layout.left() + CARD_PADDING;
+                int previewW = layout.contentWidth() - CARD_PADDING * 2;
+                int bgColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBackgroundColor() : 0xFFFFFFFF;
+                AEStyleRenderer.drawOutline(g, previewX, bgPreviewY, previewW, previewH, 0xFFC8C0AD, 1);
+                g.fill(previewX + 1, bgPreviewY + 1, previewX + previewW - 1, bgPreviewY + previewH - 1, bgColor);
+                
+                // 外层边框颜色卡片
+                cardY = layout.toScreenY(layout.customOuterBorderRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), colorCardH);
+                
+                // 绘制标题
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.border_outer_color"),
+                        layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                
+                // 绘制色块（由widget系统绘制customBorderOuterFactorButton）
+                if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible) {
+                    int swatchX = theme.customBorderOuterFactorButton.getX();
+                    int swatchY = theme.customBorderOuterFactorButton.getY();
+                    int outerColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBorderOuterColor() : 0xFFB7AF9B;
+                    
+                    // 棋盘格背景
+                    g.fill(swatchX, swatchY, swatchX + swatchSize / 2, swatchY + swatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + swatchSize / 2, swatchY, swatchX + swatchSize, swatchY + swatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + swatchSize / 2, swatchX + swatchSize / 2, swatchY + swatchSize, 0xFF999999);
+                    g.fill(swatchX + swatchSize / 2, swatchY + swatchSize / 2, swatchX + swatchSize, swatchY + swatchSize, 0xFFCCCCCC);
+                    // 实际颜色
+                    g.fill(swatchX, swatchY, swatchX + swatchSize, swatchY + swatchSize, outerColor);
+                    // 边框
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, swatchSize, swatchSize, 0xFFB7AF9B, 2);
+                }
+                
+                // HEX输入框由renderHexInputBox统一渲染，这里不需要绘制背景
+                
+                // 绘制预览块（在卡片底部）
+                int outerPreviewY = cardY + colorCardH - CARD_PADDING - previewH;
+                int outerColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBorderOuterColor() : 0xFFB7AF9B;
+                AEStyleRenderer.drawOutline(g, previewX, outerPreviewY, previewW, previewH, 0xFFC8C0AD, 1);
+                g.fill(previewX + 1, outerPreviewY + 1, previewX + previewW - 1, outerPreviewY + previewH - 1, outerColor);
+                
+                // 边框颜色大卡片（一个卡片包含所有边框颜色项，添加按钮在右上角）
+                int borderItemH = THEME_OPTION_HEIGHT + 12;  // 每个颜色行高度（增加4像素）
+                int borderItemGap = 8;  // 行间距
+                int borderCardInnerH = titleLineHeight + 2 + subtitleLineHeight + 8;
+                borderCardInnerH += borderColors.size() * (borderItemH + borderItemGap);
+                // 添加按钮现在在右上角，不需要为底部按钮预留空间
+                int borderBigCardH = CARD_PADDING + borderCardInnerH + CARD_PADDING;
+                int borderBigCardY = layout.toScreenY(layout.customAddBorderColorRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), borderBigCardY, layout.contentWidth(), borderBigCardH);
+                
+                // 标题和副标题（标题限制宽度，为右上角的添加按钮留出空间）
+                int borderTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 100 - 8;  // 减去按钮宽度和间距
+                Component titleComp = Component.translatable("screen.neotab.theme.border_colors_title");
+                String titleStr = titleComp.getString();
+                if (this.font.width(titleStr) > borderTitleMaxWidth) {
+                    // 标题太长，截断并添加省略号
+                    titleStr = this.font.plainSubstrByWidth(titleStr, borderTitleMaxWidth - this.font.width("...")) + "...";
+                }
+                g.drawString(this.font, titleStr,
+                        layout.left() + CARD_PADDING, borderBigCardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                drawScaledText(g, Component.translatable("screen.neotab.custom_theme.border_colors"),
+                        layout.left() + CARD_PADDING, borderBigCardY + CARD_PADDING + titleLineHeight + 2,
                         AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
                 
-                // 左侧按钮区域和右侧颜色选择器由widget系统绘制
-                // 在左侧绘制"边框颜色"小标题
-                int borderColorTitleY = cardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 +
-                    THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 背景颜色
-                    THEME_OPTION_HEIGHT + THEME_OPTION_GAP;   // 外层边框颜色
-                g.drawString(this.font, Component.translatable("screen.neotab.theme.border_colors_title"),
-                        layout.left() + CARD_PADDING, borderColorTitleY,
-                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                // 每个颜色行（白色内嵌行）
+                int rowStartY = borderBigCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8;
+                int rowW = layout.contentWidth() - CARD_PADDING * 2;
+                int borderSwatchSize = 16;  // 边框颜色色块固定大小（小巧，参考HTML原型）
+                for (int i = 0; i < borderColors.size(); i++) {
+                    int color = borderColors.get(i);
+                    int rowY = rowStartY + i * (borderItemH + borderItemGap);
+                    boolean borderHov = mouseX >= layout.left() + CARD_PADDING && mouseX < layout.left() + CARD_PADDING + rowW
+                                     && mouseY >= rowY && mouseY < rowY + borderItemH;
+                    // 白色行背景
+                    AEStyleRenderer.drawOutline(g, layout.left() + CARD_PADDING, rowY, rowW, borderItemH, AEStyleRenderer.COLOR_PANEL_BORDER, 1);
+                    g.fill(layout.left() + CARD_PADDING + 1, rowY + 1, layout.left() + CARD_PADDING + rowW - 1, rowY + borderItemH - 1,
+                            borderHov ? 0xFFFAF7EF : 0xFFFFFFFF);
+                    
+                    // 左侧：颜色色块（固定 16x16，垂直居中）
+                    int swatchX = layout.left() + CARD_PADDING + 8;
+                    int swatchY = rowY + (borderItemH - borderSwatchSize) / 2;
+                    // 棋盘格背景
+                    g.fill(swatchX, swatchY, swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + borderSwatchSize / 2, swatchY, swatchX + borderSwatchSize, swatchY + borderSwatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + borderSwatchSize / 2, swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize, 0xFF999999);
+                    g.fill(swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize / 2, swatchX + borderSwatchSize, swatchY + borderSwatchSize, 0xFFCCCCCC);
+                    g.fill(swatchX, swatchY, swatchX + borderSwatchSize, swatchY + borderSwatchSize, color);
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, borderSwatchSize, borderSwatchSize, AEStyleRenderer.COLOR_OUTLINE, 1);
+                    
+                    // 中间：hex输入框（在scissor外单独渲染，这里不绘制）
+                    
+                    // 右侧：红色 × 删除按钮（由widget系统处理点击，这里只绘制图标）
+                    int delX = layout.left() + CARD_PADDING + rowW - 20;
+                    int delY = rowY + (borderItemH - this.font.lineHeight) / 2;
+                    g.drawString(this.font, "×", delX + 6, delY, 0xFFB34242, false);
+                }
+                
+                // 添加边框颜色按钮（在大卡片内底部）
+                if (borderColors.size() < 7) {
+                    int addBtnY = rowStartY + borderColors.size() * (borderItemH + borderItemGap);
+                    // 添加按钮由widget系统绘制
+                }
             }
             
             // 血量显示分区标题
@@ -888,7 +1170,8 @@ public class NeoTabConfigScreen extends Screen {
             
             // 显示效果卡片
             cardY = layout.toScreenY(layout.healthModeRowY());
-            int healthCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+            int toggleCardContentH2 = Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight);
+            int healthCardHeight = CARD_PADDING + toggleCardContentH2 + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), healthCardHeight);
             
             // 标题（限制宽度）
@@ -909,7 +1192,7 @@ public class NeoTabConfigScreen extends Screen {
             
             // 启用分列卡片
             cardY = layout.toScreenY(layout.layoutEnabledRowY());
-            int layoutEnabledCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+            int layoutEnabledCardHeight = CARD_PADDING + toggleCardContentH2 + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutEnabledCardHeight);
             
             // 标题（限制宽度）
@@ -925,7 +1208,7 @@ public class NeoTabConfigScreen extends Screen {
             
             // 展示列数卡片
             cardY = layout.toScreenY(layout.layoutColumnsRowY());
-            int layoutColumnsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+            int layoutColumnsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutColumnsCardHeight);
             
             g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_columns_title"),
@@ -938,7 +1221,7 @@ public class NeoTabConfigScreen extends Screen {
             
             // 展示行数卡片
             cardY = layout.toScreenY(layout.layoutRowsRowY());
-            int layoutRowsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+            int layoutRowsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
             AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutRowsCardHeight);
             
             g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_rows_title"),
@@ -1010,7 +1293,7 @@ public class NeoTabConfigScreen extends Screen {
         };
         
         int cardWidth = (layout.contentWidth() - CARD_GAP) / 2;  // 两列，中间8px间距
-        int cardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+        int cardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
         
         for (int i = 0; i < Math.min(policyKeys.length, permissions.globalPolicyToggles.size()); i++) {
             int col = i % 2;
@@ -1071,7 +1354,7 @@ public class NeoTabConfigScreen extends Screen {
         int playerListCardY = layout.toScreenY(y);
         int playerListContentHeight;
         if (permissions.targetPlayers.isEmpty()) {
-            playerListContentHeight = 30;  // 降低空状态高度
+            playerListContentHeight = INPUT_HEIGHT;  // 与单个标签高度一致
         } else {
             // 计算标签布局的实际高度（与applyLayout保持一致）
             int tagHeight = INPUT_HEIGHT;
@@ -1194,10 +1477,31 @@ public class NeoTabConfigScreen extends Screen {
     private void renderScrollableWidgets(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         for (Renderable r : this.renderables) {
             if (r == this.doneButton || r == this.cancelButton) continue;
+            // 颜色选择器和hex输入框在scissor外单独渲染，这里跳过
+            if (r == theme.embeddedColorPicker) continue;
+            // HEX输入框需要特殊处理，先跳过（包括背景颜色、外层边框颜色、边框颜色的HEX输入框）
+            if (r instanceof net.minecraft.client.gui.components.EditBox box) {
+                if (box == theme.customBackgroundHexInput || 
+                    box == theme.customBorderOuterHexInput ||
+                    theme.customBorderHexInputs.contains(box)) {
+                    continue;
+                }
+                // 玩家搜索框：绘制白色背景
+                if (box == permissions.playerSearchBox && box.visible) {
+                    // 绘制白色背景
+                    g.fill(box.getX(), box.getY(), box.getX() + box.getWidth(), box.getY() + box.getHeight(), 0xFFFFFFFF);
+                    // 绘制边框
+                    int borderColor = box.isFocused() ? 0xFF8B8B8B : 0xFFA0A0A0;
+                    g.fill(box.getX() - 1, box.getY() - 1, box.getX() + box.getWidth() + 1, box.getY(), borderColor);  // 上
+                    g.fill(box.getX() - 1, box.getY() + box.getHeight(), box.getX() + box.getWidth() + 1, box.getY() + box.getHeight() + 1, borderColor);  // 下
+                    g.fill(box.getX() - 1, box.getY(), box.getX(), box.getY() + box.getHeight(), borderColor);  // 左
+                    g.fill(box.getX() + box.getWidth(), box.getY(), box.getX() + box.getWidth() + 1, box.getY() + box.getHeight(), borderColor);  // 右
+                }
+            }
             
             // 检查widget的visible属性
             if (r instanceof AbstractWidget widget && !widget.visible) continue;
-            
+
             if (r instanceof CycleButton<?> cb) {
                 NeoTabConfigScreenRenderer.renderAECycleButton(g, this.font, cb, mouseX, mouseY);
             } else if (r instanceof Button btn) {
@@ -1205,16 +1509,19 @@ public class NeoTabConfigScreen extends Screen {
                 if (themeIndex >= 0) {
                     NeoTabConfigScreenRenderer.renderThemeOptionButton(g, this.font, btn, theme.themeOptionIds.get(themeIndex), theme.selectedThemeId, mouseX, mouseY);
                 } else if (btn == theme.customBackgroundColorButton) {
-                    NeoTabConfigScreenRenderer.renderSelectableColorButton(g, this.font, btn, "background".equals(theme.currentSelectedColorType), mouseX, mouseY);
+                    // 背景颜色色块按钮：由卡片渲染代码手动绘制，这里跳过（避免重复绘制）
                 } else if (theme.customBorderColorButtons.contains(btn)) {
                     int bi = theme.customBorderColorButtons.indexOf(btn);
                     if (bi % 2 == 0) {
-                        NeoTabConfigScreenRenderer.renderSelectableColorButton(g, this.font, btn, ("border_" + (bi / 2)).equals(theme.currentSelectedColorType), mouseX, mouseY);
+                        // 颜色选择按钮：由卡片渲染代码绘制，这里跳过（避免重复绘制）
                     } else {
-                        NeoTabConfigScreenRenderer.renderAEButton(g, this.font, btn, mouseX, mouseY);
+                        // 删除按钮：不绘制（× 图标已在卡片渲染中手动绘制）
                     }
                 } else if (btn == theme.customBorderOuterFactorButton) {
-                    NeoTabConfigScreenRenderer.renderSelectableColorButton(g, this.font, btn, "outer_border".equals(theme.currentSelectedColorType), mouseX, mouseY);
+                    // 外层边框颜色色块按钮：由卡片渲染代码手动绘制，这里跳过（避免重复绘制）
+                } else if (btn == theme.resetToDefaultButton) {
+                    // 重置按钮：使用红色危险样式
+                    renderDangerButton(g, this.font, btn, mouseX, mouseY);
                 } else {
                     NeoTabConfigScreenRenderer.renderAEButton(g, this.font, btn, mouseX, mouseY);
                 }
@@ -1222,6 +1529,120 @@ public class NeoTabConfigScreen extends Screen {
                 r.render(g, mouseX, mouseY, partialTick);
             }
         }
+        
+        // 最后渲染HEX输入框，确保它们在最上层（仅在主题标签页显示）
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            // 渲染背景颜色HEX输入框
+            if (theme.customBackgroundHexInput != null && theme.customBackgroundHexInput.visible) {
+                renderHexInputBox(g, theme.customBackgroundHexInput, mouseX, mouseY);
+            }
+            
+            // 渲染外层边框颜色HEX输入框
+            if (theme.customBorderOuterHexInput != null && theme.customBorderOuterHexInput.visible) {
+                renderHexInputBox(g, theme.customBorderOuterHexInput, mouseX, mouseY);
+            }
+            
+            // 渲染边框颜色HEX输入框
+            for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) {
+                if (box.visible) {
+                    renderHexInputBox(g, box, mouseX, mouseY);
+                }
+            }
+        }
+    }
+    
+    // 统一的HEX输入框渲染方法（与边框颜色使用相同的逻辑）
+    private void renderHexInputBox(GuiGraphics g, net.minecraft.client.gui.components.EditBox box, int mouseX, int mouseY) {
+        // ── Hex 输入框：scissor 内渲染 + 文字左对齐 + 选中背景（修复版）──────────────────────
+        // 白色背景（左侧延伸 4px，视觉上形成内边距）
+        int bx = box.getX() - 5;
+        int by = box.getY() - 1;
+        int bw = box.getWidth() + 6;
+        int bh = box.getHeight() + 2;
+        g.fill(bx,     by,     bx + bw,     by + bh,     AEStyleRenderer.COLOR_PANEL_BORDER);
+        g.fill(bx + 1, by + 1, bx + bw - 1, by + bh - 1, 0xFFFFFFFF);
+        
+        // 色值文字左对齐，左边距小于右边距
+        String value = box.getValue();
+        int leftPadding = 4;  // 左边距
+        int textX = box.getX() + leftPadding;
+        int textY = box.getY() + (box.getHeight() - this.font.lineHeight) / 2;
+        
+        // 只在聚焦时处理选中和光标
+        if (box.isFocused()) {
+            String highlighted = box.getHighlighted();
+            
+            // 有选中文字时才进行复杂的选中渲染
+            if (!highlighted.isEmpty()) {
+                int cursorPos = box.getCursorPosition();
+                int highlightLen = highlighted.length();
+                
+                // 快速计算选中范围（优化：减少字符串比较）
+                int selStart = Math.max(0, Math.min(cursorPos - highlightLen, cursorPos));
+                int selEnd = Math.min(value.length(), Math.max(cursorPos, cursorPos + highlightLen));
+                
+                // 验证选中范围是否有效
+                if (selStart < selEnd && selEnd <= value.length()) {
+                    String beforeHighlight = value.substring(0, selStart);
+                    String afterHighlight = value.substring(selEnd);
+                    
+                    int highlightX = textX + this.font.width(beforeHighlight);
+                    int highlightW = this.font.width(highlighted);
+                    
+                    // 绘制选中背景
+                    g.fill(highlightX, textY - 1, highlightX + highlightW, textY + this.font.lineHeight, 0xFF3399FF);
+                    
+                    // 分段绘制文字
+                    g.drawString(this.font, beforeHighlight, textX, textY, 0xFF222222, false);
+                    g.drawString(this.font, highlighted, highlightX, textY, 0xFFFFFFFF, false);
+                    g.drawString(this.font, afterHighlight, highlightX + highlightW, textY, 0xFF222222, false);
+                } else {
+                    // 选中范围无效，回退到普通渲染
+                    g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+                }
+            } else {
+                // 没有选中，正常绘制文字
+                g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+                
+                // 绘制闪烁光标（修复位置）
+                if (((System.currentTimeMillis() >> 9) & 1) == 0) {  // 每512ms切换一次
+                    int cursorPos = Math.min(value.length(), Math.max(0, box.getCursorPosition()));
+                    int cursorX = textX + (cursorPos > 0 ? this.font.width(value.substring(0, cursorPos)) : 0);
+                    g.fill(cursorX, textY - 1, cursorX + 1, textY + this.font.lineHeight + 1, 0xFF444444);
+                }
+            }
+        } else {
+            // 未聚焦，直接绘制文字（最快路径）
+            g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+        }
+    }
+
+    // 危险按钮渲染方法（红色样式，用于重置等危险操作）
+    private void renderDangerButton(GuiGraphics g, Font font, Button btn, int mouseX, int mouseY) {
+        if (btn == null || !btn.visible) return;
+        
+        int x = btn.getX();
+        int y = btn.getY();
+        int w = btn.getWidth();
+        int h = btn.getHeight();
+        boolean hovered = btn.isMouseOver(mouseX, mouseY);
+        
+        // 红色边框和背景
+        int borderColor = hovered ? 0xFFC48888 : 0xFFD4A0A0;
+        int bgColor = hovered ? 0xFFF2DEDE : 0xFFFFFFFF;
+        int textColor = 0xFFB34242;  // 红色文字
+        
+        // 绘制边框
+        g.fill(x, y, x + w, y + h, borderColor);
+        // 绘制背景
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bgColor);
+        
+        // 绘制文字（居中）
+        Component message = btn.getMessage();
+        int textWidth = font.width(message);
+        int textX = x + (w - textWidth) / 2;
+        int textY = y + (h - font.lineHeight) / 2;
+        g.drawString(font, message, textX, textY, textColor, false);
     }
 
 
@@ -1253,7 +1674,16 @@ public class NeoTabConfigScreen extends Screen {
         int right = left + contentWidth;
         int toggleX = right - 6 - TOGGLE_WIDTH;
         int buttonWidth = Math.min(150, (contentWidth - 10) / 2);
-        int buttonY = this.height - 8 - 10 - INPUT_HEIGHT;
+        
+        // 计算面板高度（横向布局：宽度 > 高度）
+        // 先计算面板宽度
+        int tempPanelX = tabBarX - 2;
+        int tempPanelW = (right + 8 + SCROLL_TRACK_W + 4) - tempPanelX;
+        int maxPanelH = (int)(tempPanelW / 1.37);  // HTML比例 820:600 ≈ 1.37:1
+        int availablePanelH = this.height - 8 - 8;  // 上下各留8px边距
+        int panelH = Math.min(maxPanelH, availablePanelH);
+        
+        int buttonY = 8 + panelH - 10 - INPUT_HEIGHT;  // 按钮位于面板底部
         int buttonBarTop = buttonY - 6;
         int viewportTop = VIEWPORT_TOP;
         int viewportBottom = Math.max(viewportTop + 40, buttonBarTop - VIEWPORT_BOTTOM_MARGIN);
@@ -1263,6 +1693,9 @@ public class NeoTabConfigScreen extends Screen {
         int CARD_GAP = 8;  // 卡片之间的间距（恢复为HTML中的8px）
         int TITLE_LINE_HEIGHT = font.lineHeight;  // 标题行高度（约9px）
         int SUBTITLE_LINE_HEIGHT = font.lineHeight;  // 副标题行高度（约9px）
+        // 带开关的卡片内容高度：取开关高度和文字高度的最大值
+        int TOGGLE_CARD_CONTENT_H = Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT);
+        int TOGGLE_CARD_CONTENT_H_NO_SUB = Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT);
         
         int y = CONTENT_TOP_PADDING;
         int topSectionHeaderY = y; y += SECTION_HEADER_HEIGHT;
@@ -1282,24 +1715,24 @@ public class NeoTabConfigScreen extends Screen {
         // 玩家列表分区
         int listSectionHeaderY = y; y += SECTION_HEADER_HEIGHT;
         
-        // 更好的延迟卡片（无输入框）：padding + 标题 + 副标题间距 + 副标题 + padding
+        // 更好的延迟卡片（有副标题+开关）：高度取开关高度和文字高度的最大值
         int betterPingRowY = y;
-        int betterPingCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int betterPingCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = betterPingRowY + betterPingCardHeight + CARD_GAP;
         
         // 在线时长卡片
         int onlineDurationRowY = y;
-        int onlineDurationCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int onlineDurationCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = onlineDurationRowY + onlineDurationCardHeight + CARD_GAP;
         
-        // 称号功能卡片（无副标题）：padding + 标题 + padding
+        // 称号功能卡片（无副标题）：高度取开关高度和标题高度的最大值
         int titleRowY = y;
-        int titleCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + CARD_PADDING;
+        int titleCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H_NO_SUB + CARD_PADDING;
         y = titleRowY + titleCardHeight + CARD_GAP;
         
         // 玩家血量卡片
         int healthDisplayRowY = y;
-        int healthDisplayCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int healthDisplayCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = healthDisplayRowY + healthDisplayCardHeight + SECTION_GAP;
         
         // 底部信息分区
@@ -1313,17 +1746,17 @@ public class NeoTabConfigScreen extends Screen {
         
         // TPS 信息卡片
         int footerTpsRowY = y;
-        int footerTpsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int footerTpsCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = footerTpsRowY + footerTpsCardHeight + CARD_GAP;
         
         // MSPT 信息卡片
         int footerMsptRowY = y;
-        int footerMsptCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int footerMsptCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = footerMsptRowY + footerMsptCardHeight + CARD_GAP;
         
         // 在线人数卡片
         int footerOnlineRowY = y;
-        int footerOnlineCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int footerOnlineCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = footerOnlineRowY + footerOnlineCardHeight;
         
         // 底部三列开关（已废弃，改为卡片）
@@ -1360,7 +1793,7 @@ public class NeoTabConfigScreen extends Screen {
         if ("custom".equals(theme.selectedThemeId)) {
             // 重置为默认卡片（放在最上面）
             customResetRowY = themeY;
-            int resetCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+            int resetCardHeight = CARD_PADDING * 2 + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;  // 增加高度以容纳确认/取消按钮
             themeY = customResetRowY + resetCardHeight + CARD_GAP;
             
             // 动画效果卡片（独立卡片）
@@ -1371,35 +1804,36 @@ public class NeoTabConfigScreen extends Screen {
             // 动画速度按钮与动画开关在同一行，所以Y坐标相同
             customAnimSpeedRowY = customAnimationRowY;
             
-            // 颜色配置大卡片（包含所有颜色配置项和颜色选择器）
-            customBgColorRowY = themeY;
-            
-            // 计算左侧按钮列表高度
+            // 颜色配置：每个颜色项独立卡片（固定高度，不展开/折叠）
             java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
                 theme.customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
             
-            int leftColumnHeight = CARD_PADDING + 
-                TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 +  // 卡片标题+副标题
-                THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 背景颜色
-                THEME_OPTION_HEIGHT + THEME_OPTION_GAP +  // 外层边框颜色
-                TITLE_LINE_HEIGHT + 4;  // 边框颜色标题
+            int swatchSize = 24;  // 色块大小（缩小）
+            int previewH = 24;    // 预览块高度（缩小）
+            int contentGap = 8;   // 标题与内容之间的间距
+            int previewGap = 8;   // 颜色行与预览块之间的间距
             
-            leftColumnHeight += borderColors.size() * (THEME_OPTION_HEIGHT + THEME_OPTION_GAP);
-            if (borderColors.size() < 7) {
-                leftColumnHeight += THEME_OPTION_HEIGHT;  // 添加按钮（最后一个不需要GAP）
-            }
-            leftColumnHeight += CARD_PADDING;
+            // 计算卡片高度（标题 + 间距 + 色块行 + 间距 + 预览块）
+            int colorCardH = CARD_PADDING + TITLE_LINE_HEIGHT + contentGap + swatchSize + previewGap + previewH + CARD_PADDING;
             
-            // 右侧颜色选择器高度
-            int colorPickerHeight = theme.embeddedColorPicker != null ? 
-                (int)(theme.embeddedColorPicker.getHeight() * 1.2f) : 200;
+            // 背景颜色卡片
+            customBgColorRowY = themeY;
+            themeY += colorCardH + CARD_GAP;
             
-            int customConfigCardHeight = Math.max(leftColumnHeight, colorPickerHeight + CARD_PADDING * 2);
-            themeY = customBgColorRowY + customConfigCardHeight + SECTION_GAP;
+            // 外层边框颜色卡片
+            customOuterBorderRowY = themeY;
+            themeY += colorCardH + CARD_GAP;
             
-            // 保存其他行的Y坐标（相对于颜色配置卡片内部）
-            customOuterBorderRowY = customBgColorRowY;
-            customAddBorderColorRowY = customBgColorRowY;
+            // 边框颜色大卡片（一个卡片包含所有边框颜色项，添加按钮在右上角）
+            // 高度 = padding + 标题行 + 副标题 + 间距 + n×(itemH+gap) + padding
+            customAddBorderColorRowY = themeY;
+            int borderItemH = THEME_OPTION_HEIGHT + 12;  // 每个颜色行高度（含上下内边距，增加4像素）
+            int borderItemGap = 8;  // 行间距
+            int borderCardInnerH = TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;  // 标题+副标题
+            borderCardInnerH += borderColors.size() * (borderItemH + borderItemGap);
+            // 添加按钮现在在右上角，不需要为底部按钮预留空间
+            int borderBigCardH = CARD_PADDING + borderCardInnerH + CARD_PADDING;
+            themeY += borderBigCardH + SECTION_GAP;
         }
         
         // 血量显示分区
@@ -1408,7 +1842,7 @@ public class NeoTabConfigScreen extends Screen {
         
         // 显示效果卡片
         int healthModeRowY = themeY;
-        int healthModeCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int healthModeCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
         themeY = healthModeRowY + healthModeCardHeight + SECTION_GAP;
         
         // 布局分列分区
@@ -1417,17 +1851,17 @@ public class NeoTabConfigScreen extends Screen {
         
         // 启用分列卡片
         int layoutEnabledRowY = themeY;
-        int layoutEnabledCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int layoutEnabledCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
         themeY = layoutEnabledRowY + layoutEnabledCardHeight + CARD_GAP;
         
         // 展示列数卡片
         int layoutColumnsRowY = themeY;
-        int layoutColumnsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int layoutColumnsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
         themeY = layoutColumnsRowY + layoutColumnsCardHeight + CARD_GAP;
         
         // 展示行数卡片
         int layoutRowsRowY = themeY;
-        int layoutRowsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int layoutRowsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
         themeY = layoutRowsRowY + layoutRowsCardHeight + CARD_GAP;
         
         // 提示卡片
@@ -1447,7 +1881,7 @@ public class NeoTabConfigScreen extends Screen {
         permY += SECTION_HEADER_HEIGHT;
         
         // 全局策略权限卡片（2列网格布局，14个权限项）
-        int permCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+        int permCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
         int permRowCount = (14 + 1) / 2;  // 向上取整，14个权限项分2列
         permY += permRowCount * (permCardHeight + CARD_GAP) - CARD_GAP;  // 最后一行不需要GAP
         permY += SECTION_GAP;
@@ -1462,7 +1896,7 @@ public class NeoTabConfigScreen extends Screen {
         // 玩家列表显示卡片
         int playerListContentHeight;
         if (permissions.targetPlayers.isEmpty()) {
-            playerListContentHeight = 30;  // 降低空状态高度
+            playerListContentHeight = INPUT_HEIGHT;  // 与单个标签高度一致
         } else {
             // 计算标签布局的实际高度（与applyLayout保持一致）
             int tagHeight = INPUT_HEIGHT;
@@ -1505,9 +1939,10 @@ public class NeoTabConfigScreen extends Screen {
         int permissionsContentHeight = permY;
 
         int contentHeight;
-        if (activeTab == ConfigTab.PAGE_CONFIG) contentHeight = footerRowY;  // 直接使用最后一个卡片的底部位置
-        else if (activeTab == ConfigTab.PERMISSIONS) contentHeight = permissionsContentHeight;
-        else contentHeight = themeY;  // 主题Tab使用themeY作为内容高度
+        int CONTENT_BOTTOM_PADDING = 16;  // 内容区域底部留白，避免最后一个卡片紧贴按钮栏
+        if (activeTab == ConfigTab.PAGE_CONFIG) contentHeight = footerRowY + CONTENT_BOTTOM_PADDING;
+        else if (activeTab == ConfigTab.PERMISSIONS) contentHeight = permissionsContentHeight + CONTENT_BOTTOM_PADDING;
+        else contentHeight = themeY + CONTENT_BOTTOM_PADDING;  // 主题Tab使用themeY作为内容高度
         int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
 
         int panelX = tabBarX - 2;
@@ -1526,7 +1961,7 @@ public class NeoTabConfigScreen extends Screen {
             footerSecondColumnX + footerColumnWidth - TOGGLE_WIDTH,
             footerThirdColumnX  + footerColumnWidth - TOGGLE_WIDTH,
             footerColumnWidth, contentHeight, maxScroll, buttonWidth, buttonY,
-            panelCenterX - buttonWidth - 5, panelCenterX + 5, tabBarX,
+            panelCenterX + 5, panelCenterX - buttonWidth - 5, tabBarX,
             themeSectionHeaderY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
             customAnimationRowY, customAnimSpeedRowY, customBgColorRowY, 
             customOuterBorderRowY, customResetRowY, customAddBorderColorRowY,
@@ -1703,6 +2138,32 @@ public class NeoTabConfigScreen extends Screen {
             PacketDistributor.sendToServer(new SaveConfigPayload(config));
         }
         onClose();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 优先处理HEX输入框的键盘事件
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isFocused()) {
+                    return hexBox.keyPressed(keyCode, scanCode, modifiers);
+                }
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        // 优先处理HEX输入框的字符输入
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isFocused()) {
+                    return hexBox.charTyped(codePoint, modifiers);
+                }
+            }
+        }
+        return super.charTyped(codePoint, modifiers);
     }
 }
 

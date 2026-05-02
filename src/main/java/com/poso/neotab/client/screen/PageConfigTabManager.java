@@ -20,7 +20,8 @@ public class PageConfigTabManager {
     private static final int INPUT_HEIGHT           = 20;
     private static final int TITLE_INPUT_HEIGHT     = 60;
     private static final int MULTILINE_INPUT_HEIGHT = 60;
-    private static final int TOGGLE_WIDTH           = 56;
+    private static final int TOGGLE_WIDTH           = 26;  // 适合Minecraft GUI比例的开关宽度
+    private static final int TOGGLE_HEIGHT          = 14;  // 适合Minecraft GUI比例的开关高度
     private static final int LAYOUT_BUTTON_WIDTH    = 80;
 
     private final NeoTabConfigScreen screen;
@@ -106,7 +107,7 @@ public class PageConfigTabManager {
         this.layoutEnabledToggle = screen.addWidget(
             CycleButton.onOffBuilder(layoutCfg.isEnabled())
                 .displayOnlyValue()
-                .create(layout.toggleX(), 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                .create(layout.toggleX(), 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, CommonComponents.EMPTY,
                     (button, enabled) -> {
                         com.poso.neotab.config.TabLayoutConfig lc = com.poso.neotab.config.TabLayoutConfig.get();
                         lc.setEnabled(enabled);
@@ -116,7 +117,7 @@ public class PageConfigTabManager {
                     }));
 
         this.layoutColumnsButton = screen.addWidget(Button.builder(
-                Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()),
+                Component.literal(String.valueOf(layoutCfg.getColumns())),
                 button -> {
                     com.poso.neotab.config.TabLayoutConfig lc = com.poso.neotab.config.TabLayoutConfig.get();
                     int current = lc.getColumns();
@@ -124,14 +125,14 @@ public class PageConfigTabManager {
                     int next = current >= maxColumns ? 1 : current + 1;
                     lc.setColumns(next);
                     com.poso.neotab.config.TabLayoutConfig.save(lc);
-                    button.setMessage(Component.translatable("screen.neotab.layout.columns", next));
+                    button.setMessage(Component.literal(String.valueOf(next)));
                 })
-            .bounds(layout.left(), 0, TOGGLE_WIDTH, INPUT_HEIGHT)
+            .bounds(layout.left(), 0, 60, INPUT_HEIGHT)
             .build());
         this.layoutColumnsButton.active = layoutCfg.isEnabled();
 
         this.layoutRowsButton = screen.addWidget(Button.builder(
-                Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()),
+                Component.literal(String.valueOf(layoutCfg.getRowsPerColumn())),
                 button -> {
                     com.poso.neotab.config.TabLayoutConfig lc = com.poso.neotab.config.TabLayoutConfig.get();
                     int current = lc.getRowsPerColumn();
@@ -152,9 +153,9 @@ public class PageConfigTabManager {
                     }
                     lc.setRowsPerColumn(next);
                     com.poso.neotab.config.TabLayoutConfig.save(lc);
-                    button.setMessage(Component.translatable("screen.neotab.layout.rows", next));
+                    button.setMessage(Component.literal(String.valueOf(next)));
                 })
-            .bounds(layout.left(), 0, TOGGLE_WIDTH, INPUT_HEIGHT)
+            .bounds(layout.left(), 0, 60, INPUT_HEIGHT)
             .build());
         this.layoutRowsButton.active = layoutCfg.isEnabled();
     }
@@ -221,44 +222,65 @@ public class PageConfigTabManager {
         if (needsAdjust) {
             com.poso.neotab.config.TabLayoutConfig.save(layoutCfg);
             if (layoutColumnsButton != null) {
-                layoutColumnsButton.setMessage(Component.translatable("screen.neotab.layout.columns", layoutCfg.getColumns()));
+                layoutColumnsButton.setMessage(Component.literal(String.valueOf(layoutCfg.getColumns())));
             }
             if (layoutRowsButton != null) {
-                layoutRowsButton.setMessage(Component.translatable("screen.neotab.layout.rows", layoutCfg.getRowsPerColumn()));
+                layoutRowsButton.setMessage(Component.literal(String.valueOf(layoutCfg.getRowsPerColumn())));
             }
         }
     }
     /** Apply layout positions to all page config and footer widgets. */
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) {
         int CARD_PADDING = 10;  // 卡片内边距
+        int titleH = screen.font().lineHeight;  // 约9px
+        int subtitleH = screen.font().lineHeight;  // 约9px
         
-        // 标题信息卡片：开关在标题行右侧，输入框在副标题下方
+        // 计算各类卡片高度（与buildLayoutImpl保持一致）
+        int cardH_withSub    = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleH + 2 + subtitleH) + CARD_PADDING;
+        int cardH_noSub      = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleH) + CARD_PADDING;
+        
+        // 辅助方法：计算开关在卡片中垂直居中的Y坐标
+        // toggleCenterY = cardTop + (cardHeight - TOGGLE_HEIGHT) / 2
+        
+        // 标题信息卡片（有输入框）：开关放在顶部，不居中
         p(topTitleEnabled,       layout.toggleX(),            layout.toScreenY(layout.topTitleRowY() + CARD_PADDING));
         p(topTitleInput,         layout.left() + CARD_PADDING, layout.toScreenY(layout.topTitleInputY()));
         
-        // 内容信息卡片
+        // 内容信息卡片（有输入框）：开关放在顶部，不居中
         p(topContentEnabled,     layout.toggleX(),            layout.toScreenY(layout.topContentRowY() + CARD_PADDING));
         p(topContentInput,       layout.left() + CARD_PADDING, layout.toScreenY(layout.topContentInputY()));
         
-        // 玩家列表卡片（只有开关，无输入框）
-        p(betterPingEnabled,     layout.toggleX(),            layout.toScreenY(layout.betterPingRowY() + CARD_PADDING));
-        p(onlineDurationEnabled, layout.toggleX(),            layout.toScreenY(layout.onlineDurationRowY() + CARD_PADDING));
-        p(titleEnabled,          layout.toggleX(),            layout.toScreenY(layout.titleRowY() + CARD_PADDING));
-        p(healthDisplayEnabled,  layout.toggleX(),            layout.toScreenY(layout.healthDisplayRowY() + CARD_PADDING));
+        // 玩家列表卡片（只有开关）：开关垂直居中于卡片
+        p(betterPingEnabled,     layout.toggleX(), layout.toScreenY(layout.betterPingRowY()     + (cardH_withSub - TOGGLE_HEIGHT) / 2));
+        p(onlineDurationEnabled, layout.toggleX(), layout.toScreenY(layout.onlineDurationRowY() + (cardH_withSub - TOGGLE_HEIGHT) / 2));
+        p(titleEnabled,          layout.toggleX(), layout.toScreenY(layout.titleRowY()          + (cardH_noSub   - TOGGLE_HEIGHT) / 2));
+        p(healthDisplayEnabled,  layout.toggleX(), layout.toScreenY(layout.healthDisplayRowY()  + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         
-        // 底部自定义信息卡片
+        // 底部自定义信息卡片（有输入框）：不居中
         p(footerCustomInput,     layout.left() + CARD_PADDING, layout.toScreenY(layout.footerCustomInputY()));
         
-        // 主题页面的控件（卡片内定位）
-        p(healthDisplayMode,     layout.toggleX(),            layout.toScreenY(layout.healthModeRowY() + CARD_PADDING));
-        if (layoutEnabledToggle != null) p(layoutEnabledToggle, layout.toggleX(), layout.toScreenY(layout.layoutEnabledRowY() + CARD_PADDING));
-        if (layoutColumnsButton != null) p(layoutColumnsButton, layout.toggleX(), layout.toScreenY(layout.layoutColumnsRowY() + CARD_PADDING));
-        if (layoutRowsButton    != null) p(layoutRowsButton,    layout.toggleX(), layout.toScreenY(layout.layoutRowsRowY() + CARD_PADDING));
+        // 底部TPS/MSPT/在线人数卡片（只有开关）：垂直居中
+        p(footerTpsEnabled,      layout.toggleX(), layout.toScreenY(layout.footerTpsRowY()    + (cardH_withSub - TOGGLE_HEIGHT) / 2));
+        p(footerMsptEnabled,     layout.toggleX(), layout.toScreenY(layout.footerMsptRowY()   + (cardH_withSub - TOGGLE_HEIGHT) / 2));
+        p(footerOnlineEnabled,   layout.toggleX(), layout.toScreenY(layout.footerOnlineRowY() + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         
-        // 底部三个卡片中的开关（位置在卡片内的右上角）
-        p(footerTpsEnabled,      layout.toggleX(),            layout.toScreenY(layout.footerTpsRowY() + CARD_PADDING));
-        p(footerMsptEnabled,     layout.toggleX(),            layout.toScreenY(layout.footerMsptRowY() + CARD_PADDING));
-        p(footerOnlineEnabled,   layout.toggleX(),            layout.toScreenY(layout.footerOnlineRowY() + CARD_PADDING));
+        // 主题页面的控件（只有开关/按钮）：垂直居中
+        // healthDisplayMode 是宽按钮（60px），使用INPUT_HEIGHT，垂直居中
+        // 需要向左偏移以对齐右边缘（60px宽 vs 26px宽的toggleX）
+        int healthModeButtonW = 60;
+        int cardH_withSub_inputH = CARD_PADDING + Math.max(INPUT_HEIGHT, titleH + 2 + subtitleH) + CARD_PADDING;
+        int healthModeX = layout.right() - 6 - healthModeButtonW;
+        p(healthDisplayMode, healthModeX, layout.toScreenY(layout.healthModeRowY() + (cardH_withSub_inputH - INPUT_HEIGHT) / 2));
+        healthDisplayMode.setWidth(healthModeButtonW);
+        if (layoutEnabledToggle != null) p(layoutEnabledToggle, layout.toggleX(), layout.toScreenY(layout.layoutEnabledRowY()  + (cardH_withSub - TOGGLE_HEIGHT) / 2));
+        if (layoutColumnsButton != null) {
+            layoutColumnsButton.setWidth(60);
+            p(layoutColumnsButton, layout.right() - 6 - 60, layout.toScreenY(layout.layoutColumnsRowY() + (cardH_withSub_inputH - INPUT_HEIGHT) / 2));
+        }
+        if (layoutRowsButton    != null) {
+            layoutRowsButton.setWidth(60);
+            p(layoutRowsButton,    layout.right() - 6 - 60, layout.toScreenY(layout.layoutRowsRowY()    + (cardH_withSub_inputH - INPUT_HEIGHT) / 2));
+        }
     }
 
     private void p(net.minecraft.client.gui.components.AbstractWidget w, int x, int y) { w.setX(x); w.setY(y); }

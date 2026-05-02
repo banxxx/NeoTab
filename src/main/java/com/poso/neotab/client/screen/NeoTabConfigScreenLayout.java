@@ -50,14 +50,14 @@ public final class NeoTabConfigScreenLayout {
 
         public int scissorRight() { return this.right + 10; }
         
-        /** 获取边框颜色行的Y坐标（动态计算） */
+        /** 获取边框颜色行的Y坐标（动态计算，基于折叠高度的近似值）
+         *  注意：渲染代码应直接计算展开状态下的Y坐标，此方法仅供参考。 */
         public int customBorderColorRowY(int index) {
             int CARD_PADDING = 10;
-            int TITLE_LINE_HEIGHT = 9;
-            int SUBTITLE_LINE_HEIGHT = 9;
+            int THEME_OPTION_HEIGHT = 20;
             int CARD_GAP = 8;
-            int cardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
-            return customOuterBorderRowY + cardHeight + CARD_GAP + index * (cardHeight + CARD_GAP);
+            int collapsedCardH = CARD_PADDING + THEME_OPTION_HEIGHT + CARD_PADDING;
+            return customOuterBorderRowY + collapsedCardH + CARD_GAP + index * (collapsedCardH + CARD_GAP);
         }
     }
 

@@ -24,7 +24,8 @@ public class PermissionsTabManager {
 
     private static final int ROW_HEIGHT   = 24;
     private static final int INPUT_HEIGHT = 20;
-    private static final int TOGGLE_WIDTH = 56;
+    private static final int TOGGLE_WIDTH = 26;   // 适合Minecraft GUI比例的开关宽度
+    private static final int TOGGLE_HEIGHT = 14;  // 适合Minecraft GUI比例的开关高度
     private static final int ROW_GAP      = 10;
 
     private final NeoTabConfigScreen screen;
@@ -64,11 +65,13 @@ public class PermissionsTabManager {
 
         // Player search box（新设计中始终可用，不需要模式切换）
         this.playerSearchBox = screen.addWidget(
-            new EditBox(screen.font(), layout.left(), 0,
+            new com.poso.neotab.client.widget.CenteredEditBox(screen.font(), layout.left(), 0,
                 layout.contentWidth(), INPUT_HEIGHT,
                 Component.translatable("screen.neotab.input.player_search_hint")));
         this.playerSearchBox.setMaxLength(40);
         this.playerSearchBox.setHint(Component.translatable("screen.neotab.input.player_search_hint"));
+        this.playerSearchBox.setBordered(false);  // 禁用默认边框，我们自己绘制
+        this.playerSearchBox.setTextColor(0xFF000000);  // 黑色文字
         this.playerSearchBox.active = true;  // 始终可用
         this.playerSearchBox.setEditable(true);  // 始终可编辑
         this.playerSearchBox.visible = false;
@@ -131,7 +134,7 @@ public class PermissionsTabManager {
             CycleButton<Boolean> toggle = screen.addWidget(
                 CycleButton.onOffBuilder(val)
                     .displayOnlyValue()
-                    .create(layout.toggleX(), 0, TOGGLE_WIDTH, INPUT_HEIGHT, CommonComponents.EMPTY,
+                    .create(layout.toggleX(), 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, CommonComponents.EMPTY,
                         (btn, v) -> { /* value read on save */ }));
             toggle.visible = false;
             toggle.active = true;  // 确保可点击
@@ -374,7 +377,7 @@ public class PermissionsTabManager {
         
         // 全局策略权限卡片（2列网格布局）
         int cardWidth = (layout.contentWidth() - CARD_GAP) / 2;
-        int cardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING;
+        int cardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
         
         for (int i = 0; i < Math.min(14, globalPolicyToggles.size()); i++) {  // 只有14个权限项
             int col = i % 2;
@@ -383,10 +386,10 @@ public class PermissionsTabManager {
             int cardX = layout.left() + col * (cardWidth + CARD_GAP);
             int cardY = layout.toScreenY(y + row * (cardHeight + CARD_GAP));
             
-            // 定位开关按钮到卡片右上角
+            // 定位开关按钮：垂直居中于卡片
             CycleButton<Boolean> toggle = globalPolicyToggles.get(i);
             toggle.setX(cardX + cardWidth - CARD_PADDING - toggleWidth);
-            toggle.setY(cardY + CARD_PADDING);
+            toggle.setY(cardY + (cardHeight - TOGGLE_HEIGHT) / 2);
             toggle.setWidth(toggleWidth);
         }
         
@@ -429,7 +432,7 @@ public class PermissionsTabManager {
         int playerListContentHeight;
         
         if (targetPlayers.isEmpty()) {
-            playerListContentHeight = 30;  // 降低空状态高度
+            playerListContentHeight = inputHeight;  // 与单个标签高度一致（INPUT_HEIGHT）
         } else {
             // 计算标签布局的实际高度
             for (java.util.Map.Entry<java.util.UUID, String> entry : targetPlayers.entrySet()) {
@@ -500,13 +503,13 @@ public class PermissionsTabManager {
         
         // 应用权限设置卡片
         int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + inputHeight + CARD_PADDING;
-        int applySettingsCardY = layout.toScreenY(y);
+        int applyButtonY = layout.toScreenY(y) + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8;
         
         // 应用到全部玩家按钮（左侧）
         if (applyToAllButton != null) {
             int buttonWidth = (layout.contentWidth() - CARD_PADDING * 2 - 8) / 2;  // 两个按钮平分宽度
             applyToAllButton.setX(layout.left() + CARD_PADDING);
-            applyToAllButton.setY(applySettingsCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8);
+            applyToAllButton.setY(applyButtonY);
             applyToAllButton.setWidth(buttonWidth);
             applyToAllButton.visible = true;
         }
@@ -515,7 +518,7 @@ public class PermissionsTabManager {
         if (applyToAddedButton != null) {
             int buttonWidth = (layout.contentWidth() - CARD_PADDING * 2 - 8) / 2;
             applyToAddedButton.setX(layout.left() + CARD_PADDING + buttonWidth + 8);
-            applyToAddedButton.setY(applySettingsCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8);
+            applyToAddedButton.setY(applyButtonY);
             applyToAddedButton.setWidth(buttonWidth);
             applyToAddedButton.visible = true;
         }

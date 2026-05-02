@@ -23,88 +23,89 @@ import net.minecraft.client.gui.GuiGraphics;
 public final class AEStyleRenderer {
 
     // ── 颜色常量 ──────────────────────────────────────────────────────────────
+    // 基于 HTML 原型的温暖米色/棕色主题
 
-    /** 主面板背景色（莫奈浅蓝灰） */
-    public static final int COLOR_PANEL_BG        = 0xFFE8EDF4;
+    /** 主面板背景色（米白色） */
+    public static final int COLOR_PANEL_BG        = 0xFFFAF7EF;  // --bg-panel
     /** 主面板外层深色轮廓 */
-    public static final int COLOR_PANEL_OUTLINE   = 0xFF2C3E50;
-    /** 主面板中间灰蓝色边框 */
-    public static final int COLOR_PANEL_BORDER    = 0xFF7A8A9E;
-    /** 内容区（大凹陷区域）背景色 */
-    public static final int COLOR_CONTENT_BG      = 0xFFC8D5E5;
+    public static final int COLOR_PANEL_OUTLINE   = 0xFFB7AF9B;  // --border-dark
+    /** 主面板中间边框 */
+    public static final int COLOR_PANEL_BORDER    = 0xFFC8C0AD;  // --border-medium
+    /** 卡片浅色边框 */
+    public static final int COLOR_BORDER_LIGHT    = 0xFFE3DDCD;  // --border-light
+    /** 内容区背景色 */
+    public static final int COLOR_CONTENT_BG      = 0xFFFAF7EF;  // --bg-content
     /** 按钮/Tab非激活背景色 */
-    public static final int COLOR_BUTTON_BG       = 0xFFB8C5D6;
+    public static final int COLOR_BUTTON_BG       = 0xFFF3EFE4;  // --bg-card
     /** 按钮悬浮背景色 */
-    public static final int COLOR_BUTTON_HOVER    = 0xFFC8D5E5;
+    public static final int COLOR_BUTTON_HOVER    = 0xFFFAF7EF;  // --bg-card-hover
     /** 按钮凸起高光（顶/左） */
-    public static final int COLOR_BUTTON_HL       = 0xFFE8EDF4;
+    public static final int COLOR_BUTTON_HL       = 0xFFFFFFFF;  // 白色高光
     /** 按钮凸起阴影（底/右） */
-    public static final int COLOR_BUTTON_SH       = 0xFF7A8A9E;
+    public static final int COLOR_BUTTON_SH       = 0xFFC8C0AD;  // --border-medium
     /** Tab 栏背景色 */
-    public static final int COLOR_TAB_BAR_BG      = 0xFFD4DFEC;
-    /** Tab 非激活背景色（与Tab栏同色） */
-    public static final int COLOR_TAB_INACTIVE_BG = 0xFFD4DFEC;
+    public static final int COLOR_TAB_BAR_BG      = 0xFFF0ECDE;  // --bg-sidebar
+    /** Tab 非激活背景色 */
+    public static final int COLOR_TAB_INACTIVE_BG = 0xFFF0ECDE;  // --bg-sidebar
     /** Tab 悬浮背景色 */
-    public static final int COLOR_TAB_HOVER_BG    = 0xFFE8EDF4;
+    public static final int COLOR_TAB_HOVER_BG    = 0xFFE3DDCD;  // --border-light
     /** Tab 激活背景色 */
-    public static final int COLOR_TAB_ACTIVE_BG   = 0xFFC8D5E5;
-    /** Tab 激活左侧蓝色竖条 */
-    public static final int COLOR_TAB_ACTIVE_BAR  = 0xFF6B9BD1;
+    public static final int COLOR_TAB_ACTIVE_BG   = 0xFFFAF7EF;  // --bg-panel
+    /** Tab 激活左侧绿色竖条 */
+    public static final int COLOR_TAB_ACTIVE_BAR  = 0xFF8CAE5C;  // --accent-light
 
     /** 凸起：顶/左高光 */
-    public static final int COLOR_RAISED_HL       = 0xFFC8CCD4;
+    public static final int COLOR_RAISED_HL       = 0xFFFFFFFF;  // 白色
     /** 凸起：底/右阴影 */
-    public static final int COLOR_RAISED_SH       = 0xFF4A4E58;
+    public static final int COLOR_RAISED_SH       = 0xFFC8C0AD;  // --border-medium
     /** 凹陷：顶/左阴影 */
-    public static final int COLOR_SUNKEN_SH       = 0xFF4A4E58;
+    public static final int COLOR_SUNKEN_SH       = 0xFFC8C0AD;  // --border-medium
     /** 凹陷：底/右高光 */
-    public static final int COLOR_SUNKEN_HL       = 0xFFC8CCD4;
+    public static final int COLOR_SUNKEN_HL       = 0xFFFFFFFF;  // 白色
     /** 外层深色轮廓 */
-    public static final int COLOR_OUTLINE         = 0xFF3A3A3A;
+    public static final int COLOR_OUTLINE         = 0xFFB7AF9B;  // --border-dark
 
-    /** 主面板上的标题文字色（面板背景浅灰，用深色） */
-    public static final int COLOR_TITLE_TEXT      = 0xFF2A2A2A;
-    /** 分区标题文字色（内容区背景深灰蓝，用白色对比清晰） */
-    public static final int COLOR_SECTION_TEXT    = 0xFFF0F4F8;
-    /** 模块标题文字色（卡片背景，用深色） */
-    public static final int COLOR_MODULE_TITLE    = 0xFF2C3E50;
-    /** 模块副标题文字色（卡片背景，用灰色） */
-    public static final int COLOR_MODULE_SUBTITLE = 0xFF5A6C7E;
-    /** 普通标签文字色（内容区背景深灰蓝，用白色） */
-    public static final int COLOR_LABEL           = 0xFFE8ECF0;
-    /** 悬浮标签文字色（MC §e 黄色） */
-    public static final int COLOR_LABEL_HOVER     = 0xFFFFFF55;
-    /** 按钮文字色（浅色） */
-    public static final int COLOR_BUTTON_TEXT     = 0xFFE8ECF0;
+    /** 主面板上的标题文字色 */
+    public static final int COLOR_TITLE_TEXT      = 0xFF3B3629;  // --text-primary
+    /** 分区标题文字色 */
+    public static final int COLOR_SECTION_TEXT    = 0xFF3B3629;  // --text-primary
+    /** 模块标题文字色 */
+    public static final int COLOR_MODULE_TITLE    = 0xFF4A4233;  // 深棕色
+    /** 模块副标题文字色 */
+    public static final int COLOR_MODULE_SUBTITLE = 0xFF6B6454;  // 中棕色
+    /** 普通标签文字色 */
+    public static final int COLOR_LABEL           = 0xFF3B3629;  // --text-primary
+    /** 悬浮标签文字色 */
+    public static final int COLOR_LABEL_HOVER     = 0xFF6B8C42;  // --accent
+    /** 按钮文字色 */
+    public static final int COLOR_BUTTON_TEXT     = 0xFF3B3629;  // --text-primary
     /** 按钮悬浮文字色 */
-    public static final int COLOR_BUTTON_TEXT_HOVER = 0xFFFFFF55;
+    public static final int COLOR_BUTTON_TEXT_HOVER = 0xFF6B8C42;  // --accent
 
-    /** ON 状态颜色（MC §a 绿） */
-    public static final int COLOR_ON              = 0xFF55FF55;
-    /** OFF 状态颜色（MC §c 红） */
-    public static final int COLOR_OFF             = 0xFFFF5555;
+    /** ON 状态颜色（绿色） */
+    public static final int COLOR_ON              = 0xFF8CAE5C;  // --accent-light
+    /** OFF 状态颜色（灰色） */
+    public static final int COLOR_OFF             = 0xFFC2BBAA;  // --toggle-off-bg
 
     /** 分区分隔线颜色 */
-    public static final int COLOR_SECTION_LINE    = 0xFF6A6E78;
+    public static final int COLOR_SECTION_LINE    = 0xFFC8C0AD;  // --border-medium
     /** 分区分隔线高光（线下方 1px） */
-    public static final int COLOR_SECTION_LINE_HL = 0x60FFFFFF;
+    public static final int COLOR_SECTION_LINE_HL = 0x60FFFFFF;  // 半透明白色
 
-    /** 底部按钮栏背景色（与面板背景同色） */
-    public static final int COLOR_BUTTON_BAR_BG   = 0xFFE8EDF4;
-    /** 底部按钮栏顶部分隔线（2px 灰蓝色） */
-    public static final int COLOR_BUTTON_BAR_LINE = 0xFF9AABC0;
+    /** 底部按钮栏背景色 */
+    public static final int COLOR_BUTTON_BAR_BG   = 0xFFF0ECDE;  // --bg-sidebar
+    /** 底部按钮栏顶部分隔线 */
+    public static final int COLOR_BUTTON_BAR_LINE = 0xFFD0C9B5;  // 深米色
 
-    /** 滚动条轨道背景（改为 #9AA0AC） */
-    public static final int COLOR_SCROLL_TRACK    = 0xFF9AA0AC;
-    /** 滚动条轨道边框（白色） */
-    public static final int COLOR_SCROLL_BORDER   = 0xFFFFFFFF;
-    /** 滚动条滑块内部（原次层色，互换后） */
-    public static final int COLOR_SCROLL_THUMB    = 0xFF4A4E58;
-    /** 滚动条滑块次层边框（原内部色，互换后） */
-    public static final int COLOR_SCROLL_THUMB_SH = 0xFF6A7080;
+    /** 滚动条轨道背景 */
+    public static final int COLOR_SCROLL_TRACK    = 0xFFF3EFE4;  // --scrollbar-track
+    /** 滚动条滑块颜色 */
+    public static final int COLOR_SCROLL_THUMB    = 0xFFC8C0AD;  // --scrollbar-thumb
+    /** 滚动条轨道边框 */
+    public static final int COLOR_SCROLL_BORDER   = 0xFFC8C0AD;  // --border-medium
 
     /** Tab 栏竖向分隔线 */
-    public static final int COLOR_TAB_DIVIDER     = 0xFF6A6E78;
+    public static final int COLOR_TAB_DIVIDER     = 0xFFC8C0AD;  // --border-medium
 
     private AEStyleRenderer() {}
 
@@ -225,10 +226,64 @@ public final class AEStyleRenderer {
 
     /**
      * 绘制标题栏底部分隔线。
-     * 1px 灰蓝色分隔线 {@code #9AABC0}。
+     * 1px 边框色分隔线。
      */
     public static void drawTitleBarDivider(GuiGraphics g, int x, int y, int w) {
         g.fill(x, y, x + w, y + 1, COLOR_PANEL_BORDER);
+    }
+
+    /**
+     * 绘制标题栏渐变背景（HTML原型风格）。
+     * 渐变：#e8e1ce → #d9d1b8 → #cfc5aa
+     */
+    public static void drawTitleBarGradient(GuiGraphics g, int x, int y, int w, int h) {
+        // 简化的三色渐变：顶部、中部、底部
+        int topColor    = 0xFFE8E1CE;  // 浅米色
+        int midColor    = 0xFFD9D1B8;  // 中米色
+        int bottomColor = 0xFFCFC5AA;  // 深米色
+        
+        // 分三段绘制渐变
+        int midY = y + h * 40 / 100;  // 40% 位置
+        
+        // 顶部到中部的渐变
+        for (int i = 0; i < midY - y; i++) {
+            float ratio = (float) i / (midY - y);
+            int color = blendColors(topColor, midColor, ratio);
+            g.fill(x, y + i, x + w, y + i + 1, color);
+        }
+        
+        // 中部到底部的渐变
+        for (int i = 0; i < y + h - midY; i++) {
+            float ratio = (float) i / (y + h - midY);
+            int color = blendColors(midColor, bottomColor, ratio);
+            g.fill(x, midY + i, x + w, midY + i + 1, color);
+        }
+    }
+    
+    /**
+     * 混合两个颜色。
+     * @param color1 起始颜色（ARGB）
+     * @param color2 结束颜色（ARGB）
+     * @param ratio 混合比例（0.0 = color1, 1.0 = color2）
+     * @return 混合后的颜色（ARGB）
+     */
+    private static int blendColors(int color1, int color2, float ratio) {
+        int a1 = (color1 >> 24) & 0xFF;
+        int r1 = (color1 >> 16) & 0xFF;
+        int g1 = (color1 >> 8) & 0xFF;
+        int b1 = color1 & 0xFF;
+        
+        int a2 = (color2 >> 24) & 0xFF;
+        int r2 = (color2 >> 16) & 0xFF;
+        int g2 = (color2 >> 8) & 0xFF;
+        int b2 = color2 & 0xFF;
+        
+        int a = (int) (a1 + (a2 - a1) * ratio);
+        int r = (int) (r1 + (r2 - r1) * ratio);
+        int g = (int) (g1 + (g2 - g1) * ratio);
+        int b = (int) (b1 + (b2 - b1) * ratio);
+        
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     /**
@@ -244,108 +299,182 @@ public final class AEStyleRenderer {
     }
 
     /**
-     * 绘制Tab按钮（平面风格，无边框）。
+     * 绘制Tab按钮（HTML原型样式）。
      * <ul>
-     *   <li>非激活：背景 {@code #D4DFEC}，文字 {@code #7A8A9E}</li>
-     *   <li>悬浮：背景 {@code #E8EDF4}，文字 {@code #2C3E50}</li>
-     *   <li>激活：背景 {@code #C8D5E5}，文字 {@code #2C3E50} 加粗，左侧 3px 蓝色竖条 {@code #6B9BD1}</li>
+     *   <li>非激活：透明背景，左侧4px透明边框占位</li>
+     *   <li>悬浮：背景 {@code #E3DDCD}，左侧4px {@code #C8C0AD} 边框</li>
+     *   <li>激活：水平渐变背景（绿色10%透明度→透明），左侧4px {@code #8CAE5C} 绿色边框，右侧6x6绿色小方块</li>
      * </ul>
      *
      * @param active  是否激活
      * @param hovered 是否悬浮
      */
     public static void drawTabButton(GuiGraphics g, int x, int y, int w, int h, boolean active, boolean hovered) {
-        // 背景填充（平面，无边框）
-        int bg;
         if (active) {
-            bg = COLOR_TAB_ACTIVE_BG;
+            // 激活状态：水平渐变背景（从左侧绿色10%透明度渐变到右侧透明）
+            // rgba(107,140,66,0.1) = 0x1A6B8C42，渐变到透明
+            // 用逐列渐变模拟 linear-gradient(90deg, rgba(107,140,66,0.1) 0%, transparent 70%)
+            int gradientWidth = w * 70 / 100;  // 渐变区域占70%宽度
+            for (int i = 0; i < gradientWidth; i++) {
+                float ratio = (float) i / gradientWidth;
+                // 从 alpha=0x1A(10%) 渐变到 alpha=0x00(0%)，颜色固定为 #6B8C42
+                int alpha = (int) (0x1A * (1.0f - ratio));
+                int col = (alpha << 24) | 0x006B8C42;
+                g.fill(x + 4 + i, y, x + 4 + i + 1, y + h, col);
+            }
+            // 左侧4px绿色竖条
+            g.fill(x, y, x + 4, y + h, COLOR_TAB_ACTIVE_BAR);
+            // 右侧6x6绿色小方块（居中）
+            int dotSize = 6;
+            int dotX = x + w - dotSize - 8;
+            int dotY = y + (h - dotSize) / 2;
+            g.fill(dotX, dotY, dotX + dotSize, dotY + dotSize, COLOR_TAB_ACTIVE_BAR);
         } else if (hovered) {
-            bg = COLOR_TAB_HOVER_BG;
+            // 悬浮状态：米色背景 + 左侧4px边框色竖条
+            g.fill(x, y, x + w, y + h, COLOR_TAB_HOVER_BG);
+            g.fill(x, y, x + 4, y + h, COLOR_PANEL_BORDER);
         } else {
-            bg = COLOR_TAB_INACTIVE_BG;
-        }
-        g.fill(x, y, x + w, y + h, bg);
-
-        // 激活Tab：左侧3px蓝色竖条
-        if (active) {
-            g.fill(x, y, x + 3, y + h, COLOR_TAB_ACTIVE_BAR);
+            // 非激活：使用Tab栏背景色（透明效果）
+            g.fill(x, y, x + w, y + h, COLOR_TAB_INACTIVE_BG);
         }
     }
 
     /**
-     * 绘制 AE2 风格的输入框背景（凹陷，背景色 #7A8090）。
+     * 绘制输入框背景（白色背景，带边框）。
      * 在原版输入框控件渲染之前调用，覆盖其黑色背景。
      */
     public static void drawInputBackground(GuiGraphics g, int x, int y, int w, int h) {
-        // 凹陷边框
-        drawSunkenBorder(g, x - 1, y - 1, w + 2, h + 2, 1);
-        // 内部填充（比内容区略暗的蓝灰）
-        g.fill(x, y, x + w, y + h, 0xFF7A8090);
+        // 外层边框（中等边框色）
+        drawOutline(g, x - 1, y - 1, w + 2, h + 2, COLOR_PANEL_BORDER, 1);
+        // 内部填充（白色）
+        g.fill(x, y, x + w, y + h, 0xFFFFFFFF);  // --bg-input: #FFFFFF
     }
 
     /**
-     * 绘制 AE2 风格的输入框背景（不带外层边框，直接填充）。
+     * 绘制输入框背景（不带外层边框，直接填充白色）。
      */
     public static void drawInputFill(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, 0xFF7A8090);
+        g.fill(x, y, x + w, y + h, 0xFFFFFFFF);  // 白色
     }
 
     /**
-     * 绘制滑块式开关按钮（HTML原型样式）。
-     * ON状态：绿色滑块在右侧，OFF状态：灰色滑块在左侧。
+     * 绘制滑块式开关按钮（HTML原型样式，适配Minecraft GUI比例）。
+     * 尺寸：32x14px，滑块：10x10px白色方块，距边缘2px。
+     * OFF状态：背景 #C2BBAA，边框 #B7AF9B，滑块在左侧。
+     * ON状态：背景 #8CAE5C，边框 #6B8C42，滑块在右侧。
      */
     public static void drawSliderToggle(GuiGraphics g, int x, int y, int w, int h, boolean isOn, boolean hovered) {
-        // 背景凹陷区域
-        g.fill(x, y, x + w, y + h, 0xFFA8B5C6);  // 凹陷背景色
-        // 凹陷边框（顶/左深色）
-        g.fill(x, y, x + w, y + 1, 0xFF7A8A9E);  // 顶
-        g.fill(x, y, x + 1, y + h, 0xFF7A8A9E);  // 左
-        // 凹陷边框（底/右浅色）
-        g.fill(x, y + h - 1, x + w, y + h, 0xFFE8EDF4);  // 底
-        g.fill(x + w - 1, y, x + w, y + h, 0xFFE8EDF4);  // 右
+        // 背景颜色和边框（根据ON/OFF状态）
+        int bgColor = isOn ? 0xFF8CAE5C : 0xFFC2BBAA;  // ON: 绿色, OFF: 灰色
+        int borderColor = isOn ? 0xFF6B8C42 : 0xFFB7AF9B;  // ON: 深绿, OFF: 深灰
+        
+        // 绘制外层边框（1px）
+        drawOutline(g, x, y, w, h, borderColor, 1);
+        
+        // 绘制背景填充
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bgColor);
+        
+        // 计算滑块位置（10x10px，距离边缘2px，考虑1px边框）
+        int knobSize = h - 4;  // 高度减去上下各2px间距
+        int knobPadding = 2;   // 距离边缘2px（不含边框）
+        int knobX = isOn ? (x + w - 1 - knobPadding - knobSize) : (x + 1 + knobPadding);
+        int knobY = y + (h - knobSize) / 2;
+        
+        // 绘制白色滑块（纯白色方块）
+        g.fill(knobX, knobY, knobX + knobSize, knobY + knobSize, 0xFFFFFFFF);
+    }
 
-        // 滑块（24x14px，距离边缘2px）
-        int sliderW = 24;
-        int sliderH = 14;
-        int sliderX = isOn ? (x + w - sliderW - 2) : (x + 2);
-        int sliderY = y + 2;
+    /**
+     * 绘制主要按钮（HTML原型 .footer-btn.primary 样式）。
+     * 绿色背景，白色文字，用于"完成"按钮。
+     */
+    public static void drawPrimaryButton(GuiGraphics g, int x, int y, int w, int h, boolean hovered) {
+        // 背景色：悬浮时稍亮
+        int bg = hovered ? 0xFF7D9E4D : 0xFF6B8C42;  // --accent / hover
+        int border = 0xFF5B7A37;
+        // 外层边框
+        drawOutline(g, x, y, w, h, border, 1);
+        // 顶部高光（1px 半透明白）
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0x30FFFFFF);
+        // 背景填充
+        g.fill(x + 1, y + 2, x + w - 1, y + h - 1, bg);
+        // 底部阴影（1px 深色）
+        g.fill(x + 1, y + h - 1, x + w - 1, y + h, 0xFF4B6530);
+    }
 
-        if (isOn) {
-            // ON状态：深绿色滑块
-            int sliderBg = hovered ? 0xFF1E421E : 0xFF1A3A1A;
-            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, sliderBg);
-            // 滑块边框（凸起效果）
-            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + 1, 0xFF2A5A2A);  // 顶
-            g.fill(sliderX, sliderY, sliderX + 1, sliderY + sliderH, 0xFF2A5A2A);  // 左
-            g.fill(sliderX, sliderY + sliderH - 1, sliderX + sliderW, sliderY + sliderH, 0xFF0A1A0A);  // 底
-            g.fill(sliderX + sliderW - 1, sliderY, sliderX + sliderW, sliderY + sliderH, 0xFF0A1A0A);  // 右
+    /**
+     * 绘制次要按钮（HTML原型 .footer-btn.secondary 样式）。
+     * 米色背景，深棕文字，用于"取消"按钮。
+     */
+    public static void drawSecondaryButton(GuiGraphics g, int x, int y, int w, int h, boolean hovered) {
+        int bg = hovered ? 0xFFD3CBB3 : 0xFFE3DDCD;  // secondary / hover
+        int border = 0xFFC8C0AD;
+        // 外层边框
+        drawOutline(g, x, y, w, h, border, 1);
+        // 顶部高光
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0x40FFFFFF);
+        // 背景填充
+        g.fill(x + 1, y + 2, x + w - 1, y + h - 1, bg);
+        // 底部阴影
+        g.fill(x + 1, y + h - 1, x + w - 1, y + h, 0xFFB7AF9B);
+    }
 
-            // "ON"文字（左侧，绿色）
-            g.drawString(net.minecraft.client.Minecraft.getInstance().font, "ON", 
-                x + 6, y + (h - 8) / 2, COLOR_ON, false);
-        } else {
-            // OFF状态：灰色滑块
-            int sliderBg = hovered ? 0xFF9AABC0 : 0xFF5A6C7E;
-            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, sliderBg);
-            // 滑块边框（凸起效果）
-            g.fill(sliderX, sliderY, sliderX + sliderW, sliderY + 1, 0xFFE8EDF4);  // 顶
-            g.fill(sliderX, sliderY, sliderX + 1, sliderY + sliderH, 0xFFE8EDF4);  // 左
-            g.fill(sliderX, sliderY + sliderH - 1, sliderX + sliderW, sliderY + sliderH, 0xFF2C3E50);  // 底
-            g.fill(sliderX + sliderW - 1, sliderY, sliderX + sliderW, sliderY + sliderH, 0xFF2C3E50);  // 右
-
-            // "OFF"文字（右侧，深色）
-            g.drawString(net.minecraft.client.Minecraft.getInstance().font, "OFF", 
-                x + w - 22, y + (h - 8) / 2, 0xFF2C3E50, false);
+    /**
+     * 绘制颜色配置项行（HTML原型 .border-color-item 样式）。
+     * 左侧标签文字，右侧颜色预览方块 + hex值。
+     * 
+     * @param colorPreview 颜色预览值（ARGB），-1 表示不显示预览
+     * @param selected 是否被选中
+     * @param hovered 是否悬浮
+     */
+    public static void drawColorItemRow(GuiGraphics g, net.minecraft.client.gui.Font font,
+                                         int x, int y, int w, int h,
+                                         net.minecraft.network.chat.Component label,
+                                         int colorPreview, boolean selected, boolean hovered) {
+        // 背景：白色，带边框
+        int bg = selected ? 0xFFF4F7E8 : (hovered ? 0xFFFAF7EF : 0xFFFFFFFF);
+        int border = selected ? 0xFF8CAE5C : COLOR_PANEL_BORDER;
+        drawOutline(g, x, y, w, h, border, 1);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bg);
+        
+        int textColor = selected ? 0xFF3B3629 : (hovered ? 0xFF4A4233 : 0xFF6B6454);
+        int innerY = y + (h - font.lineHeight) / 2;
+        
+        // 左侧：标签文字
+        g.drawString(font, label, x + 6, innerY, textColor, false);
+        
+        // 右侧：颜色预览方块 + hex值
+        if (colorPreview != -1) {
+            int swatchSize = h - 6;
+            String hexText = String.format("#%06X", colorPreview & 0xFFFFFF);
+            int hexWidth = font.width(hexText);
+            int rightPadding = 6;
+            int swatchX = x + w - rightPadding - swatchSize;
+            int swatchY = y + (h - swatchSize) / 2;
+            int hexX = swatchX - 4 - hexWidth;
+            
+            // hex值文字
+            g.drawString(font, hexText, hexX, innerY, textColor, false);
+            
+            // 棋盘格背景（用于透明色）
+            g.fill(swatchX, swatchY, swatchX + swatchSize / 2, swatchY + swatchSize / 2, 0xFFCCCCCC);
+            g.fill(swatchX + swatchSize / 2, swatchY, swatchX + swatchSize, swatchY + swatchSize / 2, 0xFF999999);
+            g.fill(swatchX, swatchY + swatchSize / 2, swatchX + swatchSize / 2, swatchY + swatchSize, 0xFF999999);
+            g.fill(swatchX + swatchSize / 2, swatchY + swatchSize / 2, swatchX + swatchSize, swatchY + swatchSize, 0xFFCCCCCC);
+            // 颜色填充
+            g.fill(swatchX, swatchY, swatchX + swatchSize, swatchY + swatchSize, colorPreview);
+            // 边框
+            drawOutline(g, swatchX, swatchY, swatchSize, swatchSize, COLOR_OUTLINE, 1);
         }
     }
 
     /**
      * 绘制配置模块卡片背景。
-     * 背景色 {@code #B8C5D6}，带 1px 边框 {@code #9AABC0}。
+     * 背景色 {@code #F3EFE4}，带 1px 浅色边框 {@code #E3DDCD}。
      */
     public static void drawConfigModuleCard(GuiGraphics g, int x, int y, int w, int h) {
-        // 1px 边框
-        drawOutline(g, x, y, w, h, COLOR_PANEL_BORDER, 1);
+        // 1px 浅色边框（使用 --border-light）
+        drawOutline(g, x, y, w, h, COLOR_BORDER_LIGHT, 1);
         // 背景填充
         g.fill(x + 1, y + 1, x + w - 1, y + h - 1, COLOR_BUTTON_BG);
     }
@@ -429,11 +558,9 @@ public final class AEStyleRenderer {
                         : trackTop + thumbPad;
         int thumbX    = trackCenterX;
 
-        // 最外层 1px #3A3A3A
+        // 外层 1px 轮廓
         drawOutline(g, thumbX, thumbY, thumbW, thumbSize, COLOR_OUTLINE, 1);
-        // 次层 1px COLOR_SCROLL_THUMB_SH
-        drawOutline(g, thumbX + 1, thumbY + 1, thumbW - 2, thumbSize - 2, COLOR_SCROLL_THUMB_SH, 1);
-        // 内部 COLOR_SCROLL_THUMB
-        g.fill(thumbX + 2, thumbY + 2, thumbX + thumbW - 2, thumbY + thumbSize - 2, COLOR_SCROLL_THUMB);
+        // 内部填充
+        g.fill(thumbX + 1, thumbY + 1, thumbX + thumbW - 1, thumbY + thumbSize - 1, COLOR_SCROLL_THUMB);
     }
 }

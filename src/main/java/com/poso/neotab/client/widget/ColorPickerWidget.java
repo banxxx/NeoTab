@@ -56,6 +56,7 @@ public class ColorPickerWidget extends AbstractWidget {
     private final Font font;
     private final Consumer<Integer> onColorChanged;
     private EditBox hexInput;
+    private boolean hasInternalHexInput = true;  // 控制是否显示内部HEX输入框
     
     // HSV 颜色值 (0-1)
     private float hue = 0.0f;
@@ -96,15 +97,20 @@ public class ColorPickerWidget extends AbstractWidget {
     private static final long TEXTURE_UPDATE_INTERVAL_MS = 16;  // 约60fps的更新频率
     
     public ColorPickerWidget(int x, int y, Font font, int initialColor, Consumer<Integer> onColorChanged) {
-        this(x, y, font, initialColor, onColorChanged, 1.0f);
+        this(x, y, font, initialColor, onColorChanged, 1.0f, true);
     }
     
     public ColorPickerWidget(int x, int y, Font font, int initialColor, Consumer<Integer> onColorChanged, float scale) {
+        this(x, y, font, initialColor, onColorChanged, scale, true);
+    }
+    
+    public ColorPickerWidget(int x, int y, Font font, int initialColor, Consumer<Integer> onColorChanged, float scale, boolean hasInternalHexInput) {
         super(x, y, 0, 0, Component.empty()); // 宽高稍后设置
         this.font = font;
         this.onColorChanged = onColorChanged;
         this.currentColor = initialColor;
         this.scale = Math.max(0.5f, Math.min(2.0f, scale)); // 限制缩放范围在0.5-2.0之间
+        this.hasInternalHexInput = hasInternalHexInput;
         
         // 根据缩放计算实际尺寸
         this.HUE_BAR_WIDTH = Math.max(6, (int) (BASE_HUE_BAR_WIDTH * this.scale));
@@ -117,8 +123,14 @@ public class ColorPickerWidget extends AbstractWidget {
         this.HEX_LABEL_WIDTH = Math.max(20, (int) (BASE_HEX_LABEL_WIDTH * this.scale));
         
         // 计算总尺寸
-        this.TOTAL_WIDTH = SV_PANEL_SIZE + COMPONENT_GAP + HUE_BAR_WIDTH + COMPONENT_GAP + Math.max(PREVIEW_SIZE, ALPHA_BAR_WIDTH) + BORDER_PADDING * 2;
-        this.TOTAL_HEIGHT = SV_PANEL_SIZE + COMPONENT_GAP + (int)(20 * this.scale) + BORDER_PADDING * 2;
+        if (hasInternalHexInput) {
+            this.TOTAL_WIDTH = SV_PANEL_SIZE + COMPONENT_GAP + HUE_BAR_WIDTH + COMPONENT_GAP + Math.max(PREVIEW_SIZE, ALPHA_BAR_WIDTH) + BORDER_PADDING * 2;
+            this.TOTAL_HEIGHT = SV_PANEL_SIZE + COMPONENT_GAP + (int)(20 * this.scale) + BORDER_PADDING * 2;
+        } else {
+            // 没有内部HEX输入框时，高度减少
+            this.TOTAL_WIDTH = SV_PANEL_SIZE + COMPONENT_GAP + HUE_BAR_WIDTH + COMPONENT_GAP + Math.max(PREVIEW_SIZE, ALPHA_BAR_WIDTH) + BORDER_PADDING * 2;
+            this.TOTAL_HEIGHT = SV_PANEL_SIZE + BORDER_PADDING * 2;
+        }
         
         // 设置实际的宽高
         this.width = TOTAL_WIDTH;
@@ -127,16 +139,18 @@ public class ColorPickerWidget extends AbstractWidget {
         // 从 ARGB 转换为 HSV
         rgbToHsv(initialColor);
         
-        // 创建十六进制输入框
-        this.hexInput = new EditBox(font, 0, 0, HEX_INPUT_WIDTH, 18, Component.empty());
-        this.hexInput.setMaxLength(9); // #AARRGGBB
-        this.hexInput.setValue(colorToHex(initialColor));
-        this.hexInput.setResponder(this::onHexInputChanged);
-        this.hexInput.setEditable(true);  // 确保输入框可编辑
-        this.hexInput.setCanLoseFocus(true);  // 允许失去焦点
-        
-        // 更新输入框位置
-        updateHexInputPosition();
+        // 创建十六进制输入框（仅在需要时）
+        if (hasInternalHexInput) {
+            this.hexInput = new EditBox(font, 0, 0, HEX_INPUT_WIDTH, 18, Component.empty());
+            this.hexInput.setMaxLength(9); // #AARRGGBB
+            this.hexInput.setValue(colorToHex(initialColor));
+            this.hexInput.setResponder(this::onHexInputChanged);
+            this.hexInput.setEditable(true);  // 确保输入框可编辑
+            this.hexInput.setCanLoseFocus(true);  // 允许失去焦点
+            
+            // 更新输入框位置
+            updateHexInputPosition();
+        }
         
         // 初始化纹理缓存（永久纹理）
         initHueBarTexture();
@@ -163,7 +177,7 @@ public class ColorPickerWidget extends AbstractWidget {
      * 更新十六进制输入框的位置
      */
     private void updateHexInputPosition() {
-        if (hexInput != null) {
+        if (hexInput != null && hasInternalHexInput) {
             // HEX输入框放在HSV面板下方
             int inputX = getX() + BORDER_PADDING + HEX_LABEL_WIDTH;
             int inputY = getY() + BORDER_PADDING + SV_PANEL_SIZE + COMPONENT_GAP;
@@ -359,13 +373,16 @@ public class ColorPickerWidget extends AbstractWidget {
         // 绘制透明度条
         renderAlphaBar(graphics);
         
-        // 绘制 HEX 标签
-        graphics.drawString(font, "HEX", getX() + BORDER_PADDING, 
-            getY() + BORDER_PADDING + SV_PANEL_SIZE + COMPONENT_GAP + 5, 
-            0xFFFFFFFF, false);
-        
-        // 绘制十六进制输入框
-        hexInput.render(graphics, mouseX, mouseY, partialTick);
+        // 绘制 HEX 标签和输入框（仅在有内部输入框时）
+        if (hasInternalHexInput) {
+            // 绘制 HEX 标签
+            graphics.drawString(font, "HEX", getX() + BORDER_PADDING, 
+                getY() + BORDER_PADDING + SV_PANEL_SIZE + COMPONENT_GAP + 5, 
+                0xFFFFFFFF, false);
+            
+            // 绘制十六进制输入框
+            hexInput.render(graphics, mouseX, mouseY, partialTick);
+        }
         
         // 绘制 SV 面板的选择指示器
         renderSVIndicator(graphics);
@@ -587,14 +604,16 @@ public class ColorPickerWidget extends AbstractWidget {
         if (!this.visible) return false;
         
         // 检查是否点击了十六进制输入框
-        if (hexInput.mouseClicked(mouseX, mouseY, button)) {
+        if (hasInternalHexInput && hexInput.mouseClicked(mouseX, mouseY, button)) {
             // 设置输入框为焦点，确保能接收键盘输入
             hexInput.setFocused(true);
             return true;
         }
         
         // 如果点击了其他地方，取消输入框的焦点
-        hexInput.setFocused(false);
+        if (hasInternalHexInput) {
+            hexInput.setFocused(false);
+        }
         
         // 检查是否点击了 SV 面板
         int panelX = getX() + BORDER_PADDING;
@@ -665,12 +684,18 @@ public class ColorPickerWidget extends AbstractWidget {
     
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return hexInput.keyPressed(keyCode, scanCode, modifiers);
+        if (hasInternalHexInput && hexInput != null) {
+            return hexInput.keyPressed(keyCode, scanCode, modifiers);
+        }
+        return false;
     }
     
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        return hexInput.charTyped(codePoint, modifiers);
+        if (hasInternalHexInput && hexInput != null) {
+            return hexInput.charTyped(codePoint, modifiers);
+        }
+        return false;
     }
     
     private void updateSVFromMouse(double mouseX, double mouseY) {
@@ -733,7 +758,9 @@ public class ColorPickerWidget extends AbstractWidget {
     
     private void updateColor() {
         currentColor = hsvToRgb(hue, saturation, value, alpha);
-        hexInput.setValue(colorToHex(currentColor));
+        if (hasInternalHexInput && hexInput != null) {
+            hexInput.setValue(colorToHex(currentColor));
+        }
         
         // 更新透明度条纹理（因为颜色的RGB部分改变了）
         updateAlphaBarTexture();
@@ -883,7 +910,9 @@ public class ColorPickerWidget extends AbstractWidget {
         this.currentColor = color;
         float oldHue = hue;
         rgbToHsv(color);
-        hexInput.setValue(colorToHex(color));
+        if (hasInternalHexInput && hexInput != null) {
+            hexInput.setValue(colorToHex(color));
+        }
         
         // 如果色相改变了，更新纹理
         if (Math.abs(oldHue - hue) > 0.001f) {
