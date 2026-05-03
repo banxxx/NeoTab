@@ -5,7 +5,9 @@
   "mixins": [],
   "client": [
     "client.GuiMixin",
+    "client.MultiLineEditBoxAccessor",
     "client.MultiLineEditBoxMixin",
+    "client.MultilineTextFieldAccessor",
     "client.PlayerTabOverlayMixin",
     "client.PlayerTabOverlayAccessor"
   ],

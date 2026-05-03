@@ -27,6 +27,15 @@ public class NeoTabConfigWidgetFactory {
     }
 
     /**
+     * Create a simple ON/OFF toggle button with a callback.
+     */
+    public static CycleButton<Boolean> newToggle(int x, boolean initialValue, CycleButton.OnValueChange<Boolean> onValueChange) {
+        return CycleButton.onOffBuilder(initialValue)
+            .displayOnlyValue()
+            .create(x, 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, CommonComponents.EMPTY, onValueChange);
+    }
+
+    /**
      * Create a labeled ON/OFF toggle button.
      */
     public static CycleButton<Boolean> newLabeledToggle(int x, int width, boolean initialValue, Component label) {

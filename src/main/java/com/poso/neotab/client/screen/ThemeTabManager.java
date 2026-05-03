@@ -214,20 +214,15 @@ public class ThemeTabManager {
         });
         screen.addWidget(this.customBorderOuterHexInput);
 
-        // Animation toggle (half width)
-        int animHalfW = (customButtonWidth - 4) / 2;
-        this.customAnimationToggle = screen.addWidget(CycleButton.booleanBuilder(
-                Component.translatable("screen.neotab.custom_theme.animation.on"),
-                Component.translatable("screen.neotab.custom_theme.animation.off"))
-            .withInitialValue(customThemeConfig.isAnimationEnabled())
-            .create(layout.left(), 0, animHalfW, THEME_OPTION_HEIGHT,
-                    Component.translatable("screen.neotab.custom_theme.animation"),
-                    (btn, value) -> {
-                        customThemeConfig.setAnimationEnabled(value);
-                        com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    }));
+        // 动画效果开关（与其他toggle完全一致的创建方式）
+        this.customAnimationToggle = screen.addWidget(
+            NeoTabConfigWidgetFactory.newToggle(layout.toggleX(), customThemeConfig.isAnimationEnabled(),
+                (btn, value) -> {
+                    customThemeConfig.setAnimationEnabled(value);
+                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                }));
 
-        // Animation speed button
+        // 动画速率按钮（80×18，与重置按钮一致，右对齐）
         this.customAnimationSpeedButton = screen.addWidget(Button.builder(
                 Component.translatable("screen.neotab.custom_theme.animation_speed",
                         customThemeConfig.getAnimationSpeed()),
@@ -239,7 +234,7 @@ public class ThemeTabManager {
                     button.setMessage(Component.translatable(
                             "screen.neotab.custom_theme.animation_speed", next));
                 })
-            .bounds(layout.left(), 0, animHalfW, THEME_OPTION_HEIGHT)
+            .bounds(layout.left(), 0, 80, 18)
             .build());
 
         // Reset to default button (with icon)
@@ -259,7 +254,9 @@ public class ThemeTabManager {
                     this.customThemeConfig = com.poso.neotab.theme.CustomThemeConfig.defaults();
                     com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     showResetConfirmation = false;
-                    screen.reinit();
+                    // 只重建自定义主题相关控件，不调用 reinit()
+                    // reinit() 会从 initialConfig 重读 selectedThemeId，导致主题选择被重置
+                    screen.rebuildCustomThemeWidgets();
                 })
             .bounds(layout.left(), 0, 50, 18)
             .build());
@@ -517,22 +514,24 @@ public class ThemeTabManager {
                 resetToDefaultButton.setHeight(resetBtnH);
             }
             
-            // 动画效果卡片内的控件（动画开关和速度按钮在同一行，各占一半）
-            int animY = layout.customAnimationRowY() + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + 8;
-            int animAvailableWidth = layout.contentWidth() - CARD_PADDING * 2;
-            int animGap = 4;
-            int animButtonWidth = (animAvailableWidth - animGap) / 2;
-            
+            // 动画效果卡片：开关右对齐，垂直居中
+            int animToggleCardH = Math.max(CARD_PADDING + TITLE_LINE_HEIGHT + CARD_PADDING, CARD_PADDING + 14 + CARD_PADDING);
+            int animToggleCenterY = layout.customAnimationRowY() + (animToggleCardH - 14) / 2;
             if (customAnimationToggle != null) {
-                customAnimationToggle.setX(layout.left() + CARD_PADDING);
-                customAnimationToggle.setY(layout.toScreenY(animY));
-                customAnimationToggle.setWidth(animButtonWidth);
+                customAnimationToggle.setX(layout.toggleX());
+                customAnimationToggle.setY(layout.toScreenY(animToggleCenterY));
+                customAnimationToggle.setWidth(26);
+                customAnimationToggle.setHeight(14);
             }
-            
+
+            // 动画速率卡片：速率按钮右对齐，垂直居中
+            int animSpeedCardH = Math.max(CARD_PADDING + TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + CARD_PADDING, CARD_PADDING + 18 + CARD_PADDING);
+            int animSpeedCenterY = layout.customAnimSpeedRowY() + (animSpeedCardH - 18) / 2;
             if (customAnimationSpeedButton != null) {
-                customAnimationSpeedButton.setX(layout.left() + CARD_PADDING + animButtonWidth + animGap);
-                customAnimationSpeedButton.setY(layout.toScreenY(animY));
-                customAnimationSpeedButton.setWidth(animButtonWidth);
+                customAnimationSpeedButton.setX(layout.right() - CARD_PADDING - 80);
+                customAnimationSpeedButton.setY(layout.toScreenY(animSpeedCenterY));
+                customAnimationSpeedButton.setWidth(80);
+                customAnimationSpeedButton.setHeight(18);
             }
             
             // ── 颜色配置：每个颜色项独立卡片 ──

@@ -7,7 +7,6 @@ import com.poso.neotab.permission.PlayerCustomizePolicy;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 
@@ -196,8 +195,6 @@ public class PageConfigTabManager {
         if (screenMode == NeoTabConfigScreen.ScreenMode.ADMIN) return;
         if (!allowed) {
             widget.active = false;
-            widget.setTooltip(Tooltip.create(
-                Component.translatable("screen.neotab.locked_by_server")));
         }
     }
 
@@ -253,7 +250,7 @@ public class PageConfigTabManager {
         // 玩家列表卡片（只有开关）：开关垂直居中于卡片
         p(betterPingEnabled,     layout.toggleX(), layout.toScreenY(layout.betterPingRowY()     + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         p(onlineDurationEnabled, layout.toggleX(), layout.toScreenY(layout.onlineDurationRowY() + (cardH_withSub - TOGGLE_HEIGHT) / 2));
-        p(titleEnabled,          layout.toggleX(), layout.toScreenY(layout.titleRowY()          + (cardH_noSub   - TOGGLE_HEIGHT) / 2));
+        p(titleEnabled,          layout.toggleX(), layout.toScreenY(layout.titleRowY()          + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         p(healthDisplayEnabled,  layout.toggleX(), layout.toScreenY(layout.healthDisplayRowY()  + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         
         // 底部自定义信息卡片（有输入框）：不居中

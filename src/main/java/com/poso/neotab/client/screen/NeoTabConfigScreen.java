@@ -123,6 +123,22 @@ public class NeoTabConfigScreen extends Screen {
     ScreenMode getScreenMode() { return screenMode; }
     void syncVisibility() { syncTabWidgetVisibility(); }
     void reinit() { this.init(); }
+
+    /**
+     * 重建自定义主题相关控件，保留当前的 selectedThemeId。
+     * 用于重置自定义主题配置后刷新界面，避免 reinit() 把主题选择重置回 initialConfig 的值。
+     */
+    void rebuildCustomThemeWidgets() {
+        // 移除所有已注册的 widget，重新初始化
+        // 但保留 selectedThemeId，不从 initialConfig 重读
+        String savedThemeId = theme.selectedThemeId;
+        this.init();
+        theme.selectedThemeId = savedThemeId;
+        // 重新同步 widget 可见性（因为 init 里会根据 initialConfig 设置 selectedThemeId）
+        syncTabWidgetVisibility();
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        applyWidgetLayout(layout);
+    }
     NeoTabConfigScreenLayout.Layout buildLayout() { return buildLayoutImpl(); }
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) { applyWidgetLayout(layout); }
     void setScrollOffset(int offset, NeoTabConfigScreenLayout.Layout layout) {
@@ -371,8 +387,15 @@ public class NeoTabConfigScreen extends Screen {
             if (theme.resetToDefaultButton != null && theme.resetToDefaultButton.visible && theme.resetToDefaultButton.isMouseOver(mouseX, mouseY))
                 return theme.resetToDefaultButton.mouseClicked(mouseX, mouseY, button);
             if (theme.showResetConfirmation) { theme.showResetConfirmation = false; syncTabWidgetVisibility(); }
-            if (theme.customAnimationToggle != null && theme.customAnimationToggle.visible && theme.customAnimationToggle.isMouseOver(mouseX, mouseY))
+            if (theme.customAnimationToggle != null && theme.customAnimationToggle.visible
+                    && mouseX >= theme.customAnimationToggle.getX()
+                    && mouseX < theme.customAnimationToggle.getX() + theme.customAnimationToggle.getWidth()
+                    && mouseY >= theme.customAnimationToggle.getY()
+                    && mouseY < theme.customAnimationToggle.getY() + theme.customAnimationToggle.getHeight())
                 return theme.customAnimationToggle.mouseClicked(mouseX, mouseY, button);
+            if (theme.customAnimationSpeedButton != null && theme.customAnimationSpeedButton.visible
+                    && theme.customAnimationSpeedButton.isMouseOver(mouseX, mouseY))
+                return theme.customAnimationSpeedButton.mouseClicked(mouseX, mouseY, button);
             if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible && theme.customBorderOuterFactorButton.isMouseOver(mouseX, mouseY))
                 return theme.customBorderOuterFactorButton.mouseClicked(mouseX, mouseY, button);
             if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible && theme.customBackgroundColorButton.isMouseOver(mouseX, mouseY))
@@ -654,7 +677,6 @@ public class NeoTabConfigScreen extends Screen {
         renderPlayerSuggestionDropdown(g, mouseX, mouseY);
         // ── 颜色相关浮动组件（最后渲染，确保在最上层）──
         renderColorOverlay(g, mouseX, mouseY, partialTick, layout);
-        NeoTabConfigScreenRenderer.renderHoveredTooltip(g, this.font, hoveredTarget(mouseX, mouseY, layout), mouseX, mouseY);
     }
 
     private void renderPlayerSuggestionDropdown(GuiGraphics g, int mouseX, int mouseY) {
@@ -750,12 +772,8 @@ public class NeoTabConfigScreen extends Screen {
         }
         theme.embeddedColorPicker.setY(renderY);
 
-        // 先铺不透明背景，彻底阻断下层文字/控件渗透
-        // 使用适中的边距，提供清晰的视觉边界
-        int bgPadding = 4;  // 适中的边距，既清晰又不会太宽
-        g.fill(cpX - bgPadding, renderY - bgPadding, cpX + pw + bgPadding, renderY + ph + bgPadding, AEStyleRenderer.COLOR_PANEL_BORDER);
-        g.fill(cpX - bgPadding + 1, renderY - bgPadding + 1, cpX + pw + bgPadding - 1, renderY + ph + bgPadding - 1, 0xFF2A2A2A);
-
+        // 铺不透明背景，阻断下层文字/控件渗透
+        g.fill(cpX, renderY, cpX + pw, renderY + ph, 0xFFFAF7EF);
         theme.embeddedColorPicker.render(g, mouseX, mouseY, partialTick);
     }
 
@@ -844,14 +862,16 @@ public class NeoTabConfigScreen extends Screen {
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
-            // 称号功能卡片（无副标题）
+            // 称号功能卡片
             cardY = layout.toScreenY(layout.titleRowY());
-            int noSubtitleCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight) + CARD_PADDING;
-            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), noSubtitleCardHeight);
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
             
             g.drawString(this.font, Component.translatable("screen.neotab.list.title"),
                     layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.list.title.subtitle"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
             // 玩家血量卡片
             cardY = layout.toScreenY(layout.healthDisplayRowY());
@@ -962,22 +982,28 @@ public class NeoTabConfigScreen extends Screen {
                 // 重置按钮由widget系统绘制（靠右边框，基于卡片高度垂直居中）
                 // 确认/取消按钮在重置按钮下方，总宽度与重置按钮一致
                 
-                // 动画效果卡片（独立卡片）
+                // 动画效果卡片（标题 + 右侧开关）
                 cardY = layout.toScreenY(layout.customAnimationRowY());
-                int animCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + THEME_OPTION_HEIGHT + CARD_PADDING;
-                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), animCardHeight);
-                
-                // 标题（限制宽度，避免覆盖右侧按钮）
-                int animTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2;
+                int animToggleCardH = Math.max(CARD_PADDING + titleLineHeight + CARD_PADDING,
+                                               CARD_PADDING + 14 + CARD_PADDING);
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), animToggleCardH);
                 g.drawString(this.font, Component.translatable("screen.neotab.theme.animation_title"),
+                        layout.left() + CARD_PADDING, cardY + (animToggleCardH - titleLineHeight) / 2,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                // 开关由 widget 系统绘制
+
+                // 动画速率卡片（标题 + 副标题 + 右侧速率按钮）
+                cardY = layout.toScreenY(layout.customAnimSpeedRowY());
+                int animSpeedCardH = Math.max(CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING,
+                                              CARD_PADDING + 18 + CARD_PADDING);
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), animSpeedCardH);
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.animation_speed_title"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING,
                         AEStyleRenderer.COLOR_MODULE_TITLE, false);
-                
-                // 副标题（限制宽度，自动换行）
-                drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.animation_subtitle").getString(),
+                drawScaledText(g, Component.translatable("screen.neotab.theme.animation_subtitle"),
                         layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
-                        animTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
-                // 动画开关和速度按钮由widget系统绘制
+                        AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+                // 速率按钮由 widget 系统绘制
                 
                 // 颜色配置：每个颜色项独立卡片
                 java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
@@ -985,7 +1011,7 @@ public class NeoTabConfigScreen extends Screen {
                 
                 int swatchSize = 24;  // 色块大小（缩小）
                 int hexInputH = 24;   // HEX输入框高度（缩小）
-                int previewH = 24;    // 预览块高度（缩小）
+                int previewH = 8;     // 预览块高度
                 int contentGap = 8;   // 标题与内容之间的间距
                 int previewGap = 8;   // 颜色行与预览块之间的间距
                 
@@ -1689,9 +1715,9 @@ public class NeoTabConfigScreen extends Screen {
         int onlineDurationCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = onlineDurationRowY + onlineDurationCardHeight + CARD_GAP;
         
-        // 称号功能卡片（无副标题）：高度取开关高度和标题高度的最大值
+        // 称号功能卡片
         int titleRowY = y;
-        int titleCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H_NO_SUB + CARD_PADDING;
+        int titleCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
         y = titleRowY + titleCardHeight + CARD_GAP;
         
         // 玩家血量卡片
@@ -1760,20 +1786,25 @@ public class NeoTabConfigScreen extends Screen {
             int resetCardHeight = CARD_PADDING * 2 + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;  // 增加高度以容纳确认/取消按钮
             themeY = customResetRowY + resetCardHeight + CARD_GAP;
             
-            // 动画效果卡片（独立卡片）
+            // 动画效果卡片（只有标题 + 开关，无副标题）
             customAnimationRowY = themeY;
-            int animCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + THEME_OPTION_HEIGHT + CARD_PADDING;
-            themeY = customAnimationRowY + animCardHeight + CARD_GAP;
-            
-            // 动画速度按钮与动画开关在同一行，所以Y坐标相同
-            customAnimSpeedRowY = customAnimationRowY;
+            int animToggleCardH = CARD_PADDING + TITLE_LINE_HEIGHT + CARD_PADDING;
+            // 确保卡片高度能容纳 toggle（14px）
+            animToggleCardH = Math.max(animToggleCardH, CARD_PADDING + 14 + CARD_PADDING);
+            themeY = customAnimationRowY + animToggleCardH + CARD_GAP;
+
+            // 动画速率卡片（标题 + 副标题 + 速率按钮）
+            customAnimSpeedRowY = themeY;
+            int animSpeedCardH = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+            animSpeedCardH = Math.max(animSpeedCardH, CARD_PADDING + 18 + CARD_PADDING);
+            themeY = customAnimSpeedRowY + animSpeedCardH + CARD_GAP;
             
             // 颜色配置：每个颜色项独立卡片（固定高度，不展开/折叠）
             java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
                 theme.customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
             
             int swatchSize = 24;  // 色块大小（缩小）
-            int previewH = 24;    // 预览块高度（缩小）
+            int previewH = 8;     // 预览块高度
             int contentGap = 8;   // 标题与内容之间的间距
             int previewGap = 8;   // 颜色行与预览块之间的间距
             
@@ -2036,24 +2067,6 @@ public class NeoTabConfigScreen extends Screen {
         for (Renderable r : this.renderables) {
             if (r == this.doneButton || r == this.cancelButton) continue;
             if (r instanceof AbstractWidget w && w.visible && w.isMouseOver(mouseX, mouseY)) return w;
-        }
-        return null;
-    }
-
-    private NeoTabConfigScreenLayout.HoverTarget hoveredTarget(int mouseX, int mouseY, NeoTabConfigScreenLayout.Layout layout) {
-        if (activeTab == ConfigTab.PAGE_CONFIG) {
-            if (layout.topTitleLabelBounds().contains(mouseX, mouseY))        return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.top.title.tooltip"));
-            if (layout.topContentLabelBounds().contains(mouseX, mouseY))      return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.top.content.tooltip"));
-            if (layout.betterPingLabelBounds().contains(mouseX, mouseY))      return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.list.better_ping.tooltip"));
-            if (layout.onlineDurationLabelBounds().contains(mouseX, mouseY))  return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.list.online_duration.note"));
-            if (layout.titleLabelBounds().contains(mouseX, mouseY))           return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.list.title.tooltip"));
-            if (layout.healthDisplayLabelBounds().contains(mouseX, mouseY))   return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.list.health_display.tooltip"));
-            if (layout.footerCustomLabelBounds().contains(mouseX, mouseY))    return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.footer.custom.tooltip"));
-        } else if (activeTab == ConfigTab.THEME) {
-            if (layout.healthModeLabelBounds().contains(mouseX, mouseY))      return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.theme.health_mode.tooltip"));
-            if (pageConfig.layoutEnabledToggle != null && pageConfig.layoutEnabledToggle.isMouseOver(mouseX, mouseY)) return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.layout.enabled.tooltip"));
-            if (pageConfig.layoutColumnsButton != null && pageConfig.layoutColumnsButton.isMouseOver(mouseX, mouseY)) return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.layout.columns.tooltip"));
-            if (pageConfig.layoutRowsButton    != null && pageConfig.layoutRowsButton.isMouseOver(mouseX, mouseY))    return new NeoTabConfigScreenLayout.HoverTarget(Component.translatable("screen.neotab.layout.rows.tooltip"));
         }
         return null;
     }

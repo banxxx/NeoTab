@@ -199,7 +199,8 @@ public final class NeoTabConfigScreenRenderer {
         int textColor = selected
                 ? AEStyleRenderer.COLOR_SECTION_TEXT
                 : hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        g.drawCenteredString(font, button.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        int textX = bx + (bw - font.width(button.getMessage())) / 2;
+        g.drawString(font, button.getMessage(), textX, by + (bh - font.lineHeight) / 2, textColor, false);
     }
 
     // ── AE 风格 CycleButton ───────────────────────────────────────────────
@@ -230,7 +231,8 @@ public final class NeoTabConfigScreenRenderer {
         // 其他类型的CycleButton（如健康显示模式）使用原来的按钮样式
         AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
         int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        g.drawCenteredString(font, msg, bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        int textX = bx + (bw - font.width(msg)) / 2;
+        g.drawString(font, msg, textX, by + (bh - font.lineHeight) / 2, textColor, false);
     }
 
     // ── AE 风格普通 Button ────────────────────────────────────────────────
@@ -242,7 +244,8 @@ public final class NeoTabConfigScreenRenderer {
         int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
         AEStyleRenderer.drawButton(g, bx, by, bw, bh, hovered);
         int textColor = hovered ? AEStyleRenderer.COLOR_BUTTON_TEXT_HOVER : AEStyleRenderer.COLOR_BUTTON_TEXT;
-        g.drawCenteredString(font, btn.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        int textX = bx + (bw - font.width(btn.getMessage())) / 2;
+        g.drawString(font, btn.getMessage(), textX, by + (bh - font.lineHeight) / 2, textColor, false);
     }
 
     // ── 主要按钮（完成）────────────────────────────────────────────────────
@@ -253,10 +256,11 @@ public final class NeoTabConfigScreenRenderer {
         boolean hovered = btn.isMouseOver(mouseX, mouseY);
         int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
         AEStyleRenderer.drawPrimaryButton(g, bx, by, bw, bh, hovered);
-        // 白色加粗文字
+        // 白色加粗文字，无阴影
         net.minecraft.network.chat.Component bold = btn.getMessage().copy()
                 .withStyle(net.minecraft.ChatFormatting.BOLD);
-        g.drawCenteredString(font, bold, bx + bw / 2, by + (bh - font.lineHeight) / 2, 0xFFFFFFFF);
+        int boldX = bx + (bw - font.width(bold)) / 2;
+        g.drawString(font, bold, boldX, by + (bh - font.lineHeight) / 2, 0xFFFFFFFF, false);
     }
 
     // ── 次要按钮（取消）────────────────────────────────────────────────────
@@ -268,7 +272,8 @@ public final class NeoTabConfigScreenRenderer {
         int bx = btn.getX(), by = btn.getY(), bw = btn.getWidth(), bh = btn.getHeight();
         AEStyleRenderer.drawSecondaryButton(g, bx, by, bw, bh, hovered);
         int textColor = hovered ? 0xFF3B3629 : 0xFF4A4233;
-        g.drawCenteredString(font, btn.getMessage(), bx + bw / 2, by + (bh - font.lineHeight) / 2, textColor);
+        int textX = bx + (bw - font.width(btn.getMessage())) / 2;
+        g.drawString(font, btn.getMessage(), textX, by + (bh - font.lineHeight) / 2, textColor, false);
     }
 
     // ── 底部按钮栏 ────────────────────────────────────────────────────────

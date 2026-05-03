@@ -356,10 +356,10 @@ public class ColorPickerWidget extends AbstractWidget {
         // 如果不可见，直接返回
         if (!this.visible) return;
         
-        // 绘制外边框背景 - 使用AE风格的内容区背景色
-        graphics.fill(getX(), getY(), getX() + width, getY() + height, 0xFF9AA0AC);
-        // 使用AE风格的轮廓色
-        graphics.renderOutline(getX(), getY(), width, height, 0xFF3A3A3A);
+        // 绘制外边框背景 - 使用整体UI背景色
+        graphics.fill(getX(), getY(), getX() + width, getY() + height, 0xFFFAF7EF);
+        // 1px 深米白色边框
+        graphics.renderOutline(getX(), getY(), width, height, 0xFFC8C0AD);
         
         // 绘制 SV 面板
         renderSVPanel(graphics);
