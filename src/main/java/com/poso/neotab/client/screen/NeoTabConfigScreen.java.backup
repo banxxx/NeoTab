@@ -1,0 +1,2147 @@
+﻿package com.poso.neotab.client.screen;
+
+import com.poso.neotab.client.gui.AEStyleRenderer;
+import com.poso.neotab.client.widget.ImprovedRichTextMultiLineEditBox;
+import com.poso.neotab.config.TabConfig;
+import com.poso.neotab.network.payload.SaveConfigPayload;
+import com.poso.neotab.network.payload.SavePlayerConfigPayload;
+import com.poso.neotab.permission.PlayerCustomizePolicy;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.network.PacketDistributor;
+
+/** NeoTab config screen - delegates to manager classes. */
+public class NeoTabConfigScreen extends Screen {
+    //  Enums 
+    public enum ScreenMode { ADMIN, PLAYER }
+
+    public enum ConfigTab {
+        PAGE_CONFIG("screen.neotab.tab.page_config"),
+        THEME("screen.neotab.tab.theme"),
+        PERMISSIONS("screen.neotab.tab.permissions");
+        final String langKey;
+        ConfigTab(String langKey) { this.langKey = langKey; }
+        Component label() { return Component.translatable(langKey); }
+    }
+
+    //  Constants 
+    private static final int MAX_CONTENT_WIDTH      = 600;  // 澧炲姞鏈€澶у唴瀹瑰搴︼紝閫傚簲妯悜甯冨眬
+    private static final int ROW_HEIGHT              = 24;
+    private static final int INPUT_HEIGHT            = 20;
+    private static final int TITLE_INPUT_HEIGHT      = 60;
+    private static final int MULTILINE_INPUT_HEIGHT  = 60;
+    private static final int TOGGLE_WIDTH            = 26;   // 閫傚悎Minecraft GUI姣斾緥鐨勫紑鍏冲搴?
+    private static final int TOGGLE_HEIGHT           = 14;   // 閫傚悎Minecraft GUI姣斾緥鐨勫紑鍏抽珮搴?
+    private static final int LAYOUT_BUTTON_WIDTH     = 80;
+    private static final int THEME_OPTION_HEIGHT     = 20;
+    private static final int THEME_OPTION_GAP        = 4;
+    private static final int THEME_LIST_INSET        = 4;
+    private static final int THEME_LIST_TOP_GAP      = 4;
+    private static final int THEME_INDICATOR_SIZE    = 8;
+    private static final int SECTION_HEADER_HEIGHT   = 18;
+    private static final int SECTION_GAP             = 16;
+    private static final int ROW_GAP                 = 10;
+    private static final int FOOTER_COLUMN_GAP       = 12;
+    private static final int VIEWPORT_TOP            = 34;
+    private static final int VIEWPORT_BOTTOM_MARGIN  = 0;  // 鍐呭鍖哄煙鐩存帴璐磋繎鎸夐挳鏍忛《閮紝涓嶩TML鍘熷瀷涓€鑷?
+    private static final int SCROLL_STEP             = 18;
+    private static final int CONTENT_TOP_PADDING     = 8;
+    private static final int TAB_BAR_WIDTH           = 120;  // Tab鏍忓搴︼紝閫備腑澶у皬
+    private static final int TAB_CONTENT_GAP         = 8;
+    private static final int TAB_BUTTON_HEIGHT       = 24;
+    private static final int TAB_BUTTON_GAP          = 4;
+    private static final int TAB_BUTTON_LEFT_PADDING = 6;
+    private static final int SCROLL_TRACK_W = 14;
+
+    //  Fields 
+    private final Screen parent;
+    private final TabConfig initialConfig;
+    private ConfigTab activeTab = ConfigTab.PAGE_CONFIG;
+    private final ScreenMode screenMode;
+    private final PlayerCustomizePolicy policy;
+    private final com.poso.neotab.config.PlayerTabConfig personalConfig;
+
+    // Managers
+    final PageConfigTabManager pageConfig;
+    final PermissionsTabManager permissions;
+    final ThemeTabManager theme;
+
+    // Bottom buttons (managed by main class)
+    private Button doneButton;
+    private Button cancelButton;
+
+    // Scroll state
+    private int scrollOffset;
+    private boolean isDraggingScrollbar = false;
+    private int dragStartY = 0;
+    private int dragStartScrollOffset = 0;
+
+    //  Constructors 
+    /** Admin constructor (full config, no restrictions). */
+    public NeoTabConfigScreen(Screen parent, TabConfig config) {
+        super(Component.translatable("screen.neotab.title"));
+        this.parent = parent;
+        this.initialConfig = config;
+        this.screenMode = ScreenMode.ADMIN;
+        this.policy = com.poso.neotab.permission.PlayerCustomizePolicy.unlocked();
+        this.personalConfig = null;
+        this.pageConfig = new PageConfigTabManager(this);
+        this.permissions = new PermissionsTabManager(this);
+        this.theme = new ThemeTabManager(this);
+    }
+
+    /** Player constructor (personal customization, restricted by policy). */
+    public NeoTabConfigScreen(Screen parent, TabConfig serverConfig,
+                              ScreenMode mode, PlayerCustomizePolicy policy,
+                              com.poso.neotab.config.PlayerTabConfig personalConfig) {
+        super(Component.translatable(
+            mode == ScreenMode.PLAYER ? "screen.neotab.title.player" : "screen.neotab.title"));
+        this.parent = parent;
+        this.initialConfig = serverConfig;
+        this.screenMode = mode;
+        this.policy = policy != null ? policy : com.poso.neotab.permission.PlayerCustomizePolicy.locked();
+        this.personalConfig = personalConfig;
+        this.pageConfig = new PageConfigTabManager(this);
+        this.permissions = new PermissionsTabManager(this);
+        this.theme = new ThemeTabManager(this);
+    }
+
+    //  Manager callback helpers 
+    <T extends AbstractWidget> T addWidget(T widget) { return addRenderableWidget(widget); }
+    @Override public void removeWidget(net.minecraft.client.gui.components.events.GuiEventListener widget) { super.removeWidget(widget); }
+    Font font() { return this.font; }
+    ConfigTab getActiveTab() { return activeTab; }
+    TabConfig getInitialConfig() { return initialConfig; }
+    ScreenMode getScreenMode() { return screenMode; }
+    void syncVisibility() { syncTabWidgetVisibility(); }
+    void reinit() { this.init(); }
+
+    /**
+     * 閲嶅缓鑷畾涔変富棰樼浉鍏虫帶浠讹紝淇濈暀褰撳墠鐨?selectedThemeId銆?
+     * 鐢ㄤ簬閲嶇疆鑷畾涔変富棰橀厤缃悗鍒锋柊鐣岄潰锛岄伩鍏?reinit() 鎶婁富棰橀€夋嫨閲嶇疆鍥?initialConfig 鐨勫€笺€?
+     */
+    void rebuildCustomThemeWidgets() {
+        // 绉婚櫎鎵€鏈夊凡娉ㄥ唽鐨?widget锛岄噸鏂板垵濮嬪寲
+        // 浣嗕繚鐣?selectedThemeId锛屼笉浠?initialConfig 閲嶈
+        String savedThemeId = theme.selectedThemeId;
+        this.init();
+        theme.selectedThemeId = savedThemeId;
+        // 閲嶆柊鍚屾 widget 鍙鎬э紙鍥犱负 init 閲屼細鏍规嵁 initialConfig 璁剧疆 selectedThemeId锛?
+        syncTabWidgetVisibility();
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        applyWidgetLayout(layout);
+    }
+    NeoTabConfigScreenLayout.Layout buildLayout() { return buildLayoutImpl(); }
+    void applyLayout(NeoTabConfigScreenLayout.Layout layout) { applyWidgetLayout(layout); }
+    void setScrollOffset(int offset, NeoTabConfigScreenLayout.Layout layout) {
+        this.scrollOffset = Math.max(0, Math.min(offset, layout.maxScroll()));
+        applyWidgetLayout(layout);
+    }
+    void adjustLayoutConfigToCurrentLimits() { pageConfig.adjustLayoutConfigToCurrentLimits(); }
+
+    //  init() 
+    @Override
+    protected void init() {
+        clearWidgets();
+        theme.themeOptionButtons.clear();
+        theme.themeOptionIds.clear();
+        permissions.clear();
+        if (activeTab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) {
+            activeTab = ConfigTab.PAGE_CONFIG;
+        }
+        com.poso.neotab.config.TabConfig effectiveInit = (screenMode == ScreenMode.PLAYER && personalConfig != null)
+            ? personalConfig.mergeInto(initialConfig, policy)
+            : initialConfig;
+        theme.selectedThemeId = com.poso.neotab.theme.TabThemeRegistry.get(effectiveInit.tabTheme()).id();
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        pageConfig.initPageConfigWidgets(layout, effectiveInit, policy);
+        theme.initThemeWidgets(layout);
+        if (screenMode == ScreenMode.ADMIN) {
+            permissions.initPermissionsWidgets(layout, initialConfig);
+        }
+        pageConfig.initFooterWidgets(layout, effectiveInit, policy);
+        this.doneButton = addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> save())
+            .bounds(layout.doneButtonX(), layout.buttonY(), layout.buttonWidth(), INPUT_HEIGHT).build());
+        this.cancelButton = addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> onClose())
+            .bounds(layout.cancelButtonX(), layout.buttonY(), layout.buttonWidth(), INPUT_HEIGHT).build());
+        theme.rebuildCustomBorderColorButtons();
+        pageConfig.adjustLayoutConfigToCurrentLimits();
+        clampScroll(layout);
+        applyWidgetLayout(layout);
+        syncTabWidgetVisibility();
+    }
+
+    //  syncTabWidgetVisibility() 
+    private void syncTabWidgetVisibility() {
+        boolean page  = activeTab == ConfigTab.PAGE_CONFIG;
+        boolean themeTab = activeTab == ConfigTab.THEME;
+        boolean perms = activeTab == ConfigTab.PERMISSIONS;
+        // Permissions tab widgets
+        for (CycleButton<Boolean> btn : permissions.globalPolicyToggles) btn.visible = perms;
+        if (permissions.playerSearchBox != null) permissions.playerSearchBox.visible = perms;
+        if (permissions.permAddButton != null) permissions.permAddButton.visible = perms;
+        for (Button btn : permissions.targetPlayerRemoveButtons) btn.visible = perms;
+        if (permissions.permSaveButton != null) permissions.permSaveButton.visible = false;  // 鏃х殑淇濆瓨鎸夐挳宸插簾寮?
+        if (permissions.applyToAllButton != null) permissions.applyToAllButton.visible = perms;  // 搴旂敤鍒板叏閮ㄧ帺瀹舵寜閽?
+        if (permissions.applyToAddedButton != null) permissions.applyToAddedButton.visible = perms;  // 搴旂敤鍒板凡娣诲姞鐜╁鎸夐挳
+        // Page config tab widgets
+        pageConfig.topTitleEnabled.visible       = page;
+        pageConfig.topTitleInput.visible         = page;
+        pageConfig.topContentEnabled.visible     = page;
+        pageConfig.topContentInput.visible       = page;
+        pageConfig.betterPingEnabled.visible     = page;
+        pageConfig.onlineDurationEnabled.visible = page;
+        pageConfig.titleEnabled.visible          = page;
+        pageConfig.healthDisplayEnabled.visible  = page;
+        pageConfig.footerCustomInput.visible     = page;
+        pageConfig.footerTpsEnabled.visible      = page;
+        pageConfig.footerMsptEnabled.visible     = page;
+        pageConfig.footerOnlineEnabled.visible   = page;
+        // Theme tab widgets
+        pageConfig.healthDisplayMode.visible     = themeTab;
+        if (pageConfig.layoutEnabledToggle != null) pageConfig.layoutEnabledToggle.visible = themeTab;
+        if (pageConfig.layoutColumnsButton != null) pageConfig.layoutColumnsButton.visible = themeTab;
+        if (pageConfig.layoutRowsButton    != null) pageConfig.layoutRowsButton.visible    = themeTab;
+        for (Button button : theme.themeOptionButtons) button.visible = themeTab;
+        boolean isCustom = "custom".equals(theme.selectedThemeId);
+        theme.customBackgroundColorButton.visible = themeTab && isCustom;
+        if (theme.customBackgroundHexInput != null) theme.customBackgroundHexInput.visible = themeTab && isCustom;
+        theme.customBorderOuterFactorButton.visible = themeTab && isCustom;
+        if (theme.customBorderOuterHexInput != null) theme.customBorderOuterHexInput.visible = themeTab && isCustom;
+        theme.customAnimationToggle.visible = themeTab && isCustom;
+        if (theme.customAnimationSpeedButton != null) theme.customAnimationSpeedButton.visible = themeTab && isCustom;
+        if (theme.resetToDefaultButton != null) theme.resetToDefaultButton.visible = themeTab && isCustom;
+        if (theme.resetConfirmButton != null) theme.resetConfirmButton.visible = themeTab && isCustom && theme.showResetConfirmation;
+        if (theme.resetCancelButton != null) theme.resetCancelButton.visible = themeTab && isCustom && theme.showResetConfirmation;
+        for (Button button : theme.customBorderColorButtons) button.visible = themeTab && isCustom;
+        for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) {
+            box.visible = themeTab && isCustom;
+        }
+        for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) box.visible = themeTab && isCustom;
+        if (theme.addCustomBorderColorButton != null) theme.addCustomBorderColorButton.visible = themeTab && isCustom;
+        if (theme.embeddedColorPicker != null) theme.embeddedColorPicker.visible = themeTab && isCustom && theme.currentSelectedColorType != null;
+        // 涓嶅啀闅愯棌"娣诲姞杈规棰滆壊"鎸夐挳锛岃€屾槸閫氳繃棰滆壊閫夋嫨鍣ㄧ殑鑳屾櫙閬僵鏉ラ伄鎸?
+    }
+
+    //  switchTab 
+    private void switchTab(ConfigTab tab) {
+        if (activeTab == tab) return;
+        
+        // 鍒囨崲鏍囩椤垫椂娓呴櫎鎵€鏈塇EX杈撳叆妗嗙殑鐒︾偣
+        for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+            hexBox.setFocused(false);
+        }
+        
+        activeTab = tab;
+        scrollOffset = 0;
+        if (theme.showResetConfirmation) {
+            theme.showResetConfirmation = false;
+        }
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        clampScroll(layout);
+        applyWidgetLayout(layout);
+        syncTabWidgetVisibility();
+    }
+
+    //  onClose / repositionElements 
+    @Override
+    public void onClose() {
+        this.minecraft.setScreen(this.parent);
+    }
+
+    @Override
+    public void repositionElements() {
+        super.repositionElements();
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        clampScroll(layout);
+        applyWidgetLayout(layout);
+    }
+    // 鈹€鈹€ mouseScrolled 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        
+        // 妫€鏌ユ槸鍚﹀湪涓嬫媺鑿滃崟涓婃粴鍔?
+        if (activeTab == ConfigTab.PERMISSIONS && permissions.playerSearchBox != null 
+                && permissions.playerSearchBox.isFocused() && !permissions.playerSuggestions.isEmpty()) {
+            int dropX = permissions.playerSearchBox.getX();
+            int dropY = permissions.playerSearchBox.getY() + INPUT_HEIGHT + 1;
+            int dropW = permissions.playerSearchBox.getWidth();
+            int maxVisibleItems = 8;
+            int visibleItems = Math.min(permissions.playerSuggestions.size(), maxVisibleItems);
+            int itemH = INPUT_HEIGHT - 2;
+            int totalH = visibleItems * itemH + 2;
+            
+            if (mouseX >= dropX && mouseX < dropX + dropW && mouseY >= dropY && mouseY < dropY + totalH) {
+                // 鍦ㄤ笅鎷夎彍鍗曚笂婊氬姩
+                int maxScroll = Math.max(0, (permissions.playerSuggestions.size() - maxVisibleItems) * itemH);
+                permissions.dropdownScrollOffset = Math.max(0, Math.min(maxScroll, 
+                    permissions.dropdownScrollOffset - (int) Math.round(scrollY * itemH)));
+                return true;
+            }
+        }
+        
+        if (hoveredScrollableWidget(mouseX, mouseY) instanceof CycleButton<?>) {
+            if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
+            setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
+            return true;
+        }
+        AbstractWidget hovered = hoveredScrollableWidget(mouseX, mouseY);
+        if (hovered instanceof ImprovedRichTextMultiLineEditBox input) {
+            boolean onInputScrollbar = mouseX >= input.getX() + input.getWidth()
+                    && mouseX <= input.getX() + input.getWidth() + 8;
+            if (onInputScrollbar) return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+        if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
+        // 婊氬姩鏃堕殣钘忛鑹查€夋嫨鍣紙瀵规墍鏈夐鑹茬被鍨嬶級
+        if (theme.currentSelectedColorType != null) {
+            theme.currentSelectedColorType = null;
+            theme.currentSelectedBorderIndex = -1;
+            // 娓呴櫎鎵€鏈塇EX杈撳叆妗嗙殑鐒︾偣
+            if (theme.customBackgroundHexInput != null) {
+                theme.customBackgroundHexInput.setFocused(false);
+            }
+            if (theme.customBorderOuterHexInput != null) {
+                theme.customBorderOuterHexInput.setFocused(false);
+            }
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                hexBox.setFocused(false);
+            }
+            syncTabWidgetVisibility();
+        }
+        setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
+        return true;
+    }
+
+    // 鈹€鈹€ mouseClicked 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        
+        // 浼樺厛妫€鏌ョ帺瀹舵悳绱㈡鐨勬竻闄ゆ寜閽紙鍦ㄦ潈闄愰厤缃爣绛鹃〉锛?
+        if (activeTab == ConfigTab.PERMISSIONS && button == 0 && permissions.playerSearchBox != null) {
+            if (permissions.playerSearchBox instanceof com.poso.neotab.client.widget.CenteredEditBox centeredBox) {
+                if (centeredBox.handleClearButtonClick(mouseX, mouseY)) {
+                    permissions.playerSuggestions.clear();
+                    permissions.dropdownScrollOffset = 0;
+                    return true;
+                }
+            }
+        }
+        
+        // 浼樺厛妫€鏌EX杈撳叆妗嗙殑鐐瑰嚮锛堝湪鎵€鏈夊叾浠栧鐞嗕箣鍓嶏級
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId) && button == 0) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isMouseOver(mouseX, mouseY)) {
+                    // 娓呴櫎鍏朵粬杈撳叆妗嗙殑鐒︾偣
+                    for (net.minecraft.client.gui.components.EditBox otherBox : theme.customBorderHexInputs) {
+                        if (otherBox != hexBox) {
+                            otherBox.setFocused(false);
+                        }
+                    }
+                    // 璁剧疆褰撳墠杈撳叆妗嗙劍鐐?
+                    setFocused(hexBox);
+                    hexBox.setFocused(true);
+                    return hexBox.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+        }
+        
+        // Bottom button bar
+        if (mouseY >= layout.buttonBarTop()) {
+            if (theme.showResetConfirmation) { theme.showResetConfirmation = false; syncTabWidgetVisibility(); }
+            if (doneButton != null) {
+                int bx = doneButton.getX(), by = doneButton.getY();
+                if (mouseX >= bx && mouseX <= bx + doneButton.getWidth() && mouseY >= by && mouseY <= by + doneButton.getHeight())
+                    return doneButton.mouseClicked(mouseX, mouseY, button);
+            }
+            if (cancelButton != null) {
+                int bx = cancelButton.getX(), by = cancelButton.getY();
+                if (mouseX >= bx && mouseX <= bx + cancelButton.getWidth() && mouseY >= by && mouseY <= by + cancelButton.getHeight())
+                    return cancelButton.mouseClicked(mouseX, mouseY, button);
+            }
+            return true;
+        }
+        // Theme tab buttons
+        if (activeTab == ConfigTab.THEME) {
+            for (Button themeBtn : theme.themeOptionButtons) {
+                if (themeBtn.visible && themeBtn.isMouseOver(mouseX, mouseY)) {
+                    if (theme.showResetConfirmation) { theme.showResetConfirmation = false; syncTabWidgetVisibility(); }
+                    return themeBtn.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+        }
+        if ("custom".equals(theme.selectedThemeId) && activeTab == ConfigTab.THEME) {
+            if (theme.resetConfirmButton != null && theme.resetConfirmButton.visible && theme.resetConfirmButton.isMouseOver(mouseX, mouseY))
+                return theme.resetConfirmButton.mouseClicked(mouseX, mouseY, button);
+            if (theme.resetCancelButton != null && theme.resetCancelButton.visible && theme.resetCancelButton.isMouseOver(mouseX, mouseY))
+                return theme.resetCancelButton.mouseClicked(mouseX, mouseY, button);
+            if (theme.resetToDefaultButton != null && theme.resetToDefaultButton.visible && theme.resetToDefaultButton.isMouseOver(mouseX, mouseY))
+                return theme.resetToDefaultButton.mouseClicked(mouseX, mouseY, button);
+            if (theme.showResetConfirmation) { theme.showResetConfirmation = false; syncTabWidgetVisibility(); }
+            if (theme.customAnimationToggle != null && theme.customAnimationToggle.visible
+                    && mouseX >= theme.customAnimationToggle.getX()
+                    && mouseX < theme.customAnimationToggle.getX() + theme.customAnimationToggle.getWidth()
+                    && mouseY >= theme.customAnimationToggle.getY()
+                    && mouseY < theme.customAnimationToggle.getY() + theme.customAnimationToggle.getHeight())
+                return theme.customAnimationToggle.mouseClicked(mouseX, mouseY, button);
+            if (theme.customAnimationSpeedButton != null && theme.customAnimationSpeedButton.visible
+                    && theme.customAnimationSpeedButton.isMouseOver(mouseX, mouseY))
+                return theme.customAnimationSpeedButton.mouseClicked(mouseX, mouseY, button);
+            if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible && theme.customBorderOuterFactorButton.isMouseOver(mouseX, mouseY))
+                return theme.customBorderOuterFactorButton.mouseClicked(mouseX, mouseY, button);
+            if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible && theme.customBackgroundColorButton.isMouseOver(mouseX, mouseY))
+                return theme.customBackgroundColorButton.mouseClicked(mouseX, mouseY, button);
+            for (Button btn : theme.customBorderColorButtons) {
+                if (btn.visible && btn.isMouseOver(mouseX, mouseY)) return btn.mouseClicked(mouseX, mouseY, button);
+            }
+            if (theme.addCustomBorderColorButton != null && theme.addCustomBorderColorButton.visible && theme.addCustomBorderColorButton.isMouseOver(mouseX, mouseY))
+                return theme.addCustomBorderColorButton.mouseClicked(mouseX, mouseY, button);
+        }
+        // Color picker
+        if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+            int px = theme.embeddedColorPicker.getX(), py = theme.embeddedColorPicker.getY();
+            int pw = theme.embeddedColorPicker.getWidth(), ph = theme.embeddedColorPicker.getHeight();
+            if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
+                boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
+                if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); return true; }
+            } else if (theme.currentSelectedColorType != null) {
+                // 鐐瑰嚮棰滆壊閫夋嫨鍣ㄥ閮ㄦ椂闅愯棌锛堝鎵€鏈夐鑹茬被鍨嬶細background, outer_border, border_*锛?
+                boolean clickedSwatch = false;
+                boolean clickedHexInput = false;
+                
+                // 妫€鏌ユ槸鍚︾偣鍑讳簡鑹插潡鎸夐挳鏈韩锛堥伩鍏嶇珛鍗冲叧闂級
+                if ("background".equals(theme.currentSelectedColorType)) {
+                    if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible 
+                            && theme.customBackgroundColorButton.isMouseOver(mouseX, mouseY)) {
+                        clickedSwatch = true;
+                    }
+                    // 妫€鏌ユ槸鍚︾偣鍑讳簡鑳屾櫙棰滆壊HEX杈撳叆妗?
+                    if (theme.customBackgroundHexInput != null && theme.customBackgroundHexInput.visible 
+                            && theme.customBackgroundHexInput.isMouseOver(mouseX, mouseY)) {
+                        clickedHexInput = true;
+                        setFocused(theme.customBackgroundHexInput);
+                        theme.customBackgroundHexInput.setFocused(true);
+                    }
+                } else if ("outer_border".equals(theme.currentSelectedColorType)) {
+                    if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible 
+                            && theme.customBorderOuterFactorButton.isMouseOver(mouseX, mouseY)) {
+                        clickedSwatch = true;
+                    }
+                    // 妫€鏌ユ槸鍚︾偣鍑讳簡澶栧眰杈规棰滆壊HEX杈撳叆妗?
+                    if (theme.customBorderOuterHexInput != null && theme.customBorderOuterHexInput.visible 
+                            && theme.customBorderOuterHexInput.isMouseOver(mouseX, mouseY)) {
+                        clickedHexInput = true;
+                        setFocused(theme.customBorderOuterHexInput);
+                        theme.customBorderOuterHexInput.setFocused(true);
+                    }
+                } else if (theme.currentSelectedColorType.startsWith("border_")) {
+                    // 杈规棰滆壊椤?
+                    for (Button btn : theme.customBorderColorButtons) {
+                        if (btn.visible && btn.isMouseOver(mouseX, mouseY)) { clickedSwatch = true; break; }
+                    }
+                    // 妫€鏌ユ槸鍚︾偣鍑讳簡HEX杈撳叆妗?
+                    for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                        if (hexBox.visible && hexBox.isMouseOver(mouseX, mouseY)) { 
+                            clickedHexInput = true; 
+                            // 璁剧疆鐒︾偣鍒扮偣鍑荤殑杈撳叆妗?
+                            setFocused(hexBox);
+                            hexBox.setFocused(true);
+                            // 娓呴櫎鍏朵粬杈撳叆妗嗙殑鐒︾偣
+                            for (net.minecraft.client.gui.components.EditBox otherBox : theme.customBorderHexInputs) {
+                                if (otherBox != hexBox) {
+                                    otherBox.setFocused(false);
+                                }
+                            }
+                            break; 
+                        }
+                    }
+                }
+                
+                if (!clickedSwatch && !clickedHexInput) {
+                    // 娓呴櫎棰滆壊閫夋嫨鍣ㄧ姸鎬?
+                    theme.currentSelectedColorType = null;
+                    theme.currentSelectedBorderIndex = -1;
+                    // 娓呴櫎鎵€鏈塇EX杈撳叆妗嗙殑鐒︾偣
+                    if (theme.customBackgroundHexInput != null) {
+                        theme.customBackgroundHexInput.setFocused(false);
+                    }
+                    if (theme.customBorderOuterHexInput != null) {
+                        theme.customBorderOuterHexInput.setFocused(false);
+                    }
+                    for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                        hexBox.setFocused(false);
+                    }
+                    syncTabWidgetVisibility();
+                    NeoTabConfigScreenLayout.Layout newLayout = buildLayoutImpl();
+                    applyWidgetLayout(newLayout);
+                }
+            }
+        }
+        // Permissions dropdown
+        if (activeTab == ConfigTab.PERMISSIONS
+                && permissions.playerSearchBox != null && permissions.playerSearchBox.isFocused()
+                && !permissions.playerSuggestions.isEmpty() && button == 0) {
+            int dropX = permissions.playerSearchBox.getX();
+            int dropY = permissions.playerSearchBox.getY() + INPUT_HEIGHT + 1;
+            int dropW = permissions.playerSearchBox.getWidth();
+            int itemH = INPUT_HEIGHT - 2;
+            int maxVisibleItems = 8;
+            int visibleItems = Math.min(permissions.playerSuggestions.size(), maxVisibleItems);
+            int totalH = visibleItems * itemH + 2;
+            boolean needsScrollbar = permissions.playerSuggestions.size() > maxVisibleItems;
+            
+            // 妫€鏌ユ槸鍚︾偣鍑诲湪涓嬫媺鑿滃崟鍖哄煙
+            if (mouseX >= dropX && mouseX < dropX + dropW && mouseY >= dropY && mouseY < dropY + totalH) {
+                // 妫€鏌ユ槸鍚︾偣鍑诲湪婊氬姩鏉′笂
+                if (needsScrollbar && mouseX >= dropX + dropW - 8) {
+                    // 鐐瑰嚮鍦ㄦ粴鍔ㄦ潯鍖哄煙锛屼笉澶勭悊椤圭洰閫夋嫨
+                    return true;
+                }
+                
+                // 鐐瑰嚮鍦ㄩ」鐩笂锛岃€冭檻婊氬姩鍋忕Щ
+                int scrollOffset = permissions.dropdownScrollOffset;
+                for (int i = 0; i < permissions.playerSuggestions.size(); i++) {
+                    int itemY = dropY + 1 + i * itemH - scrollOffset;
+                    if (itemY + itemH < dropY || itemY > dropY + totalH) continue;
+                    
+                    if (mouseY >= itemY && mouseY < itemY + itemH) {
+                        permissions.playerSearchBox.setValue(permissions.playerSuggestions.get(i));
+                        permissions.playerSuggestions.clear();
+                        permissions.dropdownScrollOffset = 0;  // 閲嶇疆婊氬姩
+                        return true;
+                    }
+                }
+                return true;  // 鐐瑰嚮鍦ㄤ笅鎷夎彍鍗曞唴浣嗕笉鍦ㄤ换浣曢」鐩笂
+            }
+        }
+        
+        // Permissions tab buttons - 鏄惧紡澶勭悊鏉冮檺閰嶇疆椤甸潰鐨勬墍鏈夋寜閽?
+        if (activeTab == ConfigTab.PERMISSIONS && button == 0) {
+            // 鍏ㄥ眬绛栫暐寮€鍏虫寜閽?
+            for (CycleButton<Boolean> toggle : permissions.globalPolicyToggles) {
+                if (toggle.visible && toggle.isMouseOver(mouseX, mouseY)) {
+                    return toggle.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+            
+            // 娣诲姞鎸夐挳
+            if (permissions.permAddButton != null && permissions.permAddButton.visible 
+                    && permissions.permAddButton.isMouseOver(mouseX, mouseY)) {
+                return permissions.permAddButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 鍒犻櫎鎸夐挳
+            for (Button removeBtn : permissions.targetPlayerRemoveButtons) {
+                if (removeBtn.visible && removeBtn.isMouseOver(mouseX, mouseY)) {
+                    return removeBtn.mouseClicked(mouseX, mouseY, button);
+                }
+            }
+            
+            // 搴旂敤鍒板叏閮ㄧ帺瀹舵寜閽?
+            if (permissions.applyToAllButton != null && permissions.applyToAllButton.visible 
+                    && permissions.applyToAllButton.isMouseOver(mouseX, mouseY)) {
+                return permissions.applyToAllButton.mouseClicked(mouseX, mouseY, button);
+            }
+            
+            // 搴旂敤鍒板凡娣诲姞鐜╁鎸夐挳
+            if (permissions.applyToAddedButton != null && permissions.applyToAddedButton.visible 
+                    && permissions.applyToAddedButton.isMouseOver(mouseX, mouseY)) {
+                return permissions.applyToAddedButton.mouseClicked(mouseX, mouseY, button);
+            }
+        }
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        if (handled) return true;
+        // Tab bar click
+        if (button == 0 && mouseY >= VIEWPORT_TOP) {
+            int tabBarBgX = layout.tabBarX() + 1;  // Tab鏍忚儗鏅捣濮嬩綅缃?
+            int tabBtnX = tabBarBgX + TAB_BUTTON_LEFT_PADDING;
+            int tabBtnW = (TAB_BAR_WIDTH - 1) - TAB_BUTTON_LEFT_PADDING - 1 - 4;  // 鑳屾櫙瀹藉害 - 宸adding - 鍒嗛殧绾?- 鍙硃adding
+            if (mouseX >= tabBtnX && mouseX <= tabBtnX + tabBtnW) {
+                int tabIndex = 0;
+                for (ConfigTab tab : ConfigTab.values()) {
+                    if (tab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) continue;
+                    int btnY = VIEWPORT_TOP + tabIndex * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
+                    if (mouseY >= btnY && mouseY <= btnY + TAB_BUTTON_HEIGHT) {
+                        if (tab == ConfigTab.PERMISSIONS) {
+                            Minecraft mc = Minecraft.getInstance();
+                            if (mc.player == null || !mc.player.hasPermissions(2)) {
+                                mc.player.sendSystemMessage(Component.translatable("message.neotab.no_permission"));
+                                return true;
+                            }
+                        }
+                        switchTab(tab);
+                        return true;
+                    }
+                    tabIndex++;
+                }
+            }
+        }
+        // Scrollbar click
+        if (button == 0 && layout.maxScroll() > 0) {
+            int thumbX = layout.right() + 8;
+            int trackTop = layout.viewportTop(), trackBottom = layout.viewportBottom();
+            int trackH = trackBottom - trackTop;
+            int thumbPad = 2, thumbW = SCROLL_TRACK_W, thumbSize = thumbW + 6;
+            if (mouseX >= thumbX && mouseX <= thumbX + thumbW && mouseY >= trackTop && mouseY <= trackBottom) {
+                int travelH = trackH - thumbSize - thumbPad * 2;
+                int thumbY = travelH > 0 ? trackTop + thumbPad + this.scrollOffset * travelH / layout.maxScroll() : trackTop + thumbPad;
+                if (mouseY >= thumbY && mouseY <= thumbY + thumbSize) {
+                    isDraggingScrollbar = true; dragStartY = (int) mouseY; dragStartScrollOffset = this.scrollOffset;
+                } else {
+                    int newOffset = travelH > 0 ? (int) ((mouseY - trackTop - thumbPad - thumbSize / 2.0) * layout.maxScroll() / travelH) : 0;
+                    setScrollOffsetInternal(newOffset, layout);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && isDraggingScrollbar) { isDraggingScrollbar = false; return true; }
+        if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+            if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (isDraggingScrollbar && button == 0) {
+            NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+            int trackH = layout.viewportBottom() - layout.viewportTop();
+            int thumbSize = SCROLL_TRACK_W + 6, thumbPad = 2;
+            int travelH = trackH - thumbSize - thumbPad * 2;
+            if (travelH > 0) {
+                int deltaY = (int) mouseY - dragStartY;
+                setScrollOffsetInternal(dragStartScrollOffset + deltaY * layout.maxScroll() / travelH, layout);
+            }
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+
+
+    // 鈹€鈹€ render 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
+        clampScroll(layout);
+        applyWidgetLayout(layout);
+        this.renderBackground(g, mouseX, mouseY, partialTick);
+
+        int scrollTrackW = SCROLL_TRACK_W;
+        int panelX = layout.tabBarX() - 2;
+        int panelY = 8;
+        int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
+        
+        // 闄愬埗闈㈡澘楂樺害锛屼娇鍏舵洿绗﹀悎妯悜甯冨眬锛堝搴?> 楂樺害锛?
+        // HTML涓殑姣斾緥鏄?820:600 鈮?1.37:1
+        int maxPanelH = (int)(panelW / 1.37);  // 鏍规嵁瀹藉害璁＄畻鏈€澶ч珮搴?
+        int availableH = this.height - panelY - 8;
+        int panelH = Math.min(maxPanelH, availableH);
+        
+        AEStyleRenderer.drawMainPanel(g, panelX, panelY, panelW, panelH);
+
+        // 缁樺埗鏍囬鏍忔笎鍙樿儗鏅紙鍦ㄤ富闈㈡澘杈规鍐咃級
+        int titleBarHeight = 24;
+        AEStyleRenderer.drawTitleBarGradient(g, panelX + 3, panelY + 3, panelW - 6, titleBarHeight);
+
+        net.minecraft.network.chat.Component boldTitle = this.title.copy()
+                .withStyle(net.minecraft.ChatFormatting.BOLD);
+        int titleTextX = panelX + 10;  // 宸﹀榻愶紝璺濈宸﹁竟妗?0鍍忕礌
+        g.drawString(this.font, boldTitle, titleTextX, panelY + 6, AEStyleRenderer.COLOR_TITLE_TEXT, false);
+
+        // 鏍囬鏍忓簳閮ㄥ垎闅旂嚎锛堝湪鏍囬涓嬫柟锛屽垎闅旀爣棰樻爮鍜屼富浣撳尯鍩燂級
+        int titleBarBottom = panelY + 24;  // 鏍囬鏍忛珮搴︾害24px
+        AEStyleRenderer.drawTitleBarDivider(g, panelX + 3, titleBarBottom, panelW - 6);
+
+        NeoTabConfigScreenRenderer.renderTabBar(g, this.font, this.activeTab, layout, panelY, mouseX, mouseY, this.screenMode);
+        renderScrollableContent(g, mouseX, mouseY, partialTick, layout);
+        NeoTabConfigScreenRenderer.renderButtonBar(g, layout, this.height);
+        // Fixed widgets (done/cancel buttons) - 瀹屾垚鐢ㄤ富瑕佹牱寮忥紙缁胯壊锛夛紝鍙栨秷鐢ㄦ瑕佹牱寮忥紙绫宠壊锛?
+        NeoTabConfigScreenRenderer.renderPrimaryButton(g, this.font, this.doneButton, mouseX, mouseY);
+        NeoTabConfigScreenRenderer.renderSecondaryButton(g, this.font, this.cancelButton, mouseX, mouseY);
+        // Permissions dropdown on top
+        renderPlayerSuggestionDropdown(g, mouseX, mouseY);
+        // 鈹€鈹€ 棰滆壊鐩稿叧娴姩缁勪欢锛堟渶鍚庢覆鏌擄紝纭繚鍦ㄦ渶涓婂眰锛夆攢鈹€
+        renderColorOverlay(g, mouseX, mouseY, partialTick, layout);
+    }
+
+    private void renderPlayerSuggestionDropdown(GuiGraphics g, int mouseX, int mouseY) {
+        if (activeTab != ConfigTab.PERMISSIONS) return;
+        if (permissions.playerSearchBox == null) return;
+        
+        boolean showingDropdown = permissions.playerSearchBox.isFocused() && !permissions.playerSuggestions.isEmpty();
+        
+        // 褰撴樉绀轰笅鎷夋鏃讹紝涓存椂闅愯棌鍒犻櫎鎸夐挳浠ラ槻姝㈢┛閫?
+        if (showingDropdown) {
+            for (Button btn : permissions.targetPlayerRemoveButtons) {
+                btn.visible = false;
+            }
+        }
+        
+        if (!showingDropdown) {
+            // 鎭㈠鍒犻櫎鎸夐挳鐨勫彲瑙佹€?
+            for (Button btn : permissions.targetPlayerRemoveButtons) {
+                btn.visible = true;
+            }
+            return;
+        }
+        
+        int dropX = permissions.playerSearchBox.getX();
+        int dropY = permissions.playerSearchBox.getY() + INPUT_HEIGHT + 1;
+        int dropW = permissions.playerSearchBox.getWidth();
+        int itemH = INPUT_HEIGHT - 2;
+        
+        // 闄愬埗涓嬫媺鑿滃崟鏈€澶ч珮搴︼紙鏈€澶氭樉绀?涓」鐩級
+        int maxVisibleItems = 8;
+        int visibleItems = Math.min(permissions.playerSuggestions.size(), maxVisibleItems);
+        int totalH = visibleItems * itemH + 2;
+        boolean needsScrollbar = permissions.playerSuggestions.size() > maxVisibleItems;
+        
+        // 缁樺埗涓嬫媺鑿滃崟鑳屾櫙鍜岃竟妗嗭紙鐧借壊鑳屾櫙锛?
+        g.fill(dropX - 1, dropY - 1, dropX + dropW + 1, dropY + totalH + 1, 0xFFA0A0A0);  // 鐏拌壊杈规
+        g.fill(dropX, dropY, dropX + dropW, dropY + totalH, 0xFFFFFFFF);  // 鐧借壊鑳屾櫙
+        
+        // 鍚敤瑁佸壀鍖哄煙
+        g.enableScissor(dropX, dropY, dropX + dropW, dropY + totalH);
+        
+        // 浣跨敤婊氬姩鍋忕Щ
+        int scrollOffset = permissions.dropdownScrollOffset;
+        
+        // 缁樺埗鍙鐨勯」鐩?
+        for (int i = 0; i < permissions.playerSuggestions.size(); i++) {
+            int itemY = dropY + 1 + i * itemH - scrollOffset;
+            
+            // 璺宠繃涓嶅彲瑙佺殑椤圭洰
+            if (itemY + itemH < dropY || itemY > dropY + totalH) continue;
+            
+            boolean hovered = mouseX >= dropX && mouseX < dropX + dropW - (needsScrollbar ? 8 : 0) 
+                && mouseY >= itemY && mouseY < itemY + itemH && mouseY >= dropY && mouseY < dropY + totalH;
+            if (hovered) g.fill(dropX, itemY, dropX + dropW - (needsScrollbar ? 8 : 0), itemY + itemH, 0xFFB8D4A8);  // 鑾缁胯壊鎮仠鑳屾櫙
+            g.drawString(this.font, permissions.playerSuggestions.get(i),
+                dropX + 4, itemY + (itemH - this.font.lineHeight) / 2,
+                0xFF000000, false);  // 榛戣壊鏂囧瓧
+        }
+        
+        g.disableScissor();
+        
+        // 缁樺埗婊氬姩鏉★紙濡傛灉闇€瑕侊級
+        if (needsScrollbar) {
+            int scrollbarX = dropX + dropW - 6;
+            int scrollbarW = 4;
+            int scrollbarH = totalH - 4;
+            int maxScroll = (permissions.playerSuggestions.size() - maxVisibleItems) * itemH;
+            int thumbH = Math.max(20, scrollbarH * visibleItems / permissions.playerSuggestions.size());
+            int thumbY = scrollbarH > thumbH ? (int)((float)scrollOffset / maxScroll * (scrollbarH - thumbH)) : 0;
+            
+            // 婊氬姩鏉¤建閬擄紙娴呯伆鑹诧級
+            g.fill(scrollbarX, dropY + 2, scrollbarX + scrollbarW, dropY + totalH - 2, 0xFFD0D0D0);
+            // 婊氬姩鏉℃粦鍧楋紙娣辩伆鑹诧紝鏇存槑鏄撅級
+            g.fill(scrollbarX, dropY + 2 + thumbY, scrollbarX + scrollbarW, dropY + 2 + thumbY + thumbH, 0xFF808080);
+        }
+    }
+
+    private void renderColorOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick,
+                                    NeoTabConfigScreenLayout.Layout layout) {
+        if (activeTab != ConfigTab.THEME) return;
+
+        if (theme.embeddedColorPicker == null || !theme.embeddedColorPicker.visible) return;
+
+        int py = theme.embeddedColorPicker.getY();
+        int ph = theme.embeddedColorPicker.getHeight();
+        int pw = theme.embeddedColorPicker.getWidth();
+        int cpX = theme.embeddedColorPicker.getX();
+
+        // 鏅鸿兘缈昏浆锛氫笅鏂圭┖闂翠笉瓒虫椂鍚戜笂灞曞紑
+        int renderY = py;
+        if (py + ph > layout.buttonBarTop()) {
+            renderY = Math.max(layout.viewportTop(), py - ph - 28);
+        }
+        theme.embeddedColorPicker.setY(renderY);
+
+        // 閾轰笉閫忔槑鑳屾櫙锛岄樆鏂笅灞傛枃瀛?鎺т欢娓楅€?
+        g.fill(cpX, renderY, cpX + pw, renderY + ph, 0xFFFAF7EF);
+        theme.embeddedColorPicker.render(g, mouseX, mouseY, partialTick);
+    }
+
+    private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, NeoTabConfigScreenLayout.Layout layout) {
+        // 鍐呭鍖哄煙鑳屾櫙锛氫粠Tab鏍忓彸杈圭晫鍒颁富闈㈡澘鍙宠竟鐣岋紝浠庢爣棰樻爮鍒嗛殧绾夸笅鏂瑰埌鎸夐挳鏍忛《閮?
+        int tabBarX = layout.tabBarX();
+        int panelY = 8;  // 涓婚潰鏉块《閮╕鍧愭爣
+        int titleBarHeight = 25;  // 鏍囬鏍忛珮搴︼紙鍖呮嫭鍒嗛殧绾匡級
+        
+        int contentAreaX = tabBarX + TAB_BAR_WIDTH;  // 浠嶵ab鏍忓彸杈圭晫寮€濮?
+        int contentAreaY = panelY + titleBarHeight;  // 浠庢爣棰樻爮鍒嗛殧绾夸笅鏂瑰紑濮嬶紙涓嶵ab鏍忓悓楂橈級
+        
+        // 璁＄畻涓婚潰鏉跨殑鍙宠竟鐣?
+        int scrollTrackW = SCROLL_TRACK_W;
+        int panelX = tabBarX - 2;
+        int panelRightInner = panelX + ((layout.right() + 8 + scrollTrackW + 4) - panelX) - 3;  // 涓婚潰鏉垮彸杈圭晫鍐呬晶锛堝噺鍘昏竟妗嗭級
+        
+        int contentAreaW = panelRightInner - contentAreaX;  // 浠嶵ab鏍忓彸杈圭晫鍒颁富闈㈡澘鍙宠竟鐣?
+        int contentAreaH = layout.buttonBarTop() - contentAreaY;  // 浠庢爣棰樻爮鍒嗛殧绾夸笅鏂瑰埌鎸夐挳鏍忛《閮?
+        AEStyleRenderer.drawContentArea(g, contentAreaX, contentAreaY, contentAreaW, contentAreaH);
+        g.enableScissor(layout.scissorLeft(), layout.viewportTop(), layout.scissorRight(), layout.viewportBottom());
+
+        if (activeTab == ConfigTab.PAGE_CONFIG) {
+            int CARD_PADDING = 10;
+            
+            // 椤堕儴淇℃伅鍒嗗尯鏍囬
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.section.top"),
+                    layout.left(), layout.toScreenY(layout.topSectionHeaderY()), layout.right());
+            
+            // 鏍囬淇℃伅鍗＄墖
+            int cardY = layout.toScreenY(layout.topTitleRowY());
+            int titleLineHeight = this.font.lineHeight;
+            int subtitleLineHeight = this.font.lineHeight;
+            int topTitleCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + TITLE_INPUT_HEIGHT + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), topTitleCardHeight);
+            
+            // 缁樺埗鏍囬鍜屽紑鍏筹紙鍚屼竴琛岋級
+            g.drawString(this.font, Component.translatable("screen.neotab.top.title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING, 
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            // 寮€鍏虫寜閽敱widget绯荤粺缁樺埗锛屼綅缃凡鍦╝pplyLayout涓缃?
+            
+            // 缁樺埗鍓爣棰橈紙缂╁皬瀛椾綋锛?
+            drawScaledText(g, Component.translatable("screen.neotab.top.title.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            // 杈撳叆妗嗙敱widget绯荤粺缁樺埗
+            
+            // 鍐呭淇℃伅鍗＄墖
+            cardY = layout.toScreenY(layout.topContentRowY());
+            int topContentCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + MULTILINE_INPUT_HEIGHT + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), topContentCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.top.content"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.top.content.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 鐜╁鍒楄〃鍒嗗尯鏍囬
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.section.list"),
+                    layout.left(), layout.toScreenY(layout.listSectionHeaderY()), layout.right());
+            
+            // 鏇村ソ鐨勫欢杩熸樉绀哄崱鐗?
+            cardY = layout.toScreenY(layout.betterPingRowY());
+            int toggleCardContentH = Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight);
+            int simpleCardHeight = CARD_PADDING + toggleCardContentH + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.list.better_ping"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.list.better_ping.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 鍦ㄧ嚎鏃堕暱鏄剧ず鍗＄墖
+            cardY = layout.toScreenY(layout.onlineDurationRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.list.online_duration"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.list.online_duration.note"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 绉板彿鍔熻兘鍗＄墖
+            cardY = layout.toScreenY(layout.titleRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.list.title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.list.title.subtitle"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 鐜╁琛€閲忓崱鐗?
+            cardY = layout.toScreenY(layout.healthDisplayRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.list.health_display"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.list.health_display.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 搴曢儴淇℃伅鍒嗗尯鏍囬
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.section.footer"),
+                    layout.left(), layout.toScreenY(layout.footerSectionHeaderY()), layout.right());
+            
+            // 鑷畾涔変俊鎭崱鐗囷紙鏃犲紑鍏筹級
+            cardY = layout.toScreenY(layout.footerCustomRowY());
+            int footerCustomCardHeight = CARD_PADDING + titleLineHeight + 8 + MULTILINE_INPUT_HEIGHT + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), footerCustomCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.footer.custom"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            // TPS 淇℃伅鍗＄墖
+            cardY = layout.toScreenY(layout.footerTpsRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.footer.tps"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.footer.tps.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // MSPT 淇℃伅鍗＄墖
+            cardY = layout.toScreenY(layout.footerMsptRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.footer.mspt"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.footer.mspt.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 鍦ㄧ嚎浜烘暟鍗＄墖
+            cardY = layout.toScreenY(layout.footerOnlineRowY());
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), simpleCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.footer.online"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            drawScaledText(g, Component.translatable("screen.neotab.footer.online.tooltip"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        } else if (activeTab == ConfigTab.THEME) {
+            int CARD_PADDING = 10;
+            
+            // TAB 涓婚鍒嗗尯鏍囬
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.theme.tab_theme"),
+                    layout.left(), layout.toScreenY(layout.themeSectionHeaderY()), layout.right());
+            
+            // 棰勮涓婚鍗＄墖
+            int cardY = layout.toScreenY(layout.themeSelectorY());
+            int titleLineHeight = this.font.lineHeight;
+            int subtitleLineHeight = this.font.lineHeight;
+            
+            // 璁＄畻涓婚閫夋嫨鍣ㄥ崱鐗囬珮搴︼細padding + 鏍囬 + 鍓爣棰橀棿璺?+ 鍓爣棰?+ 鍐呭闂磋窛 + 涓婚鍒楄〃 + padding
+            int themeListHeight = theme.themeOptionButtons.size() * THEME_OPTION_HEIGHT + 
+                                  Math.max(0, theme.themeOptionButtons.size() - 1) * THEME_OPTION_GAP;
+            int themeCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + themeListHeight + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), themeCardHeight);
+            
+            // 鏍囬鏂囧瓧锛堥檺鍒跺搴︼紝閬垮厤瑕嗙洊鎸夐挳锛?
+            int titleMaxWidth = layout.contentWidth() - CARD_PADDING * 2;
+            Component titleText = Component.translatable("screen.neotab.theme.preset_title");
+            g.drawString(this.font, titleText,
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            // 鍓爣棰樻枃瀛楋紙闄愬埗瀹藉害锛岃嚜鍔ㄦ崲琛岋級
+            drawScaledText(g, Component.translatable("screen.neotab.theme.preset_subtitle"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            // 涓婚閫夋嫨鍣ㄦ寜閽敱widget绯荤粺缁樺埗
+            
+            // 濡傛灉閫変腑浜?鑷畾涔?涓婚锛屾樉绀鸿嚜瀹氫箟閰嶇疆鍗＄墖
+            if ("custom".equals(theme.selectedThemeId)) {
+                // 鑷畾涔夐厤缃崱鐗囷紙鏀惧湪鏈€涓婇潰锛屽寘鍚噸缃寜閽級
+                cardY = layout.toScreenY(layout.customResetRowY());
+                int resetCardHeight = CARD_PADDING * 2 + titleLineHeight + 2 + subtitleLineHeight + 8;  // 澧炲姞楂樺害浠ュ绾崇‘璁?鍙栨秷鎸夐挳
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), resetCardHeight);
+                
+                // 璁＄畻鏂囧瓧鍨傜洿灞呬腑浣嶇疆
+                int textBlockHeight = titleLineHeight + 2 + subtitleLineHeight;
+                int textStartY = cardY + (resetCardHeight - textBlockHeight) / 2;
+                
+                // 鏍囬锛堝乏瀵归綈锛屽瀭鐩村眳涓級
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.config_title"),
+                        layout.left() + CARD_PADDING, textStartY,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                // 鍓爣棰橈紙宸﹀榻愶紝鍨傜洿灞呬腑锛?
+                drawScaledText(g, Component.translatable("screen.neotab.custom_theme.config_subtitle"),
+                        layout.left() + CARD_PADDING, textStartY + titleLineHeight + 2,
+                        AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+                // 閲嶇疆鎸夐挳鐢眞idget绯荤粺缁樺埗锛堥潬鍙宠竟妗嗭紝鍩轰簬鍗＄墖楂樺害鍨傜洿灞呬腑锛?
+                // 纭/鍙栨秷鎸夐挳鍦ㄩ噸缃寜閽笅鏂癸紝鎬诲搴︿笌閲嶇疆鎸夐挳涓€鑷?
+                
+                // 鍔ㄧ敾鏁堟灉鍗＄墖锛堟爣棰?+ 鍙充晶寮€鍏筹級
+                cardY = layout.toScreenY(layout.customAnimationRowY());
+                int animToggleCardH = Math.max(CARD_PADDING + titleLineHeight + CARD_PADDING,
+                                               CARD_PADDING + 14 + CARD_PADDING);
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), animToggleCardH);
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.animation_title"),
+                        layout.left() + CARD_PADDING, cardY + (animToggleCardH - titleLineHeight) / 2,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                // 寮€鍏崇敱 widget 绯荤粺缁樺埗
+
+                // 鍔ㄧ敾閫熺巼鍗＄墖锛堟爣棰?+ 鍓爣棰?+ 鍙充晶閫熺巼鎸夐挳锛?
+                cardY = layout.toScreenY(layout.customAnimSpeedRowY());
+                int animSpeedCardH = Math.max(CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + CARD_PADDING,
+                                              CARD_PADDING + 18 + CARD_PADDING);
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), animSpeedCardH);
+                g.drawString(this.font, Component.translatable("screen.neotab.theme.animation_speed_title"),
+                        layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                drawScaledText(g, Component.translatable("screen.neotab.theme.animation_subtitle"),
+                        layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                        AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+                // 閫熺巼鎸夐挳鐢?widget 绯荤粺缁樺埗
+                
+                // 棰滆壊閰嶇疆锛氭瘡涓鑹查」鐙珛鍗＄墖
+                java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
+                    theme.customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
+                
+                int swatchSize = 24;  // 鑹插潡澶у皬锛堢缉灏忥級
+                int hexInputH = 24;   // HEX杈撳叆妗嗛珮搴︼紙缂╁皬锛?
+                int previewH = 8;     // 棰勮鍧楅珮搴?
+                int contentGap = 8;   // 鏍囬涓庡唴瀹逛箣闂寸殑闂磋窛
+                int previewGap = 8;   // 棰滆壊琛屼笌棰勮鍧椾箣闂寸殑闂磋窛
+                
+                // 璁＄畻鍗＄墖楂樺害锛堟爣棰?+ 闂磋窛 + 鑹插潡琛?+ 闂磋窛 + 棰勮鍧楋級
+                int colorCardH = CARD_PADDING + titleLineHeight + contentGap + swatchSize + previewGap + previewH + CARD_PADDING;
+                int CARD_GAP = 8;
+                
+                // 鑳屾櫙棰滆壊鍗＄墖
+                cardY = layout.toScreenY(layout.customBgColorRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), colorCardH);
+                
+                // 缁樺埗鏍囬
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.background_color"),
+                        layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                
+                // 缁樺埗鑹插潡锛堢敱widget绯荤粺缁樺埗customBackgroundColorButton锛?
+                if (theme.customBackgroundColorButton != null && theme.customBackgroundColorButton.visible) {
+                    int swatchX = theme.customBackgroundColorButton.getX();
+                    int swatchY = theme.customBackgroundColorButton.getY();
+                    int bgColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBackgroundColor() : 0xFFFFFFFF;
+                    
+                    // 妫嬬洏鏍艰儗鏅紙鐢ㄤ簬鏄剧ず閫忔槑搴︼級
+                    g.fill(swatchX, swatchY, swatchX + swatchSize / 2, swatchY + swatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + swatchSize / 2, swatchY, swatchX + swatchSize, swatchY + swatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + swatchSize / 2, swatchX + swatchSize / 2, swatchY + swatchSize, 0xFF999999);
+                    g.fill(swatchX + swatchSize / 2, swatchY + swatchSize / 2, swatchX + swatchSize, swatchY + swatchSize, 0xFFCCCCCC);
+                    // 瀹為檯棰滆壊
+                    g.fill(swatchX, swatchY, swatchX + swatchSize, swatchY + swatchSize, bgColor);
+                    // 杈规
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, swatchSize, swatchSize, 0xFFB7AF9B, 2);
+                }
+                
+                // HEX杈撳叆妗嗙敱renderHexInputBox缁熶竴娓叉煋锛岃繖閲屼笉闇€瑕佺粯鍒惰儗鏅?
+                
+                // 缁樺埗棰勮鍧楋紙鍦ㄥ崱鐗囧簳閮級
+                int bgPreviewY = cardY + colorCardH - CARD_PADDING - previewH;
+                int previewX = layout.left() + CARD_PADDING;
+                int previewW = layout.contentWidth() - CARD_PADDING * 2;
+                int bgColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBackgroundColor() : 0xFFFFFFFF;
+                AEStyleRenderer.drawOutline(g, previewX, bgPreviewY, previewW, previewH, 0xFFC8C0AD, 1);
+                g.fill(previewX + 1, bgPreviewY + 1, previewX + previewW - 1, bgPreviewY + previewH - 1, bgColor);
+                
+                // 澶栧眰杈规棰滆壊鍗＄墖
+                cardY = layout.toScreenY(layout.customOuterBorderRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), colorCardH);
+                
+                // 缁樺埗鏍囬
+                g.drawString(this.font, Component.translatable("screen.neotab.custom_theme.border_outer_color"),
+                        layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                
+                // 缁樺埗鑹插潡锛堢敱widget绯荤粺缁樺埗customBorderOuterFactorButton锛?
+                if (theme.customBorderOuterFactorButton != null && theme.customBorderOuterFactorButton.visible) {
+                    int swatchX = theme.customBorderOuterFactorButton.getX();
+                    int swatchY = theme.customBorderOuterFactorButton.getY();
+                    int outerColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBorderOuterColor() : 0xFFB7AF9B;
+                    
+                    // 妫嬬洏鏍艰儗鏅?
+                    g.fill(swatchX, swatchY, swatchX + swatchSize / 2, swatchY + swatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + swatchSize / 2, swatchY, swatchX + swatchSize, swatchY + swatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + swatchSize / 2, swatchX + swatchSize / 2, swatchY + swatchSize, 0xFF999999);
+                    g.fill(swatchX + swatchSize / 2, swatchY + swatchSize / 2, swatchX + swatchSize, swatchY + swatchSize, 0xFFCCCCCC);
+                    // 瀹為檯棰滆壊
+                    g.fill(swatchX, swatchY, swatchX + swatchSize, swatchY + swatchSize, outerColor);
+                    // 杈规
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, swatchSize, swatchSize, 0xFFB7AF9B, 2);
+                }
+                
+                // HEX杈撳叆妗嗙敱renderHexInputBox缁熶竴娓叉煋锛岃繖閲屼笉闇€瑕佺粯鍒惰儗鏅?
+                
+                // 缁樺埗棰勮鍧楋紙鍦ㄥ崱鐗囧簳閮級
+                int outerPreviewY = cardY + colorCardH - CARD_PADDING - previewH;
+                int outerColor = theme.customThemeConfig != null ? theme.customThemeConfig.getBorderOuterColor() : 0xFFB7AF9B;
+                AEStyleRenderer.drawOutline(g, previewX, outerPreviewY, previewW, previewH, 0xFFC8C0AD, 1);
+                g.fill(previewX + 1, outerPreviewY + 1, previewX + previewW - 1, outerPreviewY + previewH - 1, outerColor);
+                
+                // 杈规棰滆壊澶у崱鐗囷紙涓€涓崱鐗囧寘鍚墍鏈夎竟妗嗛鑹查」锛屾坊鍔犳寜閽湪鍙充笂瑙掞級
+                int borderItemH = THEME_OPTION_HEIGHT + 12;  // 姣忎釜棰滆壊琛岄珮搴︼紙澧炲姞4鍍忕礌锛?
+                int borderItemGap = 8;  // 琛岄棿璺?
+                int borderCardInnerH = titleLineHeight + 2 + subtitleLineHeight + 8;
+                borderCardInnerH += borderColors.size() * (borderItemH + borderItemGap);
+                // 娣诲姞鎸夐挳鐜板湪鍦ㄥ彸涓婅锛屼笉闇€瑕佷负搴曢儴鎸夐挳棰勭暀绌洪棿
+                int borderBigCardH = CARD_PADDING + borderCardInnerH + CARD_PADDING;
+                int borderBigCardY = layout.toScreenY(layout.customAddBorderColorRowY());
+                AEStyleRenderer.drawConfigModuleCard(g, layout.left(), borderBigCardY, layout.contentWidth(), borderBigCardH);
+                
+                // 鏍囬鍜屽壇鏍囬锛堟爣棰橀檺鍒跺搴︼紝涓哄彸涓婅鐨勬坊鍔犳寜閽暀鍑虹┖闂达級
+                int borderTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 100 - 8;  // 鍑忓幓鎸夐挳瀹藉害鍜岄棿璺?
+                Component titleComp = Component.translatable("screen.neotab.theme.border_colors_title");
+                String titleStr = titleComp.getString();
+                if (this.font.width(titleStr) > borderTitleMaxWidth) {
+                    // 鏍囬澶暱锛屾埅鏂苟娣诲姞鐪佺暐鍙?
+                    titleStr = this.font.plainSubstrByWidth(titleStr, borderTitleMaxWidth - this.font.width("...")) + "...";
+                }
+                g.drawString(this.font, titleStr,
+                        layout.left() + CARD_PADDING, borderBigCardY + CARD_PADDING,
+                        AEStyleRenderer.COLOR_MODULE_TITLE, false);
+                drawScaledText(g, Component.translatable("screen.neotab.custom_theme.border_colors"),
+                        layout.left() + CARD_PADDING, borderBigCardY + CARD_PADDING + titleLineHeight + 2,
+                        AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+                
+                // 姣忎釜棰滆壊琛岋紙鐧借壊鍐呭祵琛岋級
+                int rowStartY = borderBigCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8;
+                int rowW = layout.contentWidth() - CARD_PADDING * 2;
+                int borderSwatchSize = 16;  // 杈规棰滆壊鑹插潡鍥哄畾澶у皬锛堝皬宸э紝鍙傝€僅TML鍘熷瀷锛?
+                for (int i = 0; i < borderColors.size(); i++) {
+                    int color = borderColors.get(i);
+                    int rowY = rowStartY + i * (borderItemH + borderItemGap);
+                    boolean borderHov = mouseX >= layout.left() + CARD_PADDING && mouseX < layout.left() + CARD_PADDING + rowW
+                                     && mouseY >= rowY && mouseY < rowY + borderItemH;
+                    // 鐧借壊琛岃儗鏅?
+                    AEStyleRenderer.drawOutline(g, layout.left() + CARD_PADDING, rowY, rowW, borderItemH, AEStyleRenderer.COLOR_PANEL_BORDER, 1);
+                    g.fill(layout.left() + CARD_PADDING + 1, rowY + 1, layout.left() + CARD_PADDING + rowW - 1, rowY + borderItemH - 1,
+                            borderHov ? 0xFFFAF7EF : 0xFFFFFFFF);
+                    
+                    // 宸︿晶锛氶鑹茶壊鍧楋紙鍥哄畾 16x16锛屽瀭鐩村眳涓級
+                    int swatchX = layout.left() + CARD_PADDING + 8;
+                    int swatchY = rowY + (borderItemH - borderSwatchSize) / 2;
+                    // 妫嬬洏鏍艰儗鏅?
+                    g.fill(swatchX, swatchY, swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize / 2, 0xFFCCCCCC);
+                    g.fill(swatchX + borderSwatchSize / 2, swatchY, swatchX + borderSwatchSize, swatchY + borderSwatchSize / 2, 0xFF999999);
+                    g.fill(swatchX, swatchY + borderSwatchSize / 2, swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize, 0xFF999999);
+                    g.fill(swatchX + borderSwatchSize / 2, swatchY + borderSwatchSize / 2, swatchX + borderSwatchSize, swatchY + borderSwatchSize, 0xFFCCCCCC);
+                    g.fill(swatchX, swatchY, swatchX + borderSwatchSize, swatchY + borderSwatchSize, color);
+                    AEStyleRenderer.drawOutline(g, swatchX, swatchY, borderSwatchSize, borderSwatchSize, AEStyleRenderer.COLOR_OUTLINE, 1);
+                    
+                    // 涓棿锛歨ex杈撳叆妗嗭紙鍦╯cissor澶栧崟鐙覆鏌擄紝杩欓噷涓嶇粯鍒讹級
+                    
+                    // 鍙充晶锛氱孩鑹?脳 鍒犻櫎鎸夐挳锛堢敱widget绯荤粺澶勭悊鐐瑰嚮锛岃繖閲屽彧缁樺埗鍥炬爣锛?
+                    int delX = layout.left() + CARD_PADDING + rowW - 20;
+                    int delY = rowY + (borderItemH - this.font.lineHeight) / 2;
+                    g.drawString(this.font, "脳", delX + 6, delY, 0xFFB34242, false);
+                }
+                
+                // 娣诲姞杈规棰滆壊鎸夐挳锛堝湪澶у崱鐗囧唴搴曢儴锛?
+                if (borderColors.size() < 7) {
+                    int addBtnY = rowStartY + borderColors.size() * (borderItemH + borderItemGap);
+                    // 娣诲姞鎸夐挳鐢眞idget绯荤粺缁樺埗
+                }
+            }
+            
+            // 琛€閲忔樉绀哄垎鍖烘爣棰?
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.theme.health_section"),
+                    layout.left(), layout.toScreenY(layout.healthSectionHeaderY()), layout.right());
+            
+            // 鏄剧ず鏁堟灉鍗＄墖
+            cardY = layout.toScreenY(layout.healthModeRowY());
+            int toggleCardContentH2 = Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight);
+            int healthCardHeight = CARD_PADDING + toggleCardContentH2 + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), healthCardHeight);
+            
+            // 鏍囬锛堥檺鍒跺搴︼級
+            int healthTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 80 - 8;  // 鍑忓幓鎸夐挳瀹藉害
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.health_mode_title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            // 鍓爣棰橈紙鑷姩鎹㈣锛?
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.health_mode_subtitle").getString(),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    healthTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            // 琛€閲忔ā寮忔寜閽敱widget绯荤粺缁樺埗
+            
+            // 甯冨眬鍒嗗垪鍒嗗尯鏍囬
+            AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.theme.layout_section"),
+                    layout.left(), layout.toScreenY(layout.layoutSectionHeaderY()), layout.right());
+            
+            // 鍚敤鍒嗗垪鍗＄墖
+            cardY = layout.toScreenY(layout.layoutEnabledRowY());
+            int layoutEnabledCardHeight = CARD_PADDING + toggleCardContentH2 + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutEnabledCardHeight);
+            
+            // 鏍囬锛堥檺鍒跺搴︼級
+            int layoutTitleMaxWidth = layout.contentWidth() - CARD_PADDING * 2 - 56 - 8;
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_enabled_title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            // 鍓爣棰?
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_enabled_subtitle").getString(),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 灞曠ず鍒楁暟鍗＄墖
+            cardY = layout.toScreenY(layout.layoutColumnsRowY());
+            int layoutColumnsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutColumnsCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_columns_title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_columns_subtitle").getString(),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 灞曠ず琛屾暟鍗＄墖
+            cardY = layout.toScreenY(layout.layoutRowsRowY());
+            int layoutRowsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutRowsCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_rows_title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            drawWrappedScaledText(g, Component.translatable("screen.neotab.theme.layout_rows_subtitle").getString(),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    layoutTitleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 鎻愮ず鍗＄墖锛堟棤鎸夐挳锛?
+            cardY = layout.toScreenY(layout.layoutHintRowY());
+            // 澶氳鍓爣棰橀渶瑕佽绠楅珮搴?
+            String hintText = "褰撶帺瀹舵暟瓒呰繃瀹归噺鏃讹紝TAB 鍒楄〃灏嗚嚜鍔ㄥ垎椤垫樉绀恒€俓n蹇嵎閿細TAB + 宸?鍙崇澶撮敭缈婚〉銆?;
+            int hintLines = 2;  // 涓よ鏂囧瓧
+            int layoutHintCardHeight = CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * hintLines * 0.82f) + CARD_PADDING;
+            AEStyleRenderer.drawConfigModuleCard(g, layout.left(), cardY, layout.contentWidth(), layoutHintCardHeight);
+            
+            g.drawString(this.font, Component.translatable("screen.neotab.theme.layout_hint_title"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            // 缁樺埗澶氳鍓爣棰?
+            drawScaledText(g, Component.translatable("screen.neotab.theme.layout_hint_line1"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            drawScaledText(g, Component.translatable("screen.neotab.theme.layout_hint_line2"),
+                    layout.left() + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 0.82f),
+                    AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        } else if (activeTab == ConfigTab.PERMISSIONS) {
+            renderPermissionsContent(g, mouseX, mouseY, layout);
+        }
+        renderScrollableWidgets(g, mouseX, mouseY, partialTick);
+        g.disableScissor();
+        NeoTabConfigScreenRenderer.renderScrollbar(g, layout, this.scrollOffset);
+    }
+
+    private void renderPermissionsContent(GuiGraphics g, int mouseX, int mouseY, NeoTabConfigScreenLayout.Layout layout) {
+        int CARD_PADDING = 10;
+        int CARD_GAP = 8;
+        int titleLineHeight = this.font.lineHeight;
+        int subtitleLineHeight = this.font.lineHeight;
+        
+        int y = CONTENT_TOP_PADDING;
+        
+        // 鍏ㄥ眬绛栫暐鍒嗗尯鏍囬
+        AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.permissions.global_section"),
+                layout.left(), layout.toScreenY(y), layout.right());
+        y += SECTION_HEADER_HEIGHT;
+        
+        // 鍏ㄥ眬绛栫暐鏉冮檺鍗＄墖锛?鍒楃綉鏍煎竷灞€锛?
+        String[] policyKeys = {
+            "椤堕儴鏍囬 寮€鍏?, "椤堕儴鏍囬 鍐呭",
+            "椤堕儴鍐呭 寮€鍏?, "椤堕儴鍐呭 鏂囧瓧",
+            "寤惰繜鏄剧ず 寮€鍏?, "鍦ㄧ嚎鏃堕暱 寮€鍏?,
+            "绉板彿鍔熻兘 寮€鍏?, "琛€閲忔樉绀?寮€鍏?,
+            "琛€閲忔樉绀?妯″紡", "搴曢儴鑷畾涔夋枃瀛?,
+            "搴曢儴 TPS 寮€鍏?, "搴曢儴 MSPT 寮€鍏?,
+            "搴曢儴鍦ㄧ嚎浜烘暟 寮€鍏?, "涓婚鍒囨崲"
+        };
+        
+        String[] policySubtitles = {
+            "鍏佽鐜╁鍒囨崲椤堕儴鏍囬鐨勬樉绀?, "鍏佽鐜╁鑷畾涔夐《閮ㄦ爣棰樺唴瀹?,
+            "鍏佽鐜╁鍒囨崲椤堕儴鍐呭鐨勬樉绀?, "鍏佽鐜╁鑷畾涔夐《閮ㄥ唴瀹规枃瀛?,
+            "鍏佽鐜╁鍒囨崲寤惰繜鏄剧ず鍔熻兘", "鍏佽鐜╁鍒囨崲鍦ㄧ嚎鏃堕暱鏄剧ず",
+            "鍏佽鐜╁鍒囨崲绉板彿鍔熻兘", "鍏佽鐜╁鍒囨崲琛€閲忔樉绀哄姛鑳?,
+            "鍏佽鐜╁鍒囨崲琛€閲忔樉绀烘ā寮?, "鍏佽鐜╁鑷畾涔夊簳閮ㄦ枃瀛楀唴瀹?,
+            "鍏佽鐜╁鍒囨崲 TPS 淇℃伅鏄剧ず", "鍏佽鐜╁鍒囨崲 MSPT 淇℃伅鏄剧ず",
+            "鍏佽鐜╁鍒囨崲鍦ㄧ嚎浜烘暟鏄剧ず", "鍏佽鐜╁鍒囨崲 TAB 涓婚"
+        };
+        
+        int cardWidth = (layout.contentWidth() - CARD_GAP) / 2;  // 涓ゅ垪锛屼腑闂?px闂磋窛
+        int cardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
+        
+        for (int i = 0; i < Math.min(policyKeys.length, permissions.globalPolicyToggles.size()); i++) {
+            int col = i % 2;
+            int row = i / 2;
+            
+            if (col == 0 && i > 0) {
+                y += cardHeight + CARD_GAP;
+            }
+            
+            int cardX = layout.left() + col * (cardWidth + CARD_GAP);
+            int cardY = layout.toScreenY(y);
+            
+            // 缁樺埗鍗＄墖鑳屾櫙
+            AEStyleRenderer.drawConfigModuleCard(g, cardX, cardY, cardWidth, cardHeight);
+            
+            // 缁樺埗鏍囬锛堥檺鍒跺搴︼紝閬垮厤瑕嗙洊寮€鍏筹級
+            int titleMaxWidth = cardWidth - CARD_PADDING * 2 - 56 - 8;
+            g.drawString(this.font, policyKeys[i],
+                    cardX + CARD_PADDING, cardY + CARD_PADDING,
+                    AEStyleRenderer.COLOR_MODULE_TITLE, false);
+            
+            // 缁樺埗鍓爣棰?
+            drawWrappedScaledText(g, policySubtitles[i],
+                    cardX + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
+                    titleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+            
+            // 寮€鍏虫寜閽敱widget绯荤粺缁樺埗
+        }
+        
+        // 绉诲姩鍒颁笅涓€琛?
+        if (policyKeys.length % 2 == 1) {
+            y += cardHeight + SECTION_GAP;
+        } else {
+            y += cardHeight + SECTION_GAP;
+        }
+        
+        // 鎸囧畾鐜╁绛栫暐鍒嗗尯鏍囬
+        AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.permissions.personal_section"),
+                layout.left(), layout.toScreenY(y), layout.right());
+        y += SECTION_HEADER_HEIGHT;
+        
+        // 娣诲姞鐜╁鍗＄墖
+        int addPlayerCardY = layout.toScreenY(y);
+        int addPlayerCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
+        AEStyleRenderer.drawConfigModuleCard(g, layout.left(), addPlayerCardY, layout.contentWidth(), addPlayerCardHeight);
+        
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.add_player_title"),
+                layout.left() + CARD_PADDING, addPlayerCardY + CARD_PADDING,
+                AEStyleRenderer.COLOR_MODULE_TITLE, false);
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.add_player_subtitle"),
+                layout.left() + CARD_PADDING, addPlayerCardY + CARD_PADDING + titleLineHeight + 2,
+                AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        // 杈撳叆妗嗗拰娣诲姞鎸夐挳鐢眞idget绯荤粺缁樺埗
+        
+        y += addPlayerCardHeight + CARD_GAP;
+        
+        // 鐜╁鍒楄〃鏄剧ず鍗＄墖
+        int playerListCardY = layout.toScreenY(y);
+        int playerListContentHeight;
+        if (permissions.targetPlayers.isEmpty()) {
+            playerListContentHeight = INPUT_HEIGHT;  // 涓庡崟涓爣绛鹃珮搴︿竴鑷?
+        } else {
+            // 璁＄畻鏍囩甯冨眬鐨勫疄闄呴珮搴︼紙涓巃pplyLayout淇濇寔涓€鑷达級
+            int tagHeight = INPUT_HEIGHT;
+            int tagGap = 6;
+            int maxWidth = layout.contentWidth() - CARD_PADDING * 2;
+            int tagX = 0;
+            int tagY = 0;
+            
+            for (java.util.Map.Entry<java.util.UUID, String> entry : permissions.targetPlayers.entrySet()) {
+                String playerName = entry.getValue();
+                int nameWidth = this.font.width(playerName);
+                int deleteButtonWidth = 16;
+                int tagPadding = 6;
+                int tagWidth = tagPadding + nameWidth + 4 + deleteButtonWidth + tagPadding;
+                
+                // 妫€鏌ユ槸鍚﹂渶瑕佹崲琛?
+                if (tagX + tagWidth > maxWidth && tagX > 0) {
+                    tagX = 0;
+                    tagY += tagHeight + tagGap;
+                }
+                
+                tagX += tagWidth + tagGap;
+            }
+            playerListContentHeight = tagY + tagHeight;
+        }
+        int playerListCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + playerListContentHeight + CARD_PADDING;
+        AEStyleRenderer.drawConfigModuleCard(g, layout.left(), playerListCardY, layout.contentWidth(), playerListCardHeight);
+        
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.player_list_title"),
+                layout.left() + CARD_PADDING, playerListCardY + CARD_PADDING,
+                AEStyleRenderer.COLOR_MODULE_TITLE, false);
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.player_list_subtitle"),
+                layout.left() + CARD_PADDING, playerListCardY + CARD_PADDING + titleLineHeight + 2,
+                AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        
+        // 鐜╁鍒楄〃鍐呭鍖哄煙
+        int listContentY = playerListCardY + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8;
+        if (permissions.targetPlayers.isEmpty()) {
+            // 绌虹姸鎬佹彁绀猴紙灞呬腑鏄剧ず锛?
+            drawScaledText(g, Component.translatable("screen.neotab.permissions.player_list_empty"),
+                    layout.left() + CARD_PADDING, listContentY + 5,
+                    0xFF5A6C7E, 0.82f);
+        } else {
+            // 鏄剧ず鐜╁鍒楄〃锛堟爣绛炬牱寮忥紝鑷姩鎹㈣锛?
+            int tagX = 0;  // 鐩稿浜庡唴瀹瑰尯鍩熺殑X鍧愭爣
+            int tagY = 0;  // 鐩稿浜庡唴瀹瑰尯鍩熺殑Y鍧愭爣
+            int tagGap = 6;  // 鏍囩涔嬮棿鐨勯棿璺?
+            int tagHeight = INPUT_HEIGHT;
+            int maxWidth = layout.contentWidth() - CARD_PADDING * 2;
+            
+            for (java.util.Map.Entry<java.util.UUID, String> entry : permissions.targetPlayers.entrySet()) {
+                String playerName = entry.getValue();
+                int nameWidth = this.font.width(playerName);
+                int deleteButtonWidth = 16;
+                int tagPadding = 6;
+                int tagWidth = tagPadding + nameWidth + 4 + deleteButtonWidth + tagPadding;
+                
+                // 妫€鏌ユ槸鍚﹂渶瑕佹崲琛?
+                if (tagX + tagWidth > maxWidth && tagX > 0) {
+                    tagX = 0;
+                    tagY += tagHeight + tagGap;
+                }
+                
+                // 璁＄畻缁濆鍧愭爣
+                int absTagX = layout.left() + CARD_PADDING + tagX;
+                int absTagY = listContentY + tagY;
+                
+                // 缁樺埗鏍囩鑳屾櫙锛堝渾瑙掔煩褰級
+                int tagBgColor = 0xFF9AABC0;  // 浣跨敤杈规棰滆壊浣滀负鏍囩鑳屾櫙
+                g.fill(absTagX, absTagY, absTagX + tagWidth, absTagY + tagHeight, tagBgColor);
+                
+                // 缁樺埗鐜╁鍚嶇О
+                g.drawString(this.font, playerName,
+                        absTagX + tagPadding, absTagY + (tagHeight - this.font.lineHeight) / 2,
+                        0xFFFFFFFF, false);  // 鐧借壊鏂囧瓧
+                
+                // 鍒犻櫎鎸夐挳鐢眞idget绯荤粺缁樺埗锛堜細瑕嗙洊鍦ㄦ爣绛句笂锛屽彸瀵归綈锛?
+                
+                tagX += tagWidth + tagGap;
+            }
+        }
+        
+        y += playerListCardHeight + CARD_GAP;
+        
+        // 鎻愮ず鍗＄墖
+        int hintCardY = layout.toScreenY(y);
+        int hintCardHeight = CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 2 * 0.82f) + CARD_PADDING;
+        AEStyleRenderer.drawConfigModuleCard(g, layout.left(), hintCardY, layout.contentWidth(), hintCardHeight);
+        
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.hint_title"),
+                layout.left() + CARD_PADDING, hintCardY + CARD_PADDING,
+                AEStyleRenderer.COLOR_MODULE_TITLE, false);
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.hint_line1"),
+                layout.left() + CARD_PADDING, hintCardY + CARD_PADDING + titleLineHeight + 2,
+                AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.hint_line2"),
+                layout.left() + CARD_PADDING, hintCardY + CARD_PADDING + titleLineHeight + 2 + (int)(subtitleLineHeight * 0.82f),
+                AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        
+        y += hintCardHeight + 16;
+        
+        // 搴旂敤鏉冮檺璁剧疆鍗＄墖
+        int applySettingsCardY = layout.toScreenY(y);
+        int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
+        AEStyleRenderer.drawConfigModuleCard(g, layout.left(), applySettingsCardY, layout.contentWidth(), applySettingsCardHeight);
+        
+        g.drawString(this.font, Component.translatable("screen.neotab.permissions.apply_title"),
+                layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING,
+                AEStyleRenderer.COLOR_MODULE_TITLE, false);
+        drawScaledText(g, Component.translatable("screen.neotab.permissions.apply_subtitle"),
+                layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING + titleLineHeight + 2,
+                AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+        // 涓や釜搴旂敤鎸夐挳鐢眞idget绯荤粺缁樺埗
+        
+        y += applySettingsCardHeight + 16;
+        
+        // 淇濆瓨鎸夐挳锛堢敱widget绯荤粺缁樺埗锛岃繖閲屼笉闇€瑕佺粯鍒跺崱鐗囷級
+    }
+
+    private void renderScrollableWidgets(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        for (Renderable r : this.renderables) {
+            if (r == this.doneButton || r == this.cancelButton) continue;
+            // 棰滆壊閫夋嫨鍣ㄥ拰hex杈撳叆妗嗗湪scissor澶栧崟鐙覆鏌擄紝杩欓噷璺宠繃
+            if (r == theme.embeddedColorPicker) continue;
+            // HEX杈撳叆妗嗛渶瑕佺壒娈婂鐞嗭紝鍏堣烦杩囷紙鍖呮嫭鑳屾櫙棰滆壊銆佸灞傝竟妗嗛鑹层€佽竟妗嗛鑹茬殑HEX杈撳叆妗嗭級
+            if (r instanceof net.minecraft.client.gui.components.EditBox box) {
+                if (box == theme.customBackgroundHexInput || 
+                    box == theme.customBorderOuterHexInput ||
+                    theme.customBorderHexInputs.contains(box)) {
+                    continue;
+                }
+                // 鐜╁鎼滅储妗嗭細缁樺埗鐧借壊鑳屾櫙
+                if (box == permissions.playerSearchBox && box.visible) {
+                    // 缁樺埗鐧借壊鑳屾櫙
+                    g.fill(box.getX(), box.getY(), box.getX() + box.getWidth(), box.getY() + box.getHeight(), 0xFFFFFFFF);
+                    // 缁樺埗杈规
+                    int borderColor = box.isFocused() ? 0xFF8B8B8B : 0xFFA0A0A0;
+                    g.fill(box.getX() - 1, box.getY() - 1, box.getX() + box.getWidth() + 1, box.getY(), borderColor);  // 涓?
+                    g.fill(box.getX() - 1, box.getY() + box.getHeight(), box.getX() + box.getWidth() + 1, box.getY() + box.getHeight() + 1, borderColor);  // 涓?
+                    g.fill(box.getX() - 1, box.getY(), box.getX(), box.getY() + box.getHeight(), borderColor);  // 宸?
+                    g.fill(box.getX() + box.getWidth(), box.getY(), box.getX() + box.getWidth() + 1, box.getY() + box.getHeight(), borderColor);  // 鍙?
+                }
+            }
+            
+            // 妫€鏌idget鐨剉isible灞炴€?
+            if (r instanceof AbstractWidget widget && !widget.visible) continue;
+
+            if (r instanceof CycleButton<?> cb) {
+                NeoTabConfigScreenRenderer.renderAECycleButton(g, this.font, cb, mouseX, mouseY);
+            } else if (r instanceof Button btn) {
+                int themeIndex = theme.themeOptionButtons.indexOf(btn);
+                if (themeIndex >= 0) {
+                    NeoTabConfigScreenRenderer.renderThemeOptionButton(g, this.font, btn, theme.themeOptionIds.get(themeIndex), theme.selectedThemeId, mouseX, mouseY);
+                } else if (btn == theme.customBackgroundColorButton) {
+                    // 鑳屾櫙棰滆壊鑹插潡鎸夐挳锛氱敱鍗＄墖娓叉煋浠ｇ爜鎵嬪姩缁樺埗锛岃繖閲岃烦杩囷紙閬垮厤閲嶅缁樺埗锛?
+                } else if (theme.customBorderColorButtons.contains(btn)) {
+                    int bi = theme.customBorderColorButtons.indexOf(btn);
+                    if (bi % 2 == 0) {
+                        // 棰滆壊閫夋嫨鎸夐挳锛氱敱鍗＄墖娓叉煋浠ｇ爜缁樺埗锛岃繖閲岃烦杩囷紙閬垮厤閲嶅缁樺埗锛?
+                    } else {
+                        // 鍒犻櫎鎸夐挳锛氫笉缁樺埗锛埫?鍥炬爣宸插湪鍗＄墖娓叉煋涓墜鍔ㄧ粯鍒讹級
+                    }
+                } else if (btn == theme.customBorderOuterFactorButton) {
+                    // 澶栧眰杈规棰滆壊鑹插潡鎸夐挳锛氱敱鍗＄墖娓叉煋浠ｇ爜鎵嬪姩缁樺埗锛岃繖閲岃烦杩囷紙閬垮厤閲嶅缁樺埗锛?
+                } else if (btn == theme.resetToDefaultButton) {
+                    // 閲嶇疆鎸夐挳锛氫娇鐢ㄧ孩鑹插嵄闄╂牱寮?
+                    renderDangerButton(g, this.font, btn, mouseX, mouseY);
+                } else {
+                    NeoTabConfigScreenRenderer.renderAEButton(g, this.font, btn, mouseX, mouseY);
+                }
+            } else {
+                r.render(g, mouseX, mouseY, partialTick);
+            }
+        }
+        
+        // 鏈€鍚庢覆鏌揌EX杈撳叆妗嗭紝纭繚瀹冧滑鍦ㄦ渶涓婂眰锛堜粎鍦ㄤ富棰樻爣绛鹃〉鏄剧ず锛?
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            // 娓叉煋鑳屾櫙棰滆壊HEX杈撳叆妗?
+            if (theme.customBackgroundHexInput != null && theme.customBackgroundHexInput.visible) {
+                renderHexInputBox(g, theme.customBackgroundHexInput, mouseX, mouseY);
+            }
+            
+            // 娓叉煋澶栧眰杈规棰滆壊HEX杈撳叆妗?
+            if (theme.customBorderOuterHexInput != null && theme.customBorderOuterHexInput.visible) {
+                renderHexInputBox(g, theme.customBorderOuterHexInput, mouseX, mouseY);
+            }
+            
+            // 娓叉煋杈规棰滆壊HEX杈撳叆妗?
+            for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) {
+                if (box.visible) {
+                    renderHexInputBox(g, box, mouseX, mouseY);
+                }
+            }
+        }
+    }
+    
+    // 缁熶竴鐨凥EX杈撳叆妗嗘覆鏌撴柟娉曪紙涓庤竟妗嗛鑹蹭娇鐢ㄧ浉鍚岀殑閫昏緫锛?
+    private void renderHexInputBox(GuiGraphics g, net.minecraft.client.gui.components.EditBox box, int mouseX, int mouseY) {
+        // 鈹€鈹€ Hex 杈撳叆妗嗭細scissor 鍐呮覆鏌?+ 鏂囧瓧宸﹀榻?+ 閫変腑鑳屾櫙锛堜慨澶嶇増锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+        // 鐧借壊鑳屾櫙锛堝乏渚у欢浼?4px锛岃瑙変笂褰㈡垚鍐呰竟璺濓級
+        int bx = box.getX() - 5;
+        int by = box.getY() - 1;
+        int bw = box.getWidth() + 6;
+        int bh = box.getHeight() + 2;
+        g.fill(bx,     by,     bx + bw,     by + bh,     AEStyleRenderer.COLOR_PANEL_BORDER);
+        g.fill(bx + 1, by + 1, bx + bw - 1, by + bh - 1, 0xFFFFFFFF);
+        
+        // 鑹插€兼枃瀛楀乏瀵归綈锛屽乏杈硅窛灏忎簬鍙宠竟璺?
+        String value = box.getValue();
+        int leftPadding = 4;  // 宸﹁竟璺?
+        int textX = box.getX() + leftPadding;
+        int textY = box.getY() + (box.getHeight() - this.font.lineHeight) / 2;
+        
+        // 鍙湪鑱氱劍鏃跺鐞嗛€変腑鍜屽厜鏍?
+        if (box.isFocused()) {
+            String highlighted = box.getHighlighted();
+            
+            // 鏈夐€変腑鏂囧瓧鏃舵墠杩涜澶嶆潅鐨勯€変腑娓叉煋
+            if (!highlighted.isEmpty()) {
+                int cursorPos = box.getCursorPosition();
+                int highlightLen = highlighted.length();
+                
+                // 蹇€熻绠楅€変腑鑼冨洿锛堜紭鍖栵細鍑忓皯瀛楃涓叉瘮杈冿級
+                int selStart = Math.max(0, Math.min(cursorPos - highlightLen, cursorPos));
+                int selEnd = Math.min(value.length(), Math.max(cursorPos, cursorPos + highlightLen));
+                
+                // 楠岃瘉閫変腑鑼冨洿鏄惁鏈夋晥
+                if (selStart < selEnd && selEnd <= value.length()) {
+                    String beforeHighlight = value.substring(0, selStart);
+                    String afterHighlight = value.substring(selEnd);
+                    
+                    int highlightX = textX + this.font.width(beforeHighlight);
+                    int highlightW = this.font.width(highlighted);
+                    
+                    // 缁樺埗閫変腑鑳屾櫙
+                    g.fill(highlightX, textY - 1, highlightX + highlightW, textY + this.font.lineHeight, 0xFF3399FF);
+                    
+                    // 鍒嗘缁樺埗鏂囧瓧
+                    g.drawString(this.font, beforeHighlight, textX, textY, 0xFF222222, false);
+                    g.drawString(this.font, highlighted, highlightX, textY, 0xFFFFFFFF, false);
+                    g.drawString(this.font, afterHighlight, highlightX + highlightW, textY, 0xFF222222, false);
+                } else {
+                    // 閫変腑鑼冨洿鏃犳晥锛屽洖閫€鍒版櫘閫氭覆鏌?
+                    g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+                }
+            } else {
+                // 娌℃湁閫変腑锛屾甯哥粯鍒舵枃瀛?
+                g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+                
+                // 缁樺埗闂儊鍏夋爣锛堜慨澶嶄綅缃級
+                if (((System.currentTimeMillis() >> 9) & 1) == 0) {  // 姣?12ms鍒囨崲涓€娆?
+                    int cursorPos = Math.min(value.length(), Math.max(0, box.getCursorPosition()));
+                    int cursorX = textX + (cursorPos > 0 ? this.font.width(value.substring(0, cursorPos)) : 0);
+                    g.fill(cursorX, textY - 1, cursorX + 1, textY + this.font.lineHeight + 1, 0xFF444444);
+                }
+            }
+        } else {
+            // 鏈仛鐒︼紝鐩存帴缁樺埗鏂囧瓧锛堟渶蹇矾寰勶級
+            g.drawString(this.font, value, textX, textY, 0xFF222222, false);
+        }
+    }
+
+    // 鍗遍櫓鎸夐挳娓叉煋鏂规硶锛堢孩鑹叉牱寮忥紝鐢ㄤ簬閲嶇疆绛夊嵄闄╂搷浣滐級
+    private void renderDangerButton(GuiGraphics g, Font font, Button btn, int mouseX, int mouseY) {
+        if (btn == null || !btn.visible) return;
+        
+        int x = btn.getX();
+        int y = btn.getY();
+        int w = btn.getWidth();
+        int h = btn.getHeight();
+        boolean hovered = btn.isMouseOver(mouseX, mouseY);
+        
+        // 绾㈣壊杈规鍜岃儗鏅?
+        int borderColor = hovered ? 0xFFC48888 : 0xFFD4A0A0;
+        int bgColor = hovered ? 0xFFF2DEDE : 0xFFFFFFFF;
+        int textColor = 0xFFB34242;  // 绾㈣壊鏂囧瓧
+        
+        // 缁樺埗杈规
+        g.fill(x, y, x + w, y + h, borderColor);
+        // 缁樺埗鑳屾櫙
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bgColor);
+        
+        // 缁樺埗鏂囧瓧锛堝眳涓級
+        Component message = btn.getMessage();
+        int textWidth = font.width(message);
+        int textX = x + (w - textWidth) / 2;
+        int textY = y + (h - font.lineHeight) / 2;
+        g.drawString(font, message, textX, textY, textColor, false);
+    }
+
+
+
+    // 鈹€鈹€ applyWidgetLayout 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    private void applyWidgetLayout(NeoTabConfigScreenLayout.Layout layout) {
+        pageConfig.applyLayout(layout);
+        theme.applyLayout(layout);
+        if (activeTab == ConfigTab.PERMISSIONS) {
+            permissions.applyLayout(layout, ROW_HEIGHT, ROW_GAP, INPUT_HEIGHT,
+                CONTENT_TOP_PADDING, SECTION_HEADER_HEIGHT, TOGGLE_WIDTH);
+        }
+        if (doneButton != null) { doneButton.setX(layout.doneButtonX()); doneButton.setY(layout.buttonY()); }
+        if (cancelButton != null) { cancelButton.setX(layout.cancelButtonX()); cancelButton.setY(layout.buttonY()); }
+    }
+
+
+
+    // 鈹€鈹€ buildLayoutImpl 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    private NeoTabConfigScreenLayout.Layout buildLayoutImpl() {
+        int minSidePadding = 16;
+        int scrollbarAndMargin = SCROLL_TRACK_W + 20;
+        int availableWidth = this.width - minSidePadding * 2 - TAB_BAR_WIDTH - TAB_CONTENT_GAP - scrollbarAndMargin;
+        int contentWidth = Math.min(MAX_CONTENT_WIDTH, Math.max(200, availableWidth));
+        int totalWidth = TAB_BAR_WIDTH + TAB_CONTENT_GAP + contentWidth + scrollbarAndMargin;
+        int blockLeft = Math.max(minSidePadding, (this.width - totalWidth) / 2);
+        int tabBarX = blockLeft;
+        int left = blockLeft + TAB_BAR_WIDTH + TAB_CONTENT_GAP;
+        int right = left + contentWidth;
+        int toggleX = right - 6 - TOGGLE_WIDTH;
+        int buttonWidth = Math.min(150, (contentWidth - 10) / 2);
+        
+        // 璁＄畻闈㈡澘楂樺害锛堟í鍚戝竷灞€锛氬搴?> 楂樺害锛?
+        // 鍏堣绠楅潰鏉垮搴?
+        int tempPanelX = tabBarX - 2;
+        int tempPanelW = (right + 8 + SCROLL_TRACK_W + 4) - tempPanelX;
+        int maxPanelH = (int)(tempPanelW / 1.37);  // HTML姣斾緥 820:600 鈮?1.37:1
+        int availablePanelH = this.height - 8 - 8;  // 涓婁笅鍚勭暀8px杈硅窛
+        int panelH = Math.min(maxPanelH, availablePanelH);
+        
+        int buttonY = 8 + panelH - 10 - INPUT_HEIGHT;  // 鎸夐挳浣嶄簬闈㈡澘搴曢儴
+        int buttonBarTop = buttonY - 6;
+        int viewportTop = VIEWPORT_TOP;
+        int viewportBottom = Math.max(viewportTop + 40, buttonBarTop - VIEWPORT_BOTTOM_MARGIN);
+
+        // 鍗＄墖甯冨眬甯搁噺
+        int CARD_PADDING = 10;  // 鍗＄墖鍐呰竟璺?
+        int CARD_GAP = 8;  // 鍗＄墖涔嬮棿鐨勯棿璺濓紙鎭㈠涓篐TML涓殑8px锛?
+        int TITLE_LINE_HEIGHT = font.lineHeight;  // 鏍囬琛岄珮搴︼紙绾?px锛?
+        int SUBTITLE_LINE_HEIGHT = font.lineHeight;  // 鍓爣棰樿楂樺害锛堢害9px锛?
+        // 甯﹀紑鍏崇殑鍗＄墖鍐呭楂樺害锛氬彇寮€鍏抽珮搴﹀拰鏂囧瓧楂樺害鐨勬渶澶у€?
+        int TOGGLE_CARD_CONTENT_H = Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT);
+        int TOGGLE_CARD_CONTENT_H_NO_SUB = Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT);
+        
+        int y = CONTENT_TOP_PADDING;
+        int topSectionHeaderY = y; y += SECTION_HEADER_HEIGHT;
+        
+        // 鏍囬淇℃伅鍗＄墖锛歱adding + 鏍囬 + 鍓爣棰橀棿璺?+ 鍓爣棰?+ 鍐呭闂磋窛 + 杈撳叆妗?+ padding
+        int topTitleRowY = y;
+        int topTitleInputY = topTitleRowY + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
+        int topTitleCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + TITLE_INPUT_HEIGHT + CARD_PADDING;
+        y = topTitleRowY + topTitleCardHeight + CARD_GAP;
+        
+        // 鍐呭淇℃伅鍗＄墖
+        int topContentRowY = y;
+        int topContentInputY = topContentRowY + CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;
+        int topContentCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + MULTILINE_INPUT_HEIGHT + CARD_PADDING;
+        y = topContentRowY + topContentCardHeight + SECTION_GAP;
+        
+        // 鐜╁鍒楄〃鍒嗗尯
+        int listSectionHeaderY = y; y += SECTION_HEADER_HEIGHT;
+        
+        // 鏇村ソ鐨勫欢杩熷崱鐗囷紙鏈夊壇鏍囬+寮€鍏筹級锛氶珮搴﹀彇寮€鍏抽珮搴﹀拰鏂囧瓧楂樺害鐨勬渶澶у€?
+        int betterPingRowY = y;
+        int betterPingCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = betterPingRowY + betterPingCardHeight + CARD_GAP;
+        
+        // 鍦ㄧ嚎鏃堕暱鍗＄墖
+        int onlineDurationRowY = y;
+        int onlineDurationCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = onlineDurationRowY + onlineDurationCardHeight + CARD_GAP;
+        
+        // 绉板彿鍔熻兘鍗＄墖
+        int titleRowY = y;
+        int titleCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = titleRowY + titleCardHeight + CARD_GAP;
+        
+        // 鐜╁琛€閲忓崱鐗?
+        int healthDisplayRowY = y;
+        int healthDisplayCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = healthDisplayRowY + healthDisplayCardHeight + SECTION_GAP;
+        
+        // 搴曢儴淇℃伅鍒嗗尯
+        int footerSectionHeaderY = y; y += SECTION_HEADER_HEIGHT;
+        
+        // 鑷畾涔変俊鎭崱鐗囷紙鏃犲壇鏍囬锛夛細padding + 鏍囬 + 鍐呭闂磋窛 + 杈撳叆妗?+ padding
+        int footerCustomRowY = y;
+        int footerCustomInputY = footerCustomRowY + CARD_PADDING + TITLE_LINE_HEIGHT + 8;
+        int footerCustomCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 8 + MULTILINE_INPUT_HEIGHT + CARD_PADDING;
+        y = footerCustomRowY + footerCustomCardHeight + CARD_GAP;
+        
+        // TPS 淇℃伅鍗＄墖
+        int footerTpsRowY = y;
+        int footerTpsCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = footerTpsRowY + footerTpsCardHeight + CARD_GAP;
+        
+        // MSPT 淇℃伅鍗＄墖
+        int footerMsptRowY = y;
+        int footerMsptCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = footerMsptRowY + footerMsptCardHeight + CARD_GAP;
+        
+        // 鍦ㄧ嚎浜烘暟鍗＄墖
+        int footerOnlineRowY = y;
+        int footerOnlineCardHeight = CARD_PADDING + TOGGLE_CARD_CONTENT_H + CARD_PADDING;
+        y = footerOnlineRowY + footerOnlineCardHeight;
+        
+        // 搴曢儴涓夊垪寮€鍏筹紙宸插簾寮冿紝鏀逛负鍗＄墖锛?
+        int footerRowY = y;
+
+        int footerTotalWidth = contentWidth - 6;
+        int footerColumnWidth = (footerTotalWidth - FOOTER_COLUMN_GAP * 2) / 3;
+        int footerFirstColumnX  = left;
+        int footerSecondColumnX = left + footerColumnWidth + FOOTER_COLUMN_GAP;
+        int footerThirdColumnX  = left + (footerColumnWidth + FOOTER_COLUMN_GAP) * 2;
+        int labelWidth = Math.max(80, contentWidth - 6 - TOGGLE_WIDTH - 8);
+
+        // 涓婚鏍峰紡Tab甯冨眬锛堝崱鐗囧紡锛?
+        int themeY = CONTENT_TOP_PADDING;
+        
+        int themeSectionHeaderY = themeY;
+        themeY += SECTION_HEADER_HEIGHT;
+        
+        // 棰勮涓婚鍗＄墖
+        int themeSelectorY = themeY;
+        int themeListHeight = com.poso.neotab.theme.TabThemeRegistry.ids().size() * THEME_OPTION_HEIGHT + 
+                              Math.max(0, com.poso.neotab.theme.TabThemeRegistry.ids().size() - 1) * THEME_OPTION_GAP;
+        int themeSelectorCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + themeListHeight + CARD_PADDING;
+        themeY = themeSelectorY + themeSelectorCardHeight + CARD_GAP;
+        
+        // 鑷畾涔変富棰橀厤缃崱鐗囷紙浠呭湪閫変腑"custom"鏃舵樉绀猴級
+        int customResetRowY = themeY;
+        int customAnimationRowY = themeY;
+        int customAnimSpeedRowY = themeY;
+        int customBgColorRowY = themeY;
+        int customOuterBorderRowY = themeY;
+        int customAddBorderColorRowY = themeY;
+        
+        if ("custom".equals(theme.selectedThemeId)) {
+            // 閲嶇疆涓洪粯璁ゅ崱鐗囷紙鏀惧湪鏈€涓婇潰锛?
+            customResetRowY = themeY;
+            int resetCardHeight = CARD_PADDING * 2 + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;  // 澧炲姞楂樺害浠ュ绾崇‘璁?鍙栨秷鎸夐挳
+            themeY = customResetRowY + resetCardHeight + CARD_GAP;
+            
+            // 鍔ㄧ敾鏁堟灉鍗＄墖锛堝彧鏈夋爣棰?+ 寮€鍏筹紝鏃犲壇鏍囬锛?
+            customAnimationRowY = themeY;
+            int animToggleCardH = CARD_PADDING + TITLE_LINE_HEIGHT + CARD_PADDING;
+            // 纭繚鍗＄墖楂樺害鑳藉绾?toggle锛?4px锛?
+            animToggleCardH = Math.max(animToggleCardH, CARD_PADDING + 14 + CARD_PADDING);
+            themeY = customAnimationRowY + animToggleCardH + CARD_GAP;
+
+            // 鍔ㄧ敾閫熺巼鍗＄墖锛堟爣棰?+ 鍓爣棰?+ 閫熺巼鎸夐挳锛?
+            customAnimSpeedRowY = themeY;
+            int animSpeedCardH = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + CARD_PADDING;
+            animSpeedCardH = Math.max(animSpeedCardH, CARD_PADDING + 18 + CARD_PADDING);
+            themeY = customAnimSpeedRowY + animSpeedCardH + CARD_GAP;
+            
+            // 棰滆壊閰嶇疆锛氭瘡涓鑹查」鐙珛鍗＄墖锛堝浐瀹氶珮搴︼紝涓嶅睍寮€/鎶樺彔锛?
+            java.util.List<Integer> borderColors = theme.customThemeConfig != null ? 
+                theme.customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
+            
+            int swatchSize = 24;  // 鑹插潡澶у皬锛堢缉灏忥級
+            int previewH = 8;     // 棰勮鍧楅珮搴?
+            int contentGap = 8;   // 鏍囬涓庡唴瀹逛箣闂寸殑闂磋窛
+            int previewGap = 8;   // 棰滆壊琛屼笌棰勮鍧椾箣闂寸殑闂磋窛
+            
+            // 璁＄畻鍗＄墖楂樺害锛堟爣棰?+ 闂磋窛 + 鑹插潡琛?+ 闂磋窛 + 棰勮鍧楋級
+            int colorCardH = CARD_PADDING + TITLE_LINE_HEIGHT + contentGap + swatchSize + previewGap + previewH + CARD_PADDING;
+            
+            // 鑳屾櫙棰滆壊鍗＄墖
+            customBgColorRowY = themeY;
+            themeY += colorCardH + CARD_GAP;
+            
+            // 澶栧眰杈规棰滆壊鍗＄墖
+            customOuterBorderRowY = themeY;
+            themeY += colorCardH + CARD_GAP;
+            
+            // 杈规棰滆壊澶у崱鐗囷紙涓€涓崱鐗囧寘鍚墍鏈夎竟妗嗛鑹查」锛屾坊鍔犳寜閽湪鍙充笂瑙掞級
+            // 楂樺害 = padding + 鏍囬琛?+ 鍓爣棰?+ 闂磋窛 + n脳(itemH+gap) + padding
+            customAddBorderColorRowY = themeY;
+            int borderItemH = THEME_OPTION_HEIGHT + 12;  // 姣忎釜棰滆壊琛岄珮搴︼紙鍚笂涓嬪唴杈硅窛锛屽鍔?鍍忕礌锛?
+            int borderItemGap = 8;  // 琛岄棿璺?
+            int borderCardInnerH = TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8;  // 鏍囬+鍓爣棰?
+            borderCardInnerH += borderColors.size() * (borderItemH + borderItemGap);
+            // 娣诲姞鎸夐挳鐜板湪鍦ㄥ彸涓婅锛屼笉闇€瑕佷负搴曢儴鎸夐挳棰勭暀绌洪棿
+            int borderBigCardH = CARD_PADDING + borderCardInnerH + CARD_PADDING;
+            themeY += borderBigCardH + SECTION_GAP;
+        }
+        
+        // 琛€閲忔樉绀哄垎鍖?
+        int healthSectionHeaderY = themeY;
+        themeY += SECTION_HEADER_HEIGHT;
+        
+        // 鏄剧ず鏁堟灉鍗＄墖
+        int healthModeRowY = themeY;
+        int healthModeCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
+        themeY = healthModeRowY + healthModeCardHeight + SECTION_GAP;
+        
+        // 甯冨眬鍒嗗垪鍒嗗尯
+        int layoutSectionHeaderY = themeY;
+        themeY += SECTION_HEADER_HEIGHT;
+        
+        // 鍚敤鍒嗗垪鍗＄墖
+        int layoutEnabledRowY = themeY;
+        int layoutEnabledCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
+        themeY = layoutEnabledRowY + layoutEnabledCardHeight + CARD_GAP;
+        
+        // 灞曠ず鍒楁暟鍗＄墖
+        int layoutColumnsRowY = themeY;
+        int layoutColumnsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
+        themeY = layoutColumnsRowY + layoutColumnsCardHeight + CARD_GAP;
+        
+        // 灞曠ず琛屾暟鍗＄墖
+        int layoutRowsRowY = themeY;
+        int layoutRowsCardHeight = CARD_PADDING + Math.max(INPUT_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
+        themeY = layoutRowsRowY + layoutRowsCardHeight + CARD_GAP;
+        
+        // 鎻愮ず鍗＄墖
+        int layoutHintRowY = themeY;
+        int hintLines = 2;
+        int layoutHintCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + (int)(SUBTITLE_LINE_HEIGHT * hintLines * 0.82f) + CARD_PADDING;
+        themeY = layoutHintRowY + layoutHintCardHeight;
+        
+        int themeSelectorWidth = contentWidth - 6;
+        int themeSelectorHeight = themeSelectorCardHeight;  // 鏁翠釜鍗＄墖鐨勯珮搴?
+        int layoutButtonsY = layoutEnabledRowY;  // 淇濇寔鍏煎鎬?
+
+        // 鏉冮檺閰嶇疆椤甸潰鍐呭楂樺害璁＄畻锛堝崱鐗囧紡甯冨眬锛?
+        int permY = CONTENT_TOP_PADDING;
+        
+        // 鍏ㄥ眬绛栫暐鍒嗗尯鏍囬
+        permY += SECTION_HEADER_HEIGHT;
+        
+        // 鍏ㄥ眬绛栫暐鏉冮檺鍗＄墖锛?鍒楃綉鏍煎竷灞€锛?4涓潈闄愰」锛?
+        int permCardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT) + CARD_PADDING;
+        int permRowCount = (14 + 1) / 2;  // 鍚戜笂鍙栨暣锛?4涓潈闄愰」鍒?鍒?
+        permY += permRowCount * (permCardHeight + CARD_GAP) - CARD_GAP;  // 鏈€鍚庝竴琛屼笉闇€瑕丟AP
+        permY += SECTION_GAP;
+        
+        // 鎸囧畾鐜╁绛栫暐鍒嗗尯鏍囬
+        permY += SECTION_HEADER_HEIGHT;
+        
+        // 娣诲姞鐜╁鍗＄墖
+        int addPlayerCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + INPUT_HEIGHT + CARD_PADDING;
+        permY += addPlayerCardHeight + CARD_GAP;
+        
+        // 鐜╁鍒楄〃鏄剧ず鍗＄墖
+        int playerListContentHeight;
+        if (permissions.targetPlayers.isEmpty()) {
+            playerListContentHeight = INPUT_HEIGHT;  // 涓庡崟涓爣绛鹃珮搴︿竴鑷?
+        } else {
+            // 璁＄畻鏍囩甯冨眬鐨勫疄闄呴珮搴︼紙涓巃pplyLayout淇濇寔涓€鑷达級
+            int tagHeight = INPUT_HEIGHT;
+            int tagGap = 6;
+            int maxWidth = contentWidth - CARD_PADDING * 2;
+            int tagX = 0;
+            int tagY = 0;
+            
+            for (java.util.Map.Entry<java.util.UUID, String> entry : permissions.targetPlayers.entrySet()) {
+                String playerName = entry.getValue();
+                int nameWidth = this.font.width(playerName);
+                int deleteButtonWidth = 16;
+                int tagPadding = 6;
+                int tagWidth = tagPadding + nameWidth + 4 + deleteButtonWidth + tagPadding;
+                
+                // 妫€鏌ユ槸鍚﹂渶瑕佹崲琛?
+                if (tagX + tagWidth > maxWidth && tagX > 0) {
+                    tagX = 0;
+                    tagY += tagHeight + tagGap;
+                }
+                
+                tagX += tagWidth + tagGap;
+            }
+            playerListContentHeight = tagY + tagHeight;
+        }
+        int playerListCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + playerListContentHeight + CARD_PADDING;
+        permY += playerListCardHeight + CARD_GAP;
+        
+        // 鎻愮ず鍗＄墖
+        int permHintCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + (int)(SUBTITLE_LINE_HEIGHT * 2 * 0.82f) + CARD_PADDING;
+        permY += permHintCardHeight + 16;
+        
+        // 搴旂敤鏉冮檺璁剧疆鍗＄墖
+        int applySettingsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + INPUT_HEIGHT + CARD_PADDING;
+        permY += applySettingsCardHeight + 16;
+        
+        // 淇濆瓨鎸夐挳锛堝凡搴熷純锛?
+        // permY += INPUT_HEIGHT + 8;
+        
+        int permissionsContentHeight = permY;
+
+        int contentHeight;
+        int CONTENT_BOTTOM_PADDING = 16;  // 鍐呭鍖哄煙搴曢儴鐣欑櫧锛岄伩鍏嶆渶鍚庝竴涓崱鐗囩揣璐存寜閽爮
+        if (activeTab == ConfigTab.PAGE_CONFIG) contentHeight = footerRowY + CONTENT_BOTTOM_PADDING;
+        else if (activeTab == ConfigTab.PERMISSIONS) contentHeight = permissionsContentHeight + CONTENT_BOTTOM_PADDING;
+        else contentHeight = themeY + CONTENT_BOTTOM_PADDING;  // 涓婚Tab浣跨敤themeY浣滀负鍐呭楂樺害
+        int maxScroll = Math.max(0, contentHeight - (viewportBottom - viewportTop));
+
+        int panelX = tabBarX - 2;
+        int panelW = (right + 8 + SCROLL_TRACK_W + 4) - panelX;
+        int panelCenterX = panelX + panelW / 2;
+
+        return new NeoTabConfigScreenLayout.Layout(
+            contentWidth, left, right, toggleX, labelWidth,
+            this.scrollOffset, viewportTop, viewportBottom, buttonBarTop,
+            topSectionHeaderY, topTitleRowY, topTitleInputY, topContentRowY, topContentInputY,
+            listSectionHeaderY, betterPingRowY, onlineDurationRowY, titleRowY, healthDisplayRowY,
+            footerSectionHeaderY, footerCustomRowY, footerCustomInputY, 
+            footerTpsRowY, footerMsptRowY, footerOnlineRowY, footerRowY,
+            footerFirstColumnX, footerSecondColumnX, footerThirdColumnX,
+            footerFirstColumnX  + footerColumnWidth - TOGGLE_WIDTH,
+            footerSecondColumnX + footerColumnWidth - TOGGLE_WIDTH,
+            footerThirdColumnX  + footerColumnWidth - TOGGLE_WIDTH,
+            footerColumnWidth, contentHeight, maxScroll, buttonWidth, buttonY,
+            panelCenterX + 5, panelCenterX - buttonWidth - 5, tabBarX,
+            themeSectionHeaderY, themeSelectorY, themeSelectorWidth, themeSelectorHeight,
+            customAnimationRowY, customAnimSpeedRowY, customBgColorRowY, 
+            customOuterBorderRowY, customResetRowY, customAddBorderColorRowY,
+            healthSectionHeaderY, healthModeRowY, layoutSectionHeaderY, layoutButtonsY,
+            layoutEnabledRowY, layoutColumnsRowY, layoutRowsRowY, layoutHintRowY,
+            lb(Component.translatable("screen.neotab.top.title"),           left, viewportTop - scrollOffset + topTitleRowY,       labelWidth),
+            lb(Component.translatable("screen.neotab.top.content"),         left, viewportTop - scrollOffset + topContentRowY,     labelWidth),
+            lb(Component.translatable("screen.neotab.list.better_ping"),    left, viewportTop - scrollOffset + betterPingRowY,     labelWidth),
+            lb(Component.translatable("screen.neotab.list.online_duration"),left, viewportTop - scrollOffset + onlineDurationRowY, labelWidth),
+            lb(Component.translatable("screen.neotab.list.title"),          left, viewportTop - scrollOffset + titleRowY,          labelWidth),
+            lb(Component.translatable("screen.neotab.list.health_display"), left, viewportTop - scrollOffset + healthDisplayRowY,  labelWidth),
+            lb(Component.translatable("screen.neotab.footer.custom"),       left, viewportTop - scrollOffset + footerCustomRowY,   labelWidth),
+            lb(Component.translatable("screen.neotab.footer.tps"),    footerFirstColumnX,  viewportTop - scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6),
+            lb(Component.translatable("screen.neotab.footer.mspt"),   footerSecondColumnX, viewportTop - scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6),
+            lb(Component.translatable("screen.neotab.footer.online"), footerThirdColumnX,  viewportTop - scrollOffset + footerRowY, footerColumnWidth - TOGGLE_WIDTH - 6),
+            lb(Component.translatable("screen.neotab.theme.health_mode"), left, viewportTop - scrollOffset + healthModeRowY, labelWidth)
+        );
+    }
+
+    private NeoTabConfigScreenLayout.LabelBounds lb(Component text, int x, int y, int maxWidth) {
+        int w = Math.min(this.font.width(text), maxWidth);
+        return new NeoTabConfigScreenLayout.LabelBounds(x, y, Math.max(w, 1), INPUT_HEIGHT);
+    }
+
+    /**
+     * 缁樺埗缂╂斁鏂囧瓧锛堢敤浜庡疄鐜颁笉鍚屽瓧浣撳ぇ灏忥級銆?
+     * 
+     * @param g GuiGraphics
+     * @param text 鏂囧瓧鍐呭
+     * @param x X鍧愭爣
+     * @param y Y鍧愭爣
+     * @param color 棰滆壊
+     * @param scale 缂╂斁姣斾緥锛?.0 = 姝ｅ父澶у皬锛?.75 = 75%澶у皬锛?
+     */
+    private void drawScaledText(GuiGraphics g, Component text, float x, float y, int color, float scale) {
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y, 0);
+        pose.scale(scale, scale, 1.0f);
+        g.drawString(this.font, text, 0, 0, color, false);
+        pose.popPose();
+    }
+
+    /**
+     * 缁樺埗鑷姩鎹㈣鐨勭缉鏀炬枃瀛椼€?
+     * 
+     * @param g GuiGraphics
+     * @param text 鏂囧瓧鍐呭
+     * @param x X鍧愭爣
+     * @param y Y鍧愭爣
+     * @param maxWidth 鏈€澶у搴?
+     * @param color 棰滆壊
+     * @param scale 缂╂斁姣斾緥
+     */
+    private void drawWrappedScaledText(GuiGraphics g, String text, float x, float y, int maxWidth, int color, float scale) {
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y, 0);
+        pose.scale(scale, scale, 1.0f);
+        
+        // 璁＄畻缂╂斁鍚庣殑鏈€澶у搴?
+        int scaledMaxWidth = (int)(maxWidth / scale);
+        
+        // 绠€鍗曠殑鎹㈣閫昏緫锛氭寜绌烘牸鍒嗚瘝
+        String[] words = text.split(" ");
+        StringBuilder currentLine = new StringBuilder();
+        int currentY = 0;
+        int lineHeight = this.font.lineHeight;
+        
+        for (String word : words) {
+            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
+            int testWidth = this.font.width(testLine);
+            
+            if (testWidth > scaledMaxWidth && currentLine.length() > 0) {
+                // 缁樺埗褰撳墠琛?
+                g.drawString(this.font, currentLine.toString(), 0, currentY, color, false);
+                currentLine = new StringBuilder(word);
+                currentY += lineHeight;
+            } else {
+                currentLine = new StringBuilder(testLine);
+            }
+        }
+        
+        // 缁樺埗鏈€鍚庝竴琛?
+        if (currentLine.length() > 0) {
+            g.drawString(this.font, currentLine.toString(), 0, currentY, color, false);
+        }
+        
+        pose.popPose();
+    }
+
+    // 鈹€鈹€ Scroll helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    private void setScrollOffsetInternal(int nextOffset, NeoTabConfigScreenLayout.Layout layout) {
+        this.scrollOffset = Math.max(0, Math.min(nextOffset, layout.maxScroll()));
+        applyWidgetLayout(layout);
+    }
+
+    private void clampScroll(NeoTabConfigScreenLayout.Layout layout) {
+        this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, layout.maxScroll()));
+    }
+
+    private boolean isInsideViewport(double mouseX, double mouseY, NeoTabConfigScreenLayout.Layout layout) {
+        return mouseX >= layout.left() && mouseX <= layout.right() + 8 + SCROLL_TRACK_W
+            && mouseY >= layout.viewportTop() && mouseY <= layout.viewportBottom();
+    }
+
+    private AbstractWidget hoveredScrollableWidget(double mouseX, double mouseY) {
+        for (Renderable r : this.renderables) {
+            if (r == this.doneButton || r == this.cancelButton) continue;
+            if (r instanceof AbstractWidget w && w.visible && w.isMouseOver(mouseX, mouseY)) return w;
+        }
+        return null;
+    }
+
+    // 鈹€鈹€ save 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    private void save() {
+        if (screenMode == ScreenMode.PLAYER) {
+            com.poso.neotab.config.PlayerTabConfig playerCfg = new com.poso.neotab.config.PlayerTabConfig(
+                Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : java.util.UUID.randomUUID(),
+                policy.allowTopTitleToggle()      ? pageConfig.topTitleEnabled.getValue()      : null,
+                policy.allowTopTitleEdit()        ? pageConfig.topTitleInput.getValue()        : null,
+                policy.allowTopContentToggle()    ? pageConfig.topContentEnabled.getValue()    : null,
+                policy.allowTopContentEdit()      ? pageConfig.topContentInput.getValue()      : null,
+                policy.allowPingDisplayToggle()   ? pageConfig.betterPingEnabled.getValue()    : null,
+                policy.allowDurationToggle()      ? pageConfig.onlineDurationEnabled.getValue() : null,
+                policy.allowTitleToggle()         ? pageConfig.titleEnabled.getValue()         : null,
+                policy.allowHealthDisplayToggle() ? pageConfig.healthDisplayEnabled.getValue() : null,
+                policy.allowHealthModeChange()    ? pageConfig.healthDisplayMode.getValue()    : null,
+                policy.allowFooterCustomEdit()    ? pageConfig.footerCustomInput.getValue()    : null,
+                policy.allowFooterTpsToggle()     ? pageConfig.footerTpsEnabled.getValue()     : null,
+                policy.allowFooterMsptToggle()    ? pageConfig.footerMsptEnabled.getValue()    : null,
+                policy.allowFooterOnlineToggle()  ? pageConfig.footerOnlineEnabled.getValue()  : null,
+                policy.allowThemeChange()         ? theme.selectedThemeId                      : null
+            );
+            PacketDistributor.sendToServer(new SavePlayerConfigPayload(playerCfg));
+        } else {
+            TabConfig config = new TabConfig(
+                pageConfig.topTitleEnabled.getValue(),
+                pageConfig.topTitleInput.getValue(),
+                pageConfig.topContentEnabled.getValue(),
+                pageConfig.topContentInput.getValue(),
+                pageConfig.betterPingEnabled.getValue(),
+                pageConfig.onlineDurationEnabled.getValue(),
+                pageConfig.titleEnabled.getValue(),
+                pageConfig.healthDisplayEnabled.getValue(),
+                pageConfig.healthDisplayMode.getValue(),
+                theme.selectedThemeId,
+                pageConfig.footerCustomInput.getValue(),
+                pageConfig.footerTpsEnabled.getValue(),
+                pageConfig.footerMsptEnabled.getValue(),
+                pageConfig.footerOnlineEnabled.getValue(),
+                initialConfig.refreshIntervalTicks(),
+                permissions.buildGlobalPolicyFromToggles(initialConfig),
+                permissions.buildPlayerPoliciesFromToggles(initialConfig)
+            ).sanitized();
+            PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        }
+        onClose();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 浼樺厛澶勭悊HEX杈撳叆妗嗙殑閿洏浜嬩欢
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isFocused()) {
+                    return hexBox.keyPressed(keyCode, scanCode, modifiers);
+                }
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        // 浼樺厛澶勭悊HEX杈撳叆妗嗙殑瀛楃杈撳叆
+        if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
+            for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
+                if (hexBox.visible && hexBox.isFocused()) {
+                    return hexBox.charTyped(codePoint, modifiers);
+                }
+            }
+        }
+        return super.charTyped(codePoint, modifiers);
+    }
+}
+
+

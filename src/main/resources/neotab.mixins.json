@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.poso.neotab.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "neotab.refmap.json",
+  "mixins": [
+  ],
+  "client": [
+    "PlayerTabOverlayMixin",
+    "PlayerTabOverlayAccessor",
+    "client.MultiLineEditBoxMixin",
+    "client.MultiLineEditBoxAccessor",
+    "client.MultilineTextFieldAccessor"
+  ],
+  "server": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
