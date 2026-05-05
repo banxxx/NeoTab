@@ -119,8 +119,9 @@ public class NeoTabConfigScreen extends Screen {
         return com.poso.neotab.util.ScreenAccessHelper.addWidget(this, widget); 
     }
     
+    @Override
     public void removeWidget(net.minecraft.client.gui.components.events.GuiEventListener widget) { 
-        com.poso.neotab.util.ScreenAccessHelper.removeWidget(this, widget); 
+        super.removeWidget(widget); 
     }
     
     // 公共包装方法，供 ScreenAccessHelper 调用
@@ -135,6 +136,10 @@ public class NeoTabConfigScreen extends Screen {
     public void removeWidgetPublic(net.minecraft.client.gui.components.events.GuiEventListener widget) {
         this.removeWidget(widget);
     }
+
+    // ThemeTabManager 직접 호출용 (NeoForge 버전과 동일한 방식)
+    <T extends AbstractWidget> T addWidgetDirect(T widget) { return this.addRenderableWidget(widget); }
+    void removeWidgetDirect(net.minecraft.client.gui.components.events.GuiEventListener widget) { this.removeWidget(widget); }
     
     Font font() { return this.font; }
     ConfigTab getActiveTab() { return activeTab; }
@@ -353,6 +358,18 @@ public class NeoTabConfigScreen extends Screen {
                 }
             }
         }
+
+        // 颜色选择器优先拦截：当颜色选择器可见时，其区域内的点击不应穿透到下方组件
+        if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+            int px = theme.embeddedColorPicker.getX(), py = theme.embeddedColorPicker.getY();
+            int pw = theme.embeddedColorPicker.getWidth(), ph = theme.embeddedColorPicker.getHeight();
+            if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
+                boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
+                if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); }
+                // 无论是否命中内部控件，都消费掉这次点击，防止穿透
+                return true;
+            }
+        }
         
         // 优先检查HEX输入框的点击（在所有其他处理之前）
         if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId) && button == 0) {
@@ -420,18 +437,51 @@ public class NeoTabConfigScreen extends Screen {
             for (Button btn : theme.customBorderColorButtons) {
                 if (btn.visible && btn.isMouseOver(mouseX, mouseY)) return btn.mouseClicked(mouseX, mouseY, button);
             }
+            // 删除按钮：用与渲染完全相同的坐标判断点击（× 是手动绘制的，不是 Button widget）
+            if (theme.customThemeConfig != null && button == 0) {
+                java.util.List<Integer> borderColors = theme.customThemeConfig.getBorderColors();
+                int CARD_PADDING = 10;
+                int borderItemH = THEME_OPTION_HEIGHT + 12;
+                int borderItemGap = 8;
+                int titleLineHeight = this.font.lineHeight;
+                int subtitleLineHeight = this.font.lineHeight;
+                int borderCardInnerH = titleLineHeight + 2 + subtitleLineHeight + 8;
+                int borderBigCardY = layout.toScreenY(layout.customAddBorderColorRowY());
+                int rowStartY = borderBigCardY + CARD_PADDING + borderCardInnerH;
+                int rowW = layout.contentWidth() - CARD_PADDING * 2;
+                for (int i = 0; i < borderColors.size(); i++) {
+                    int rowY = rowStartY + i * (borderItemH + borderItemGap);
+                    int delX = layout.left() + CARD_PADDING + rowW - 20;
+                    if (mouseX >= delX && mouseX < delX + 20 && mouseY >= rowY && mouseY < rowY + borderItemH) {
+                        final int idx = i;
+                        java.util.List<Integer> newColors = new java.util.ArrayList<>(theme.customThemeConfig.getBorderColors());
+                        newColors.remove(idx);
+                        theme.customThemeConfig.setBorderColors(newColors);
+                        com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
+                        if (theme.currentSelectedBorderIndex == idx) {
+                            theme.currentSelectedColorType = null;
+                            theme.currentSelectedBorderIndex = -1;
+                        } else if (theme.currentSelectedBorderIndex > idx) {
+                            theme.currentSelectedBorderIndex--;
+                            theme.currentSelectedColorType = "border_" + theme.currentSelectedBorderIndex;
+                        }
+                        theme.rebuildCustomBorderColorButtons();
+                        NeoTabConfigScreenLayout.Layout newLayout = buildLayoutImpl();
+                        applyWidgetLayout(newLayout);
+                        return true;
+                    }
+                }
+            }
             if (theme.addCustomBorderColorButton != null && theme.addCustomBorderColorButton.visible && theme.addCustomBorderColorButton.isMouseOver(mouseX, mouseY))
                 return theme.addCustomBorderColorButton.mouseClicked(mouseX, mouseY, button);
         }
-        // Color picker
+        // Color picker - 处理点击颜色选择器外部时关闭（区域内点击已在方法开头处理）
         if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
             int px = theme.embeddedColorPicker.getX(), py = theme.embeddedColorPicker.getY();
             int pw = theme.embeddedColorPicker.getWidth(), ph = theme.embeddedColorPicker.getHeight();
-            if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
-                boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
-                if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); return true; }
-            } else if (theme.currentSelectedColorType != null) {
-                // 点击颜色选择器外部时隐藏（对所有颜色类型：background, outer_border, border_*）
+            if (!(mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph)
+                    && theme.currentSelectedColorType != null) {
+                // 点击颜色选择器外部
                 boolean clickedSwatch = false;
                 boolean clickedHexInput = false;
                 
@@ -627,7 +677,13 @@ public class NeoTabConfigScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0 && isDraggingScrollbar) { isDraggingScrollbar = false; return true; }
         if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
-            if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) return true;
+            if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) {
+                // 拖动结束时保存配置
+                if (theme.customThemeConfig != null) {
+                    com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
+                }
+                return true;
+            }
         }
         return super.mouseReleased(mouseX, mouseY, button);
     }
@@ -1140,6 +1196,14 @@ public class NeoTabConfigScreen extends Screen {
                     int rowY = rowStartY + i * (borderItemH + borderItemGap);
                     boolean borderHov = mouseX >= layout.left() + CARD_PADDING && mouseX < layout.left() + CARD_PADDING + rowW
                                      && mouseY >= rowY && mouseY < rowY + borderItemH;
+                    // 如果颜色选择器可见且鼠标在其区域内，不显示悬浮效果（防止渲染穿透）
+                    if (borderHov && theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+                        int cpx = theme.embeddedColorPicker.getX(), cpy = theme.embeddedColorPicker.getY();
+                        int cpw = theme.embeddedColorPicker.getWidth(), cph = theme.embeddedColorPicker.getHeight();
+                        if (mouseX >= cpx && mouseX < cpx + cpw && mouseY >= cpy && mouseY < cpy + cph) {
+                            borderHov = false;
+                        }
+                    }
                     // 白色行背景
                     AEStyleRenderer.drawOutline(g, layout.left() + CARD_PADDING, rowY, rowW, borderItemH, AEStyleRenderer.COLOR_PANEL_BORDER, 1);
                     g.fill(layout.left() + CARD_PADDING + 1, rowY + 1, layout.left() + CARD_PADDING + rowW - 1, rowY + borderItemH - 1,

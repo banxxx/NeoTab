@@ -52,6 +52,8 @@ public class ThemeTabManager {
     // 颜色选择器浮动位置（相对于屏幕坐标）
     int colorPickerFloatX = 0;
     int colorPickerFloatY = 0;
+    // 防止颜色选择器→HEX输入框→颜色选择器的循环更新
+    boolean updatingHexFromPicker = false;
 
     ThemeTabManager(NeoTabConfigScreen screen) {
         this.screen = screen;
@@ -123,6 +125,7 @@ public class ThemeTabManager {
         this.customBackgroundHexInput.setCanLoseFocus(true);
         this.customBackgroundHexInput.setFocused(false);
         this.customBackgroundHexInput.setResponder(text -> {
+            if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
             try {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
@@ -187,6 +190,7 @@ public class ThemeTabManager {
         this.customBorderOuterHexInput.setCanLoseFocus(true);
         this.customBorderOuterHexInput.setFocused(false);
         this.customBorderOuterHexInput.setResponder(text -> {
+            if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
             try {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
@@ -301,13 +305,35 @@ public class ThemeTabManager {
             color -> {
                 if ("background".equals(currentSelectedColorType)) {
                     customThemeConfig.setBackgroundColor(color);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    // 同步更新HEX输入�?
+                    // 不在拖动时保存，由 mouseReleased 触发保存
                     if (customBackgroundHexInput != null) {
+                        updatingHexFromPicker = true;
                         customBackgroundHexInput.setValue(String.format("#%08X", color));
+                        updatingHexFromPicker = false;
+                    }
+                } else if ("outer_border".equals(currentSelectedColorType)) {
+                    customThemeConfig.setBorderOuterColor(color);
+                    if (customBorderOuterHexInput != null) {
+                        updatingHexFromPicker = true;
+                        customBorderOuterHexInput.setValue(String.format("#%08X", color));
+                        updatingHexFromPicker = false;
+                    }
+                } else if (currentSelectedColorType != null && currentSelectedColorType.startsWith("border_")) {
+                    if (currentSelectedBorderIndex >= 0) {
+                        java.util.List<Integer> colors = new java.util.ArrayList<>(customThemeConfig.getBorderColors());
+                        if (currentSelectedBorderIndex < colors.size()) {
+                            colors.set(currentSelectedBorderIndex, color);
+                            customThemeConfig.setBorderColors(colors);
+                            if (currentSelectedBorderIndex < customBorderHexInputs.size()) {
+                                updatingHexFromPicker = true;
+                                customBorderHexInputs.get(currentSelectedBorderIndex)
+                                    .setValue(String.format("#%08X", color));
+                                updatingHexFromPicker = false;
+                            }
+                        }
                     }
                 }
-            }, colorPickerScale, false);  // 设置为false，不显示内部HEX输入�?
+            }, colorPickerScale, false);
         this.embeddedColorPicker.visible = false;  // 初始化时隐藏
         ScreenAccessHelper.addWidget(screen, this.embeddedColorPicker);
 
@@ -317,17 +343,17 @@ public class ThemeTabManager {
 
     void rebuildCustomBorderColorButtons() {
         for (Button button : customBorderColorButtons) {
-            ScreenAccessHelper.removeWidget(screen, button);
+            screen.removeWidgetDirect(button);
         }
         customBorderColorButtons.clear();
 
         for (EditBox box : customBorderHexInputs) {
-            ScreenAccessHelper.removeWidget(screen, box);
+            screen.removeWidgetDirect(box);
         }
         customBorderHexInputs.clear();
 
         if (addCustomBorderColorButton != null) {
-            ScreenAccessHelper.removeWidget(screen, addCustomBorderColorButton);
+            screen.removeWidgetDirect(addCustomBorderColorButton);
             addCustomBorderColorButton = null;
         }
 
@@ -347,7 +373,7 @@ public class ThemeTabManager {
             final int color = colors.get(i);
 
             // 颜色选择按钮（色块区域，点击打开颜色选择器）
-            Button colorButton = ScreenAccessHelper.addWidget(screen, Button.builder(
+            Button colorButton = screen.addWidgetDirect(Button.builder(
                 Component.empty(),
                 button -> {
                     String colorType = "border_" + index;
@@ -368,29 +394,7 @@ public class ThemeTabManager {
             ).bounds(layout.left(), 0, 28, 28).build());
             customBorderColorButtons.add(colorButton);
 
-            // 删除按钮
-            Button deleteButton = ScreenAccessHelper.addWidget(screen, Button.builder(
-                Component.literal("×"),
-                button -> {
-                    List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
-                    newColors.remove(index);
-                    customThemeConfig.setBorderColors(newColors);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    if (currentSelectedBorderIndex == index) {
-                        currentSelectedColorType = null;
-                        currentSelectedBorderIndex = -1;
-                    } else if (currentSelectedBorderIndex > index) {
-                        currentSelectedBorderIndex--;
-                        currentSelectedColorType = "border_" + currentSelectedBorderIndex;
-                    }
-                    rebuildCustomBorderColorButtons();
-                    NeoTabConfigScreenLayout.Layout newLayout = screen.buildLayout();
-                    screen.applyLayout(newLayout);
-                }
-            ).bounds(layout.left(), 0, delBtnW, 20).build());
-            customBorderColorButtons.add(deleteButton);
-
-            // Hex输入框（支持透明度，格式 #AARRGGBB�?
+            // Hex输入框（支持透明度，格式 #AARRGGBB）�?
             final EditBox hexBox = new EditBox(
                     screen.font(), layout.left(), 0, hexInputW, 20,
                     Component.empty());
@@ -402,6 +406,7 @@ public class ThemeTabManager {
             hexBox.setFocused(false);   // 初始状态不聚焦
             hexBox.visible = false;     // 初始状态不可见，由syncVisibility控制
             hexBox.setResponder(text -> {
+                if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
                 try {
                     String clean = text.startsWith("#") ? text.substring(1) : text;
                     
@@ -448,13 +453,13 @@ public class ThemeTabManager {
                 } catch (NumberFormatException ignored) {}
             });
             hexBox.visible = false;
-            ScreenAccessHelper.addWidget(screen, hexBox);
+            screen.addWidgetDirect(hexBox);
             customBorderHexInputs.add(hexBox);
         }
 
         if (colors.size() < 7) {
             // 添加按钮：紧凑样式，不全�?
-            this.addCustomBorderColorButton = ScreenAccessHelper.addWidget(screen, Button.builder(
+            this.addCustomBorderColorButton = screen.addWidgetDirect(Button.builder(
                 Component.translatable("screen.neotab.custom_theme.add_border_color"),
                 button -> {
                     List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
@@ -524,8 +529,18 @@ public class ThemeTabManager {
                 customAnimationToggle.setWidth(26);
                 customAnimationToggle.setHeight(14);
             }
+
+            // 动画速率卡片：速率按钮右对齐，垂直居中
+            int animSpeedCardH = Math.max(CARD_PADDING + TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + CARD_PADDING, CARD_PADDING + 18 + CARD_PADDING);
+            int animSpeedCenterY = layout.customAnimSpeedRowY() + (animSpeedCardH - 18) / 2;
+            if (customAnimationSpeedButton != null) {
+                customAnimationSpeedButton.setX(layout.right() - CARD_PADDING - 80);
+                customAnimationSpeedButton.setY(layout.toScreenY(animSpeedCenterY));
+                customAnimationSpeedButton.setWidth(80);
+                customAnimationSpeedButton.setHeight(18);
+            }
             
-            // 背景颜色卡片（色�?+ HEX输入框布局，固定高度）
+            // 背景颜色卡片（色块 + HEX输入框布局，固定高度）
             int bgCardY = layout.customBgColorRowY();
             int swatchSize = 24;  // 色块大小（缩小）
             int hexInputW = 90;   // HEX输入框宽度（缩小�?
@@ -554,6 +569,101 @@ public class ThemeTabManager {
                 if ("background".equals(currentSelectedColorType) && customBackgroundColorButton != null) {
                     embeddedColorPicker.setX(customBackgroundColorButton.getX());
                     embeddedColorPicker.setY(customBackgroundColorButton.getY() + swatchSize + 4);
+                } else if ("outer_border".equals(currentSelectedColorType) && customBorderOuterFactorButton != null) {
+                    embeddedColorPicker.setX(customBorderOuterFactorButton.getX());
+                    embeddedColorPicker.setY(customBorderOuterFactorButton.getY() + swatchSize + 4);
+                }
+            }
+
+            // 外层边框颜色卡片
+            int outerCardY = layout.customOuterBorderRowY();
+            if (customBorderOuterFactorButton != null) {
+                customBorderOuterFactorButton.setX(layout.left() + CARD_PADDING);
+                customBorderOuterFactorButton.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
+                customBorderOuterFactorButton.setWidth(swatchSize);
+                customBorderOuterFactorButton.setHeight(swatchSize);
+            }
+            if (customBorderOuterHexInput != null) {
+                customBorderOuterHexInput.setX(layout.left() + CARD_PADDING + swatchSize + gap);
+                customBorderOuterHexInput.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
+                customBorderOuterHexInput.setWidth(hexInputW);
+                customBorderOuterHexInput.setHeight(swatchSize);
+            }
+
+            // 边框颜色列表（customBorderColorButtons 每个颜色一个色块按钮，索引 i 对应颜色 i）
+            java.util.List<Integer> borderColors = customThemeConfig != null ?
+                customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
+            int borderItemH = THEME_OPTION_HEIGHT + 12;
+            int borderItemGap = 8;
+            int borderCardInnerH = TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + 8;
+            int rowStartY = layout.customAddBorderColorRowY() + CARD_PADDING + borderCardInnerH;
+            int borderSwatchSize = 16;
+            int hexInputH = 14;
+            int borderHexInputW = 70;
+
+            for (int i = 0; i < borderColors.size(); i++) {
+                int rowY = rowStartY + i * (borderItemH + borderItemGap);
+                int swatchX = layout.left() + CARD_PADDING + 8;
+                int swatchY = rowY + (borderItemH - borderSwatchSize) / 2;
+
+                // 色块按钮（索引 i，一对一）
+                if (i < customBorderColorButtons.size()) {
+                    Button colorBtn = customBorderColorButtons.get(i);
+                    colorBtn.setX(swatchX);
+                    colorBtn.setY(layout.toScreenY(swatchY));
+                    colorBtn.setWidth(borderSwatchSize);
+                    colorBtn.setHeight(borderSwatchSize);
+                }
+
+                // HEX 输入框
+                if (i < customBorderHexInputs.size()) {
+                    EditBox hexBox = customBorderHexInputs.get(i);
+                    hexBox.setX(swatchX + borderSwatchSize + 8);
+                    hexBox.setY(layout.toScreenY(rowY + (borderItemH - hexInputH) / 2));
+                    hexBox.setWidth(borderHexInputW);
+                    hexBox.setHeight(hexInputH);
+                }
+
+                // 颜色选择器定位（当此项被选中时）
+                String colorType = "border_" + i;
+                if (colorType.equals(currentSelectedColorType) && embeddedColorPicker != null) {
+                    embeddedColorPicker.setX(swatchX);
+                    embeddedColorPicker.setY(layout.toScreenY(swatchY) + borderSwatchSize + 4);
+                    colorPickerFloatX = swatchX;
+                    colorPickerFloatY = layout.toScreenY(swatchY) + borderSwatchSize + 4;
+                }
+            }
+
+            // 添加边框颜色按钮
+            if (addCustomBorderColorButton != null) {
+                int addBtnW = 100;
+                int addBtnH = 18;
+                int borderCardY = layout.customAddBorderColorRowY();
+                addCustomBorderColorButton.setX(layout.right() - CARD_PADDING - addBtnW);
+                addCustomBorderColorButton.setY(layout.toScreenY(borderCardY + CARD_PADDING + (TITLE_LINE_HEIGHT - addBtnH) / 2));
+                addCustomBorderColorButton.setWidth(addBtnW);
+                addCustomBorderColorButton.setHeight(addBtnH);
+            }
+
+            // 重置确认/取消按钮
+            if (showResetConfirmation && resetToDefaultButton != null) {
+                int resetBtnW = 80;
+                int btnGap = 2;
+                int actualBtnW = (resetBtnW - btnGap) / 2;
+                int confirmCancelBtnH = 18;
+                int baseX = resetToDefaultButton.getX();
+                int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight() + 4;
+                if (resetCancelButton != null) {
+                    resetCancelButton.setX(baseX);
+                    resetCancelButton.setY(baseY);
+                    resetCancelButton.setWidth(actualBtnW);
+                    resetCancelButton.setHeight(confirmCancelBtnH);
+                }
+                if (resetConfirmButton != null) {
+                    resetConfirmButton.setX(baseX + actualBtnW + btnGap);
+                    resetConfirmButton.setY(baseY);
+                    resetConfirmButton.setWidth(actualBtnW);
+                    resetConfirmButton.setHeight(confirmCancelBtnH);
                 }
             }
         }
