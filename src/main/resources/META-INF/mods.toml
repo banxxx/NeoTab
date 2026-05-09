@@ -23,6 +23,8 @@ modId="${mod_id}" #mandatory
 version="${mod_version}" #mandatory
 # A display name for the mod
 displayName="${mod_name}" #mandatory
+side = "both"               # 两端都能加载
+clientSideOnly = true       # 服务器不会强制要求客户端也安装它
 # A URL to query for updates for this mod. See the JSON update specification https://docs.minecraftforge.net/en/latest/misc/updatechecker/
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 # A URL for the "homepage" for this mod, displayed in the mod UI
@@ -49,6 +51,7 @@ authors="${mod_authors}" #optional
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''${mod_description}'''
+
 
 # Mixin configuration
 [[mixins]]

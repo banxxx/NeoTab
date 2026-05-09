@@ -111,5 +111,6 @@
   "screen.neotab.input.top_title_hint": "Supports rich text tags, e.g. <color></color>\nMax 32 visible characters",
   "screen.neotab.input.top_content_hint": "Supports placeholders, e.g. %server_tps%\nMax 256 visible characters",
   "screen.neotab.input.footer_custom_hint": "Enter custom text with placeholders\nExample: %server_tps%, %online_players%",
-  "screen.neotab.input.player_search_hint": "Enter player name..."
+  "screen.neotab.input.player_search_hint": "Enter player name...",
+  "screen.neotab.permissions.override_personal": "Override personal policies"
 }

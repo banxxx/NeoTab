@@ -194,9 +194,7 @@ public class PageConfigTabManager {
                                     NeoTabConfigScreen.ScreenMode screenMode,
                                     PlayerCustomizePolicy policy) {
         if (screenMode == NeoTabConfigScreen.ScreenMode.ADMIN) return;
-        if (!allowed) {
-            widget.active = false;
-        }
+        widget.active = allowed;
     }
 
     /**

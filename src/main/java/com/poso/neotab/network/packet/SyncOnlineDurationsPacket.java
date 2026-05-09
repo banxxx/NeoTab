@@ -1,8 +1,11 @@
 package com.poso.neotab.network.packet;
 
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -57,20 +60,19 @@ public class SyncOnlineDurationsPacket {
     public static void handle(SyncOnlineDurationsPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            // 确保在客户端线程执行
             if (context.getDirection().getReceptionSide().isClient()) {
-                handleClientSide(packet);
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                    try {
+                        Class<?> clz = Class.forName("com.poso.neotab.network.client.ClientPacketHandlers");
+                        Method method = clz.getMethod("handleSyncOnlineDurations", Map.class);
+                        method.invoke(null, packet.onlineDurations);
+                    } catch (Exception e) {
+                        com.poso.neotab.NeoTab.LOGGER.error("Failed to sync online durations", e);
+                    }
+                });
             }
         });
         context.setPacketHandled(true);
-    }
-    
-    /**
-     * 客户端处理逻辑。
-     */
-    private static void handleClientSide(SyncOnlineDurationsPacket packet) {
-        // 更新客户端状态管理器中的在线时长数据
-        com.poso.neotab.client.NeoTabClientState.updateOnlineDurations(packet.onlineDurations);
     }
     
     public Map<UUID, String> getOnlineDurations() {

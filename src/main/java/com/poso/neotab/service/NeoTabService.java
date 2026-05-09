@@ -1,5 +1,6 @@
 package com.poso.neotab.service;
 
+import com.poso.neotab.NeoTab;
 import com.poso.neotab.config.PlayerTabConfig;
 import com.poso.neotab.config.PlayerTabConfigRepository;
 import com.poso.neotab.config.TabConfig;
@@ -335,6 +336,13 @@ public final class NeoTabService {
             actor.sendSystemMessage(Component.translatable("message.neotab.no_permission"));
             return;
         }
+
+        NeoTab.LOGGER.info("NeoTabService.updateConfig from player {}: ping={}, duration={}, health={}, mode={}",
+            actor.getName().getString(),
+            requestedConfig.betterPingEnabled(),
+            requestedConfig.onlineDurationEnabled(),
+            requestedConfig.healthDisplayEnabled(),
+            requestedConfig.healthDisplayMode());
 
         this.config = requestedConfig.sanitized();
         repository.save(actor.server, this.config);

@@ -2,8 +2,11 @@ package com.poso.neotab.network.packet;
 
 import com.poso.neotab.config.TabConfig;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
@@ -41,26 +44,19 @@ public class OpenConfigScreenPacket {
     public static void handle(OpenConfigScreenPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            // 确保在客户端线程执行
             if (context.getDirection().getReceptionSide().isClient()) {
-                handleClientSide(packet);
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                    try {
+                        Class<?> clz = Class.forName("com.poso.neotab.network.client.ClientPacketHandlers");
+                        Method method = clz.getMethod("handleOpenConfigScreen", TabConfig.class);
+                        method.invoke(null, packet.config);
+                    } catch (Exception e) {
+                        com.poso.neotab.NeoTab.LOGGER.error("Failed to open config screen", e);
+                    }
+                });
             }
         });
         context.setPacketHandled(true);
-    }
-    
-    /**
-     * 客户端处理逻辑。
-     */
-    private static void handleClientSide(OpenConfigScreenPacket packet) {
-        // 在客户端打开配置界面
-        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
-        minecraft.setScreen(
-            new com.poso.neotab.client.screen.NeoTabConfigScreen(
-                minecraft.screen,  // parent screen
-                packet.config      // config
-            )
-        );
     }
     
     public TabConfig getConfig() {

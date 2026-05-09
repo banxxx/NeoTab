@@ -91,16 +91,15 @@ public final class NeoTabCommands {
             return 0;
         }
 
-        // 计算该玩家的有效策略
-        PlayerCustomizePolicy policy = NeoTabPermissions.resolvePolicy(
-            player, NeoTab.service().getConfig()
-        );
-
-        // 获取该玩家的当前个人配置
+        TabConfig serverConfig = NeoTab.service().getConfig();
+        PlayerCustomizePolicy policy = NeoTabPermissions.resolvePolicy(player, serverConfig);
         PlayerTabConfig personalConfig = NeoTab.service().getPlayerConfig(player.getUUID());
 
-        NeoTabNetwork.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), 
-            new OpenCustomizeScreenPacket(personalConfig, policy));
+        NeoTabNetwork.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player),
+                new OpenCustomizeScreenPacket(serverConfig, personalConfig, policy));
+
+        NeoTab.LOGGER.info("Customize policy for {}: {}", player.getName().getString(), policy);
+
         source.sendSuccess(() -> Component.translatable("command.neotab.customize_opened"), false);
         return Command.SINGLE_SUCCESS;
     }

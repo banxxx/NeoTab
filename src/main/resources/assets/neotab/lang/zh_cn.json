@@ -111,5 +111,6 @@
   "screen.neotab.input.top_title_hint": "支持富文本标签，如 <color></color>\n最多 32 个可见字符",
   "screen.neotab.input.top_content_hint": "支持占位符，如 %server_tps%\n最多 256 个可见字符",
   "screen.neotab.input.footer_custom_hint": "输入自定义文本，支持占位符\n例如：%server_tps%、%online_players%",
-  "screen.neotab.input.player_search_hint": "输入玩家名称..."
+  "screen.neotab.input.player_search_hint": "输入玩家名称...",
+  "screen.neotab.permissions.override_personal": "覆盖个人策略"
 }

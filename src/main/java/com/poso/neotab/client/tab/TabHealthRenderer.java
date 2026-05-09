@@ -25,12 +25,6 @@ import java.util.UUID;
  */
 public final class TabHealthRenderer {
 
-    // ── 原版心形 sprite ────────────────────────────────────────────────────────
-    // 注意：1.20.1 使用 ResourceLocation 而不是 withDefaultNamespace
-    public static final ResourceLocation HEART_FULL      = new ResourceLocation("minecraft", "hud/heart/full");
-    public static final ResourceLocation HEART_HALF      = new ResourceLocation("minecraft", "hud/heart/half");
-    public static final ResourceLocation HEART_CONTAINER = new ResourceLocation("minecraft", "hud/heart/container");
-
     // ── 尺寸常量（与 Mixin 中保持一致）────────────────────────────────────────
     public static final int HEART_SIZE  = 8;
     public static final int HEART_STEP  = 7;
@@ -136,10 +130,8 @@ public final class TabHealthRenderer {
 
         if (config.healthDisplayMode() == com.poso.neotab.config.HealthDisplayMode.COMPACT) {
             // COMPACT 模式：1颗心 + 数字
-            // 注意：1.20.1 可能没有 blitSprite 方法，需要使用 blit 或其他方法
-            // 这里暂时保留 blitSprite 调用，如果编译错误需要替换为兼容方法
-            renderHeartSprite(g, HEART_CONTAINER, startX, y);
-            renderHeartSprite(g, HEART_FULL, startX, y);
+            renderHeartSprite(g, 0, startX, y);  // 空容器
+            renderHeartSprite(g, 1, startX, y);  // 满心
             int numX = startX + HEART_SIZE + SECTION_GAP;
             g.drawString(font, "x" + (int) health, numX, y, 0xFFFFFF, false);
             return;
@@ -149,8 +141,8 @@ public final class TabHealthRenderer {
         if (maxHealth > 20f || health > 20f) {
             for (int i = 0; i < MAX_HEARTS; i++) {
                 int hx = startX + i * HEART_STEP;
-                renderHeartSprite(g, HEART_CONTAINER, hx, y);
-                renderHeartSprite(g, HEART_FULL, hx, y);
+                renderHeartSprite(g, 0, hx, y);  // 空容器
+                renderHeartSprite(g, 1, hx, y);  // 满心
             }
             int numX = startX + HEARTS_W + SECTION_GAP;
             g.drawString(font, "x" + (int) health, numX, y, 0xFFFFFF, false);
@@ -161,29 +153,43 @@ public final class TabHealthRenderer {
 
             for (int i = 0; i < total; i++) {
                 int hx = startX + i * HEART_STEP;
-                renderHeartSprite(g, HEART_CONTAINER, hx, y);
+                renderHeartSprite(g, 0, hx, y);  // 空容器
                 if (i < fullHearts) {
-                    renderHeartSprite(g, HEART_FULL, hx, y);
+                    renderHeartSprite(g, 1, hx, y);  // 满心
                 } else if (hasHalf) {
-                    renderHeartSprite(g, HEART_HALF, hx, y);
+                    renderHeartSprite(g, 2, hx, y);  // 半心
                 }
             }
         }
     }
 
+    // ── 原版 gui_icons.png 纹理位置 ───────────────────────────────────────────
+    private static final ResourceLocation GUI_ICONS = new ResourceLocation("minecraft", "textures/gui/icons.png");
+
+    // gui_icons.png 中心形图标的 UV 坐标（原版 1.20.1 PlayerTabOverlay 中的常量值）
+    // 每颗心 9x9 像素，在 256x256 的纹理图中
+    private static final int HEART_EMPTY_CONTAINER_U = 16;  // 空心容器
+    private static final int HEART_FULL_U             = 52;  // 满心
+    private static final int HEART_HALF_U             = 61;  // 半心
+    private static final int HEART_V                  = 0;   // V 坐标（第一行）
+    private static final int HEART_TEX_W              = 9;
+    private static final int HEART_TEX_H              = 9;
+
     /**
-     * 渲染心形图标的辅助方法。
-     * 1.20.1 可能没有 blitSprite 方法，这里提供一个兼容实现。
+     * 渲染心形图标，使用原版 gui_icons.png 纹理，支持资源包替换。
+     *
+     * @param g      渲染上下文
+     * @param type   心形类型：0=空容器, 1=满心, 2=半心
+     * @param x      屏幕 X 坐标
+     * @param y      屏幕 Y 坐标
      */
-    private static void renderHeartSprite(GuiGraphics g, ResourceLocation sprite, int x, int y) {
-        // 1.20.1 中 GuiGraphics 可能没有 blitSprite 方法
-        // 这里使用简单的矩形填充作为占位符
-        // 实际项目中需要使用正确的纹理渲染方法
-        // TODO: 实现正确的心形图标渲染
-        // 暂时使用红色矩形作为占位符
-        int color = sprite.getPath().contains("full") ? 0xFFFF0000 : 
-                   sprite.getPath().contains("half") ? 0xFFFF8080 : 0xFF800000;
-        g.fill(x, y, x + HEART_SIZE, y + HEART_SIZE, color);
+    private static void renderHeartSprite(GuiGraphics g, int type, int x, int y) {
+        int u = switch (type) {
+            case 1  -> HEART_FULL_U;
+            case 2  -> HEART_HALF_U;
+            default -> HEART_EMPTY_CONTAINER_U;
+        };
+        g.blit(GUI_ICONS, x, y, u, HEART_V, HEART_TEX_W, HEART_TEX_H);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

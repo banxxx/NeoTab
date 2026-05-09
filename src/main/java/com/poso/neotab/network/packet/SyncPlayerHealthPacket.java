@@ -1,8 +1,11 @@
 package com.poso.neotab.network.packet;
 
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -73,21 +76,19 @@ public class SyncPlayerHealthPacket {
     public static void handle(SyncPlayerHealthPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            // 确保在客户端线程执行
             if (context.getDirection().getReceptionSide().isClient()) {
-                handleClientSide(packet);
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                    try {
+                        Class<?> clz = Class.forName("com.poso.neotab.network.client.ClientPacketHandlers");
+                        Method method = clz.getMethod("handleSyncPlayerHealth", Map.class, Map.class);
+                        method.invoke(null, packet.playerHealths, packet.playerMaxHealths);
+                    } catch (Exception e) {
+                        com.poso.neotab.NeoTab.LOGGER.error("Failed to sync player health", e);
+                    }
+                });
             }
         });
         context.setPacketHandled(true);
-    }
-    
-    /**
-     * 客户端处理逻辑。
-     */
-    private static void handleClientSide(SyncPlayerHealthPacket packet) {
-        // 更新客户端状态管理器中的血量数据
-        com.poso.neotab.client.NeoTabClientState.updatePlayerHealths(
-            packet.playerHealths, packet.playerMaxHealths);
     }
     
     public Map<UUID, Float> getPlayerHealths() {

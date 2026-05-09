@@ -1529,7 +1529,7 @@ public class NeoTabConfigScreen extends Screen {
         
         // 应用权限设置卡片
         int applySettingsCardY = layout.toScreenY(y);
-        int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
+        int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + TOGGLE_HEIGHT + 4 + INPUT_HEIGHT + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), applySettingsCardY, layout.contentWidth(), applySettingsCardHeight);
         
         g.drawString(this.font, Component.translatable("screen.neotab.permissions.apply_title"),
@@ -1538,6 +1538,16 @@ public class NeoTabConfigScreen extends Screen {
         drawScaledText(g, Component.translatable("screen.neotab.permissions.apply_subtitle"),
                 layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+
+        // 绘制覆盖个人策略标签（开关在文字左侧）
+        if (permissions.overridePersonalPolicyToggle != null && permissions.overridePersonalPolicyToggle.visible) {
+            Component label = Component.translatable("screen.neotab.permissions.override_personal");
+            int labelX = layout.left() + CARD_PADDING + TOGGLE_WIDTH + 4;  // 开关宽度26 + 间距4
+            int labelY = layout.toScreenY(y) + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8
+                    + (TOGGLE_HEIGHT - this.font.lineHeight) / 2;  // 垂直居中
+            g.drawString(this.font, label, labelX, labelY, 0xFF000000, false); // 黑色文字
+        }
+
         // 两个应用按钮由widget系统绘制
         
         y += applySettingsCardHeight + 16;
@@ -2006,7 +2016,7 @@ public class NeoTabConfigScreen extends Screen {
         permY += permHintCardHeight + 16;
         
         // 应用权限设置卡片
-        int applySettingsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + INPUT_HEIGHT + CARD_PADDING;
+        int applySettingsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + TOGGLE_HEIGHT + 4 + INPUT_HEIGHT + CARD_PADDING;
         permY += applySettingsCardHeight + 16;
         
         // 保存按钮（已废弃）
@@ -2190,9 +2200,15 @@ public class NeoTabConfigScreen extends Screen {
                 pageConfig.footerMsptEnabled.getValue(),
                 pageConfig.footerOnlineEnabled.getValue(),
                 initialConfig.refreshIntervalTicks(),
-                permissions.buildGlobalPolicyFromToggles(initialConfig),
-                permissions.buildPlayerPoliciesFromToggles(initialConfig)
+                permissions.buildGlobalPolicyFromToggles(),
+                permissions.buildPlayerPoliciesFromToggles()
             ).sanitized();
+            com.poso.neotab.NeoTab.LOGGER.info("NeoTabConfigScreen ADMIN save: ping={}, duration={}, health={}, mode={}, theme={}",
+                config.betterPingEnabled(),
+                config.onlineDurationEnabled(),
+                config.healthDisplayEnabled(),
+                config.healthDisplayMode(),
+                config.tabTheme());
             com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
         }
         onClose();

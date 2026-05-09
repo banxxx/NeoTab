@@ -14,9 +14,6 @@ public interface MultiLineEditBoxAccessor {
     @Accessor("textField")
     MultilineTextField neotab$getTextField();
 
-    @Accessor("focusedTime")
-    long neotab$getFocusedTime();
-
     @Accessor("font")
     net.minecraft.client.gui.Font neotab$getFont();
 

@@ -86,15 +86,22 @@ public final class NeoTabClientState {
     
     /**
      * 更新当前配置。
-     * 
+     *
      * <p>由网络包处理器调用，更新客户端的有效配置。</p>
-     * 
+     *
      * @param config 新的配置
      */
     public static void updateConfig(TabConfig config) {
         if (config != null) {
+            com.poso.neotab.NeoTab.LOGGER.info("NeoTabClientState.updateConfig: ping={}, duration={}, health={}, mode={}",
+                config.betterPingEnabled(),
+                config.onlineDurationEnabled(),
+                config.healthDisplayEnabled(),
+                config.healthDisplayMode());
             currentConfig = config;
             needsLayoutRecalculation = true;
+        } else {
+            com.poso.neotab.NeoTab.LOGGER.warn("NeoTabClientState.updateConfig: received null config!");
         }
     }
     

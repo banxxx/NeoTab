@@ -1,7 +1,6 @@
 package com.poso.neotab.client.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.poso.neotab.client.gui.AEStyleRenderer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;

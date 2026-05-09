@@ -2,8 +2,11 @@ package com.poso.neotab.network.packet;
 
 import com.poso.neotab.permission.PlayerCustomizePolicy;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
@@ -41,20 +44,19 @@ public class SyncCustomizePolicyPacket {
     public static void handle(SyncCustomizePolicyPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            // 确保在客户端线程执行
             if (context.getDirection().getReceptionSide().isClient()) {
-                handleClientSide(packet);
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                    try {
+                        Class<?> clz = Class.forName("com.poso.neotab.network.client.ClientPacketHandlers");
+                        Method method = clz.getMethod("handleSyncCustomizePolicy", PlayerCustomizePolicy.class);
+                        method.invoke(null, packet.policy);
+                    } catch (Exception e) {
+                        com.poso.neotab.NeoTab.LOGGER.error("Failed to sync customize policy", e);
+                    }
+                });
             }
         });
         context.setPacketHandled(true);
-    }
-    
-    /**
-     * 客户端处理逻辑。
-     */
-    private static void handleClientSide(SyncCustomizePolicyPacket packet) {
-        // 更新客户端状态管理器中的策略
-        com.poso.neotab.client.NeoTabClientState.updatePolicy(packet.policy);
     }
     
     public PlayerCustomizePolicy getPolicy() {

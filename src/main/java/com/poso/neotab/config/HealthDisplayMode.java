@@ -1,5 +1,7 @@
 package com.poso.neotab.config;
 
+import net.minecraft.network.chat.Component;
+
 /**
  * 血量显示效果模式。
  *
@@ -24,5 +26,10 @@ public enum HealthDisplayMode {
             case "compact" -> COMPACT;
             default        -> FULL;
         };
+    }
+
+    /** 获取显示名称（用于UI）。 */
+    public Component getDisplayName() {
+        return Component.translatable("config.neotab.health_mode." + toId());
     }
 }
