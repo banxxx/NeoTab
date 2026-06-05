@@ -33,7 +33,7 @@ public class NeoTabConfigScreen extends Screen {
     }
 
     //  Constants 
-    private static final int MAX_CONTENT_WIDTH      = 600;  // 增加最大内容宽度，适应横向布局
+    private static final int MAX_CONTENT_WIDTH      = 820;  // 增加最大内容宽度，适应横向布局
     private static final int ROW_HEIGHT              = 24;
     private static final int INPUT_HEIGHT            = 20;
     private static final int TITLE_INPUT_HEIGHT      = 60;
@@ -216,6 +216,7 @@ public class NeoTabConfigScreen extends Screen {
         if (permissions.permSaveButton != null) permissions.permSaveButton.visible = false;  // 旧的保存按钮已废弃
         if (permissions.applyToAllButton != null) permissions.applyToAllButton.visible = perms;  // 应用到全部玩家按钮
         if (permissions.applyToAddedButton != null) permissions.applyToAddedButton.visible = perms;  // 应用到已添加玩家按钮
+        if (permissions.overridePersonalPolicyToggle != null) permissions.overridePersonalPolicyToggle.visible = perms;
         // Page config tab widgets
         pageConfig.topTitleEnabled.visible       = page;
         pageConfig.topTitleInput.visible         = page;
@@ -719,11 +720,8 @@ public class NeoTabConfigScreen extends Screen {
         int panelY = 8;
         int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
         
-        // 限制面板高度，使其更符合横向布局（宽度 > 高度）
-        // HTML中的比例是 820:600 ≈ 1.37:1
-        int maxPanelH = (int)(panelW / 1.37);  // 根据宽度计算最大高度
         int availableH = this.height - panelY - 8;
-        int panelH = Math.min(maxPanelH, availableH);
+        int panelH = Math.max(180, availableH);
         
         AEStyleRenderer.drawMainPanel(g, panelX, panelY, panelW, panelH);
 
@@ -1777,13 +1775,8 @@ public class NeoTabConfigScreen extends Screen {
         int toggleX = right - 6 - TOGGLE_WIDTH;
         int buttonWidth = Math.min(150, (contentWidth - 10) / 2);
         
-        // 计算面板高度（横向布局：宽度 > 高度）
-        // 先计算面板宽度
-        int tempPanelX = tabBarX - 2;
-        int tempPanelW = (right + 8 + SCROLL_TRACK_W + 4) - tempPanelX;
-        int maxPanelH = (int)(tempPanelW / 1.37);  // HTML比例 820:600 ≈ 1.37:1
         int availablePanelH = this.height - 8 - 8;  // 上下各留8px边距
-        int panelH = Math.min(maxPanelH, availablePanelH);
+        int panelH = Math.max(180, availablePanelH);
         
         int buttonY = 8 + panelH - 10 - INPUT_HEIGHT;  // 按钮位于面板底部
         int buttonBarTop = buttonY - 6;
@@ -2261,4 +2254,3 @@ public class NeoTabConfigScreen extends Screen {
         return super.charTyped(codePoint, modifiers);
     }
 }
-

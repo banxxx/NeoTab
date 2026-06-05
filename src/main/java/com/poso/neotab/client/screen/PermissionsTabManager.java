@@ -477,13 +477,14 @@ public class PermissionsTabManager {
         int applyButtonY = layout.toScreenY(y) + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + TOGGLE_HEIGHT + 4;;
 
         // 覆盖个人策略勾选框 - 放在标题/副标题下方，开关在文字前面
+        boolean perms = screen.getActiveTab() == NeoTabConfigScreen.ConfigTab.PERMISSIONS;
         if (overridePersonalPolicyToggle != null) {
             // 开关放在左侧
             overridePersonalPolicyToggle.setX(layout.left() + CARD_PADDING);
             overridePersonalPolicyToggle.setY(layout.toScreenY(y) + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8);
             overridePersonalPolicyToggle.setWidth(TOGGLE_WIDTH);
             overridePersonalPolicyToggle.setHeight(TOGGLE_HEIGHT);
-            overridePersonalPolicyToggle.visible = true;
+            overridePersonalPolicyToggle.visible = perms;
         }
 
         // 应用按钮 - 放在勾选框下方
@@ -492,13 +493,13 @@ public class PermissionsTabManager {
             applyToAllButton.setX(layout.left() + CARD_PADDING);
             applyToAllButton.setY(applyButtonY);
             applyToAllButton.setWidth(buttonWidth);
-            applyToAllButton.visible = true;
+            applyToAllButton.visible = perms;
         }
         if (applyToAddedButton != null) {
             applyToAddedButton.setX(layout.left() + CARD_PADDING + buttonWidth + 8);
             applyToAddedButton.setY(applyButtonY);
             applyToAddedButton.setWidth(buttonWidth);
-            applyToAddedButton.visible = true;
+            applyToAddedButton.visible = perms;
         }
 
         y += applySettingsCardHeight + 16;
