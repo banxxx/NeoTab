@@ -25,7 +25,7 @@ public final class NeoTabNetwork {
     
     /** 网络通道实例 */
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
-        new ResourceLocation(NeoTab.MODID, "main"),
+        ResourceLocation.fromNamespaceAndPath(NeoTab.MODID, "main"),
         () -> PROTOCOL_VERSION,
         PROTOCOL_VERSION::equals,
         PROTOCOL_VERSION::equals

@@ -93,7 +93,7 @@ public final class NeoTabClientState {
      */
     public static void updateConfig(TabConfig config) {
         if (config != null) {
-            com.poso.neotab.NeoTab.LOGGER.info("NeoTabClientState.updateConfig: ping={}, duration={}, health={}, mode={}",
+            com.poso.neotab.NeoTab.LOGGER.debug("NeoTabClientState.updateConfig: ping={}, duration={}, health={}, mode={}",
                 config.betterPingEnabled(),
                 config.onlineDurationEnabled(),
                 config.healthDisplayEnabled(),

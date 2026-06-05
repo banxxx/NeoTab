@@ -220,7 +220,7 @@ public class CustomThemeConfig {
             return fromJson(json);
         } catch (com.google.gson.JsonSyntaxException e) {
             // JSON格式错误，返回默认配置
-            System.err.println("Failed to parse custom theme config: " + e.getMessage());
+            com.poso.neotab.NeoTab.LOGGER.warn("Failed to parse custom theme config, using defaults: {}", e.getMessage());
             return defaults();
         } catch (Exception e) {
             // 其他错误，抛出IOException

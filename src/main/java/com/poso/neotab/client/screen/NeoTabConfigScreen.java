@@ -213,7 +213,6 @@ public class NeoTabConfigScreen extends Screen {
         if (permissions.playerSearchBox != null) permissions.playerSearchBox.visible = perms;
         if (permissions.permAddButton != null) permissions.permAddButton.visible = perms;
         for (Button btn : permissions.targetPlayerRemoveButtons) btn.visible = perms;
-        if (permissions.permSaveButton != null) permissions.permSaveButton.visible = false;  // 旧的保存按钮已废弃
         if (permissions.applyToAllButton != null) permissions.applyToAllButton.visible = perms;  // 应用到全部玩家按钮
         if (permissions.applyToAddedButton != null) permissions.applyToAddedButton.visible = perms;  // 应用到已添加玩家按钮
         if (permissions.overridePersonalPolicyToggle != null) permissions.overridePersonalPolicyToggle.visible = perms;

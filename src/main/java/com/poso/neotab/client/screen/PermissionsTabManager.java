@@ -40,7 +40,6 @@ public class PermissionsTabManager {
     final List<Button> targetPlayerRemoveButtons = new ArrayList<>();
     UUID editingPlayerUUID = null;
     final List<CycleButton<Boolean>> personalPolicyToggles = new ArrayList<>();
-    Button permSaveButton;
     Button applyToAllButton;
     Button applyToAddedButton;
 
@@ -56,7 +55,6 @@ public class PermissionsTabManager {
         personalPolicyToggles.clear();
         playerSuggestions.clear();
         targetPlayerRemoveButtons.clear();
-        permSaveButton = null;
         applyToAllButton = null;
         applyToAddedButton = null;
         overridePersonalPolicyToggle = null;
@@ -168,42 +166,6 @@ public class PermissionsTabManager {
                 .build());
         this.applyToAddedButton.visible = false;
         this.applyToAddedButton.active = true;
-
-        // Save permissions button (obsolete, kept hidden)
-        this.permSaveButton = ScreenAccessHelper.addWidget(screen, Button.builder(
-                        Component.translatable("screen.neotab.permissions.save_config"),
-                        btn -> savePermissions(initialConfig))
-                .bounds(layout.left(), 0, 120, INPUT_HEIGHT)
-                .build());
-        this.permSaveButton.visible = false;
-        this.permSaveButton.active = true;
-    }
-
-    void savePermissions(TabConfig initialConfig) {
-        TabConfig config = new TabConfig(
-                initialConfig.topTitleEnabled(),
-                initialConfig.topTitleText(),
-                initialConfig.topContentEnabled(),
-                initialConfig.topContentText(),
-                initialConfig.betterPingEnabled(),
-                initialConfig.onlineDurationEnabled(),
-                initialConfig.titleEnabled(),
-                initialConfig.healthDisplayEnabled(),
-                initialConfig.healthDisplayMode(),
-                initialConfig.tabTheme(),
-                initialConfig.footerCustomText(),
-                initialConfig.footerTpsEnabled(),
-                initialConfig.footerMsptEnabled(),
-                initialConfig.footerOnlineEnabled(),
-                initialConfig.refreshIntervalTicks(),
-                buildGlobalPolicyFromToggles(),
-                buildMergedPlayerPoliciesFromToggles(initialConfig)
-        ).sanitized();
-        com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) {
-            mc.player.sendSystemMessage(Component.translatable("message.neotab.permissions_saved"));
-        }
     }
 
     void applyToAllPlayers(TabConfig initialConfig) {
@@ -503,9 +465,5 @@ public class PermissionsTabManager {
         }
 
         y += applySettingsCardHeight + 16;
-
-        if (permSaveButton != null) {
-            permSaveButton.visible = false;
-        }
     }
 }

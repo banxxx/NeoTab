@@ -164,7 +164,7 @@ public final class TabHealthRenderer {
     }
 
     // ── 原版 gui_icons.png 纹理位置 ───────────────────────────────────────────
-    private static final ResourceLocation GUI_ICONS = new ResourceLocation("minecraft", "textures/gui/icons.png");
+    private static final ResourceLocation GUI_ICONS = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/gui/icons.png");
 
     // gui_icons.png 中心形图标的 UV 坐标（原版 1.20.1 PlayerTabOverlay 中的常量值）
     // 每颗心 9x9 像素，在 256x256 的纹理图中

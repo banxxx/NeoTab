@@ -105,7 +105,6 @@
   "screen.neotab.permissions.apply_subtitle": "点击下方按钮应用当前权限配置",
   "screen.neotab.permissions.apply_to_all": "应用到全部玩家",
   "screen.neotab.permissions.apply_to_added": "应用到已添加玩家",
-  "screen.neotab.permissions.save_config": "保存权限配置",
   "screen.neotab.policy.add": "添加",
   
   "screen.neotab.input.top_title_hint": "支持富文本标签，如 <color></color>\n最多 32 个可见字符",

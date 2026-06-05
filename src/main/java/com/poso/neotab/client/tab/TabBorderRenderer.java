@@ -21,9 +21,9 @@ public final class TabBorderRenderer {
 
     // ── 翻页箭头纹理 ──────────────────────────────────────────────────────────
     private static final ResourceLocation CHEVRON_LEFT  =
-            new ResourceLocation("neotab", "textures/gui/chevron_left.png");
+            ResourceLocation.fromNamespaceAndPath("neotab", "textures/gui/chevron_left.png");
     private static final ResourceLocation CHEVRON_RIGHT =
-            new ResourceLocation("neotab", "textures/gui/chevron_right.png");
+            ResourceLocation.fromNamespaceAndPath("neotab", "textures/gui/chevron_right.png");
 
     /** 纹理原始尺寸（80×128，目标渲染尺寸 PAGE_ARROW_W × PAGE_ARROW_H 的 8 倍） */
     private static final int CHEVRON_TEX_W = 80;

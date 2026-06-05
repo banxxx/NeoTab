@@ -8,10 +8,7 @@
   ],
   "client": [
     "PlayerTabOverlayMixin",
-    "PlayerTabOverlayAccessor",
-    "client.MultiLineEditBoxMixin",
-    "client.MultiLineEditBoxAccessor",
-    "client.MultilineTextFieldAccessor"
+    "client.MultiLineEditBoxMixin"
   ],
   "server": [
   ],

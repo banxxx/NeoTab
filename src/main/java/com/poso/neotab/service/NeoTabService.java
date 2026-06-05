@@ -337,7 +337,7 @@ public final class NeoTabService {
             return;
         }
 
-        NeoTab.LOGGER.info("NeoTabService.updateConfig from player {}: ping={}, duration={}, health={}, mode={}",
+        NeoTab.LOGGER.debug("NeoTabService.updateConfig from player {}: ping={}, duration={}, health={}, mode={}",
             actor.getName().getString(),
             requestedConfig.betterPingEnabled(),
             requestedConfig.onlineDurationEnabled(),

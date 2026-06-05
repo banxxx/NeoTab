@@ -105,7 +105,6 @@
   "screen.neotab.permissions.apply_subtitle": "Click the buttons below to apply current permission configuration",
   "screen.neotab.permissions.apply_to_all": "Apply to All Players",
   "screen.neotab.permissions.apply_to_added": "Apply to Added Players",
-  "screen.neotab.permissions.save_config": "Save Permission Config",
   "screen.neotab.policy.add": "Add",
   
   "screen.neotab.input.top_title_hint": "Supports rich text tags, e.g. <color></color>\nMax 32 visible characters",
