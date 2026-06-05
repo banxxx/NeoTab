@@ -133,6 +133,10 @@ public final class NeoTabPermissions {
         }
     }
 
+    public static boolean canCustomize(ServerPlayer player, TabConfig serverConfig) {
+        return canCustomize(player) && resolvePolicy(player, serverConfig).allowsAnyCustomization();
+    }
+
     /**
      * 获取玩家实际生效的自定义策略。
      *
@@ -157,12 +161,8 @@ public final class NeoTabPermissions {
 
         // 2. 个人专属策略优先
         PlayerCustomizePolicy personal = serverConfig.playerPolicies().get(uuid);
-        if (personal != null) {
-            return personal;
-        }
-
         // 3. 全局策略 AND 权限节点
-        PlayerCustomizePolicy global = serverConfig.globalPolicy();
+        PlayerCustomizePolicy global = personal != null ? personal : serverConfig.globalPolicy();
         PlayerCustomizePolicy fromNodes = new PlayerCustomizePolicy(
             perm(player, CUSTOMIZE_TOP_TITLE_TOGGLE),
             perm(player, CUSTOMIZE_TOP_TITLE_EDIT),

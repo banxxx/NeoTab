@@ -1,6 +1,5 @@
 package com.poso.neotab.client.screen;
 
-import com.poso.neotab.NeoTab;
 import com.poso.neotab.config.TabConfig;
 import com.poso.neotab.network.packet.SaveConfigPacket;
 import com.poso.neotab.permission.PlayerCustomizePolicy;
@@ -198,7 +197,7 @@ public class PermissionsTabManager {
                 initialConfig.footerOnlineEnabled(),
                 initialConfig.refreshIntervalTicks(),
                 buildGlobalPolicyFromToggles(),
-                buildPlayerPoliciesFromToggles()
+                buildMergedPlayerPoliciesFromToggles(initialConfig)
         ).sanitized();
         com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
         Minecraft mc = Minecraft.getInstance();
@@ -208,9 +207,6 @@ public class PermissionsTabManager {
     }
 
     void applyToAllPlayers(TabConfig initialConfig) {
-        for (int i = 0; i < globalPolicyToggles.size(); i++) {
-            NeoTab.LOGGER.info("Toggle {} value: {}", i, globalPolicyToggles.get(i).getValue());
-        }
         TabConfig config = new TabConfig(
                 initialConfig.topTitleEnabled(),
                 initialConfig.topTitleText(),
@@ -231,7 +227,6 @@ public class PermissionsTabManager {
                 // 根据勾选框决定是否清空个人策略
                 overridePersonalPolicyToggle.getValue() ? new HashMap<>() : initialConfig.playerPolicies()
         ).sanitized();
-        NeoTab.LOGGER.info("Build policy from toggles: {}", buildGlobalPolicyFromToggles());
         com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
@@ -266,7 +261,7 @@ public class PermissionsTabManager {
                 initialConfig.footerOnlineEnabled(),
                 initialConfig.refreshIntervalTicks(),
                 initialConfig.globalPolicy(),  // 保持全局策略不变
-                buildPlayerPoliciesFromToggles()  // 只更新已添加玩家的策略
+                buildMergedPlayerPoliciesFromToggles(initialConfig)
         ).sanitized();
         com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
         Minecraft mc = Minecraft.getInstance();
@@ -357,6 +352,12 @@ public class PermissionsTabManager {
                 policies.put(uuid, policy);
             }
         }
+        return policies;
+    }
+
+    Map<UUID, PlayerCustomizePolicy> buildMergedPlayerPoliciesFromToggles(TabConfig initialConfig) {
+        Map<UUID, PlayerCustomizePolicy> policies = new HashMap<>(initialConfig.playerPolicies());
+        policies.putAll(buildPlayerPoliciesFromToggles());
         return policies;
     }
 

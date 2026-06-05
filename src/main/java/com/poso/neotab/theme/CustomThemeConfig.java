@@ -25,6 +25,7 @@ public class CustomThemeConfig {
     
     /** 边框颜色数组（最多7种颜色，ARGB格式） */
     private List<Integer> borderColors;
+    private transient int[] cachedBorderColors;
     
     /** 外层边框颜色 (ARGB)，默认深色 */
     private int borderOuterColor;
@@ -66,9 +67,22 @@ public class CustomThemeConfig {
     public List<Integer> getBorderColors() {
         return new ArrayList<>(borderColors);
     }
+
+    public int[] getBorderColorsArray() {
+        if (cachedBorderColors != null) {
+            return cachedBorderColors;
+        }
+        int[] colors = new int[borderColors.size()];
+        for (int i = 0; i < borderColors.size(); i++) {
+            colors[i] = borderColors.get(i);
+        }
+        cachedBorderColors = colors;
+        return cachedBorderColors;
+    }
     
     public void setBorderColors(List<Integer> borderColors) {
         this.borderColors = new ArrayList<>(borderColors);
+        this.cachedBorderColors = null;
     }
     
     public int getBorderOuterColor() {

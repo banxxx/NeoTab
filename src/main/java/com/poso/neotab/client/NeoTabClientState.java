@@ -348,10 +348,11 @@ public final class NeoTabClientState {
      * 获取指定玩家的在线时长。
      * 
      * @param playerId 玩家UUID
-     * @return 在线时长文本，如果没有数据返回 null
+     * @return 在线时长文本，如果没有数据返回空字符串
      */
     public static String getOnlineDuration(UUID playerId) {
-        return onlineDurations.get(playerId);
+        String duration = onlineDurations.get(playerId);
+        return duration != null ? duration : "";
     }
     
     /**
@@ -375,20 +376,22 @@ public final class NeoTabClientState {
      * 获取指定玩家的当前血量。
      * 
      * @param playerId 玩家UUID
-     * @return 当前血量，如果没有数据返回 null
+     * @return 当前血量，如果没有数据返回 0
      */
-    public static Float getPlayerHealth(UUID playerId) {
-        return playerHealths.get(playerId);
+    public static float getPlayerHealth(UUID playerId) {
+        Float health = playerHealths.get(playerId);
+        return health != null ? health : 0.0F;
     }
     
     /**
      * 获取指定玩家的最大血量。
      * 
      * @param playerId 玩家UUID
-     * @return 最大血量，如果没有数据返回 null
+     * @return 最大血量，如果没有数据返回 20
      */
-    public static Float getPlayerMaxHealth(UUID playerId) {
-        return playerMaxHealths.get(playerId);
+    public static float getPlayerMaxHealth(UUID playerId) {
+        Float maxHealth = playerMaxHealths.get(playerId);
+        return maxHealth != null ? maxHealth : 20.0F;
     }
     
     // ── GUI状态管理 ───────────────────────────────────────────────────────────

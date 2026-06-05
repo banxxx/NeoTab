@@ -131,8 +131,7 @@ public final class TabBorderRenderer {
     public static void drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
         com.poso.neotab.theme.CustomThemeConfig themeConfig = com.poso.neotab.theme.CustomThemeManager.get();
 
-        java.util.List<Integer> borderColorsList = themeConfig.getBorderColors();
-        int[] rainbowColors = borderColorsList.stream().mapToInt(Integer::intValue).toArray();
+        int[] rainbowColors = themeConfig.getBorderColorsArray();
 
         if (rainbowColors.length == 0) {
             rainbowColors = new int[]{ themeConfig.getBackgroundColor() };

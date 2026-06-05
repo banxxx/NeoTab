@@ -294,12 +294,6 @@ public abstract class PlayerTabOverlayMixin {
         boolean hasDuration = config.onlineDurationEnabled();
         boolean hasHealth   = config.healthDisplayEnabled();
 
-        // DEBUG: log to confirm mixin is firing and config values
-        if (hasPing || hasDuration || hasHealth) {
-            com.poso.neotab.NeoTab.LOGGER.info("neotab$renderRightAlignedInfo FIRING: ping={} dur={} health={} player={}",
-                hasPing, hasDuration, hasHealth, playerInfo.getProfile().getName());
-        }
-
         // 只要任意 NeoTab 功能启用，就取消原版 renderPingIcon，
         // 避免原版延迟图标与自定义内容重叠导致无效果
         if (hasPing || hasDuration || hasHealth) {

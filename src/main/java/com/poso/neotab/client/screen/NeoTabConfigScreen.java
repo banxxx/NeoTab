@@ -740,8 +740,12 @@ public class NeoTabConfigScreen extends Screen {
         int titleBarBottom = panelY + 24;  // 标题栏高度约24px
         AEStyleRenderer.drawTitleBarDivider(g, panelX + 3, titleBarBottom, panelW - 6);
 
+        boolean colorPickerBlocksMouse = isMouseInsideColorPickerOverlay(mouseX, mouseY, layout);
+        int contentMouseX = colorPickerBlocksMouse ? -1 : mouseX;
+        int contentMouseY = colorPickerBlocksMouse ? -1 : mouseY;
+
         NeoTabConfigScreenRenderer.renderTabBar(g, this.font, this.activeTab, layout, panelY, mouseX, mouseY, this.screenMode);
-        renderScrollableContent(g, mouseX, mouseY, partialTick, layout);
+        renderScrollableContent(g, contentMouseX, contentMouseY, partialTick, layout);
         NeoTabConfigScreenRenderer.renderButtonBar(g, layout, this.height);
         // Fixed widgets (done/cancel buttons) - 完成用主要样式（绿色），取消用次要样式（米色）
         NeoTabConfigScreenRenderer.renderPrimaryButton(g, this.font, this.doneButton, mouseX, mouseY);
@@ -848,6 +852,23 @@ public class NeoTabConfigScreen extends Screen {
         // 铺不透明背景，阻断下层文字/控件渗透
         g.fill(cpX, renderY, cpX + pw, renderY + ph, 0xFFFAF7EF);
         theme.embeddedColorPicker.render(g, mouseX, mouseY, partialTick);
+    }
+
+    private boolean isMouseInsideColorPickerOverlay(int mouseX, int mouseY, NeoTabConfigScreenLayout.Layout layout) {
+        if (activeTab != ConfigTab.THEME) return false;
+        if (theme.embeddedColorPicker == null || !theme.embeddedColorPicker.visible) return false;
+
+        int px = theme.embeddedColorPicker.getX();
+        int py = theme.embeddedColorPicker.getY();
+        int pw = theme.embeddedColorPicker.getWidth();
+        int ph = theme.embeddedColorPicker.getHeight();
+        int renderY = py;
+        if (py + ph > layout.buttonBarTop()) {
+            renderY = Math.max(layout.viewportTop(), py - ph - 28);
+        }
+
+        return mouseX >= px && mouseX < px + pw
+            && mouseY >= renderY && mouseY < renderY + ph;
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, NeoTabConfigScreenLayout.Layout layout) {

@@ -64,8 +64,25 @@ public record PlayerCustomizePolicy(
             true, true, true, true, true,
             true, true, true, true,
             true,
-            true
+            false
         );
+    }
+
+    public boolean allowsAnyCustomization() {
+        return allowTopTitleToggle
+            || allowTopTitleEdit
+            || allowTopContentToggle
+            || allowTopContentEdit
+            || allowPingDisplayToggle
+            || allowDurationToggle
+            || allowTitleToggle
+            || allowHealthDisplayToggle
+            || allowHealthModeChange
+            || allowFooterCustomEdit
+            || allowFooterTpsToggle
+            || allowFooterMsptToggle
+            || allowFooterOnlineToggle
+            || allowThemeChange;
     }
 
     /**

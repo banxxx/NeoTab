@@ -44,7 +44,7 @@ public final class NeoTabCommands {
             // 玩家自定义命令
             .then(Commands.literal("customize")
                 .requires(src -> src.getEntity() instanceof ServerPlayer p
-                    && NeoTabPermissions.canCustomize(p))
+                    && NeoTabPermissions.canCustomize(p, NeoTab.service().getConfig()))
                 .executes(context -> openCustomizeScreen(context.getSource())))
         );
     }
