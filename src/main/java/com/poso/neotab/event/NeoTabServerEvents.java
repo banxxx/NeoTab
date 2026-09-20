@@ -2,6 +2,7 @@ package com.poso.neotab.event;
 
 import com.poso.neotab.NeoTab;
 import com.poso.neotab.config.TabConfig;
+import com.poso.neotab.permission.NeoTabPermissions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -11,12 +12,13 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PermissionsChangedEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.server.permission.events.PermissionGatherEvent;
 
 /**
  * NeoTab 服务端事件处理。
@@ -35,14 +37,15 @@ public final class NeoTabServerEvents {
 
     /**
      * 注册权限节点。
-     * 
-     * <p>Forge 1.20.1 使用不同的权限系统，不需要像 NeoForge 那样通过事件注册。
-     * 权限节点在 NeoTabPermissions 中定义后即可直接使用。</p>
+     *
+     * <p>Forge 1.20.1 的 {@code PermissionAPI.getPermission} 对未注册节点会抛
+     * {@code UnregisteredPermissionException}，必须先通过 {@link PermissionGatherEvent.Nodes}
+     * 把节点交给当前权限处理器，否则权限模组无法介入。</p>
      */
     @SubscribeEvent
-    public static void onCommonSetup(FMLCommonSetupEvent event) {
-        // Forge 1.20.1 的权限节点在定义时就已经注册到系统中
-        // 不需要额外的事件处理
+    public static void onPermissionGather(PermissionGatherEvent.Nodes event) {
+        event.addNodes(NeoTabPermissions.CONFIGURE);
+        event.addNodes(NeoTabPermissions.ALL_CUSTOMIZE_NODES);
         NeoTab.LOGGER.info("NeoTab permission nodes registered");
     }
 
@@ -84,6 +87,17 @@ public final class NeoTabServerEvents {
         }
     }
 
+    /** OP / DEOP 跨越 2 级时，立即重发该玩家的策略与有效配置。 */
+    @SubscribeEvent
+    public static void onPermissionsChanged(PermissionsChangedEvent event) {
+        if (event.getOldLevel() >= 2 == event.getNewLevel() >= 2) {
+            return; // 未跨越 2 级线，生效策略不可能变化
+        }
+        if (event.getEntity() instanceof ServerPlayer player) {
+            NeoTab.service().onPlayerPermissionsChanged(player);
+        }
+    }
+
     /**
      * 自定义 TAB 玩家名显示（称号功能）。
      *
@@ -106,7 +120,7 @@ public final class NeoTabServerEvents {
         if (config.titleEnabled()) {
             String titleText = getTitleForPlayer(player);
             if (titleText != null && !titleText.isEmpty()) {
-                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText, titleText);
+                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText);
                 playerName = Component.empty().append(titleComponent).append(" ").append(playerName);
             }
         }

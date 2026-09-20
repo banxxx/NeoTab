@@ -145,6 +145,7 @@ public class NeoTabConfigScreen extends Screen {
     ConfigTab getActiveTab() { return activeTab; }
     TabConfig getInitialConfig() { return initialConfig; }
     ScreenMode getScreenMode() { return screenMode; }
+    PlayerCustomizePolicy getPolicy() { return policy; }
     void syncVisibility() { syncTabWidgetVisibility(); }
     void reinit() { this.init(); }
 
@@ -249,7 +250,6 @@ public class NeoTabConfigScreen extends Screen {
         for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) {
             box.visible = themeTab && isCustom;
         }
-        for (net.minecraft.client.gui.components.EditBox box : theme.customBorderHexInputs) box.visible = themeTab && isCustom;
         if (theme.addCustomBorderColorButton != null) theme.addCustomBorderColorButton.visible = themeTab && isCustom;
         if (theme.embeddedColorPicker != null) theme.embeddedColorPicker.visible = themeTab && isCustom && theme.currentSelectedColorType != null;
         // 不再隐藏"添加边框颜色"按钮，而是通过颜色选择器的背景遮罩来遮挡
@@ -263,6 +263,11 @@ public class NeoTabConfigScreen extends Screen {
         for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {
             hexBox.setFocused(false);
         }
+        // 清除屏幕级焦点，避免快捷键继续打进已隐藏的输入框（如权限页搜索框）
+        if (permissions.playerSearchBox != null) {
+            permissions.playerSearchBox.setFocused(false);
+        }
+        this.setFocused(null);
         
         activeTab = tab;
         scrollOffset = 0;
@@ -278,7 +283,14 @@ public class NeoTabConfigScreen extends Screen {
     //  onClose / repositionElements 
     @Override
     public void onClose() {
+        // 取消/ESC 关闭：回滚本次会话对自定义主题的未保存编辑（Done 保存路径已先 markSaved）
+        theme.restoreSnapshot();
         this.minecraft.setScreen(this.parent);
+    }
+
+    @Override
+    public void tick() {
+        permissions.tickApplyArmed();
     }
 
     public void repositionElements() {
@@ -457,7 +469,6 @@ public class NeoTabConfigScreen extends Screen {
                         java.util.List<Integer> newColors = new java.util.ArrayList<>(theme.customThemeConfig.getBorderColors());
                         newColors.remove(idx);
                         theme.customThemeConfig.setBorderColors(newColors);
-                        com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
                         if (theme.currentSelectedBorderIndex == idx) {
                             theme.currentSelectedColorType = null;
                             theme.currentSelectedBorderIndex = -1;
@@ -638,13 +649,8 @@ public class NeoTabConfigScreen extends Screen {
                     if (tab == ConfigTab.PERMISSIONS && screenMode != ScreenMode.ADMIN) continue;
                     int btnY = VIEWPORT_TOP + tabIndex * (TAB_BUTTON_HEIGHT + TAB_BUTTON_GAP);
                     if (mouseY >= btnY && mouseY <= btnY + TAB_BUTTON_HEIGHT) {
-                        if (tab == ConfigTab.PERMISSIONS) {
-                            Minecraft mc = Minecraft.getInstance();
-                            if (mc.player == null || !mc.player.hasPermissions(2)) {
-                                mc.player.sendSystemMessage(Component.translatable("message.neotab.no_permission"));
-                                return true;
-                            }
-                        }
+                        // 进入 ADMIN 模式本身就代表服务端 canConfigure 校验通过（OP≥2），
+                        // 客户端 LocalPlayer 的权限等级不会从服务器同步，这里不能再查 hasPermissions。
                         switchTab(tab);
                         return true;
                     }
@@ -678,10 +684,7 @@ public class NeoTabConfigScreen extends Screen {
         if (button == 0 && isDraggingScrollbar) { isDraggingScrollbar = false; return true; }
         if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
             if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) {
-                // 拖动结束时保存配置
-                if (theme.customThemeConfig != null) {
-                    com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
-                }
+                // 拖动结束只停留在内存，Done 时由 markSaved 统一写盘
                 return true;
             }
         }
@@ -1245,12 +1248,6 @@ public class NeoTabConfigScreen extends Screen {
                     int delY = rowY + (borderItemH - this.font.lineHeight) / 2;
                     g.drawString(this.font, "×", delX + 6, delY, 0xFFB34242, false);
                 }
-                
-                // 添加边框颜色按钮（在大卡片内底部）
-                if (borderColors.size() < 7) {
-                    int addBtnY = rowStartY + borderColors.size() * (borderItemH + borderItemGap);
-                    // 添加按钮由widget系统绘制
-                }
             }
             
             // 血量显示分区标题
@@ -1360,31 +1357,29 @@ public class NeoTabConfigScreen extends Screen {
                 layout.left(), layout.toScreenY(y), layout.right());
         y += SECTION_HEADER_HEIGHT;
         
-        // 全局策略权限卡片（2列网格布局）
-        String[] policyKeys = {
-            "顶部标题 开关", "顶部标题 内容",
-            "顶部内容 开关", "顶部内容 文字",
-            "延迟显示 开关", "在线时长 开关",
-            "称号功能 开关", "血量显示 开关",
-            "血量显示 模式", "底部自定义文字",
-            "底部 TPS 开关", "底部 MSPT 开关",
-            "底部在线人数 开关", "主题切换"
+        // 全局策略权限卡片（2列网格布局），与 globalPolicyToggles 顺序一一对应
+        String[] policyTitleKeys = {
+            "screen.neotab.permissions.policy.top_title_toggle",
+            "screen.neotab.permissions.policy.top_title_content",
+            "screen.neotab.permissions.policy.top_content_toggle",
+            "screen.neotab.permissions.policy.top_content_text",
+            "screen.neotab.permissions.policy.delay_toggle",
+            "screen.neotab.permissions.policy.online_duration_toggle",
+            "screen.neotab.permissions.policy.title_toggle",
+            "screen.neotab.permissions.policy.health_toggle",
+            "screen.neotab.permissions.policy.health_mode",
+            "screen.neotab.permissions.policy.footer_custom",
+            "screen.neotab.permissions.policy.footer_tps_toggle",
+            "screen.neotab.permissions.policy.footer_mspt_toggle",
+            "screen.neotab.permissions.policy.footer_online_toggle",
+            "screen.neotab.permissions.policy.theme_toggle"
         };
-        
-        String[] policySubtitles = {
-            "允许玩家切换顶部标题的显示", "允许玩家自定义顶部标题内容",
-            "允许玩家切换顶部内容的显示", "允许玩家自定义顶部内容文字",
-            "允许玩家切换延迟显示功能", "允许玩家切换在线时长显示",
-            "允许玩家切换称号功能", "允许玩家切换血量显示功能",
-            "允许玩家切换血量显示模式", "允许玩家自定义底部文字内容",
-            "允许玩家切换 TPS 信息显示", "允许玩家切换 MSPT 信息显示",
-            "允许玩家切换在线人数显示", "允许玩家切换 TAB 主题"
-        };
+        // 副标题 key = 标题 key + ".desc"
         
         int cardWidth = (layout.contentWidth() - CARD_GAP) / 2;  // 两列，中间8px间距
         int cardHeight = CARD_PADDING + Math.max(TOGGLE_HEIGHT, titleLineHeight + 2 + subtitleLineHeight) + CARD_PADDING;
         
-        for (int i = 0; i < Math.min(policyKeys.length, permissions.globalPolicyToggles.size()); i++) {
+        for (int i = 0; i < Math.min(policyTitleKeys.length, permissions.globalPolicyToggles.size()); i++) {
             int col = i % 2;
             int row = i / 2;
             
@@ -1400,12 +1395,12 @@ public class NeoTabConfigScreen extends Screen {
             
             // 绘制标题（限制宽度，避免覆盖开关）
             int titleMaxWidth = cardWidth - CARD_PADDING * 2 - 56 - 8;
-            g.drawString(this.font, policyKeys[i],
+            g.drawString(this.font, Component.translatable(policyTitleKeys[i]),
                     cardX + CARD_PADDING, cardY + CARD_PADDING,
                     AEStyleRenderer.COLOR_MODULE_TITLE, false);
             
             // 绘制副标题
-            drawWrappedScaledText(g, policySubtitles[i],
+            drawWrappedScaledText(g, Component.translatable(policyTitleKeys[i] + ".desc").getString(),
                     cardX + CARD_PADDING, cardY + CARD_PADDING + titleLineHeight + 2,
                     titleMaxWidth, AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
             
@@ -1413,11 +1408,7 @@ public class NeoTabConfigScreen extends Screen {
         }
         
         // 移动到下一行
-        if (policyKeys.length % 2 == 1) {
-            y += cardHeight + SECTION_GAP;
-        } else {
-            y += cardHeight + SECTION_GAP;
-        }
+        y += cardHeight + SECTION_GAP;
         
         // 指定玩家策略分区标题
         AEStyleRenderer.drawSectionHeader(g, this.font, Component.translatable("screen.neotab.permissions.personal_section"),
@@ -1609,13 +1600,8 @@ public class NeoTabConfigScreen extends Screen {
                     NeoTabConfigScreenRenderer.renderThemeOptionButton(g, this.font, btn, theme.themeOptionIds.get(themeIndex), theme.selectedThemeId, mouseX, mouseY);
                 } else if (btn == theme.customBackgroundColorButton) {
                     // 背景颜色色块按钮：由卡片渲染代码手动绘制，这里跳过（避免重复绘制）
-                } else if (theme.customBorderColorButtons.contains(btn)) {
-                    int bi = theme.customBorderColorButtons.indexOf(btn);
-                    if (bi % 2 == 0) {
-                        // 颜色选择按钮：由卡片渲染代码绘制，这里跳过（避免重复绘制）
-                    } else {
-                        // 删除按钮：不绘制（× 图标已在卡片渲染中手动绘制）
-                    }
+                } else if (theme.customBorderColorButtons.indexOf(btn) >= 0) {
+                    // 颜色选择色块与删除按钮：均由卡片渲染代码绘制（× 图标手动绘制），这里跳过
                 } else if (btn == theme.customBorderOuterFactorButton) {
                     // 外层边框颜色色块按钮：由卡片渲染代码手动绘制，这里跳过（避免重复绘制）
                 } else if (btn == theme.resetToDefaultButton) {
@@ -1761,7 +1747,29 @@ public class NeoTabConfigScreen extends Screen {
 
 
     // ── buildLayoutImpl ──────────────────────────────────────────────────────
+    /** 影响布局结果的全部输入；任一变化都会触发重建。 */
+    private record LayoutKey(int width, int height, int scrollOffset, ConfigTab activeTab,
+                             String selectedThemeId, int borderColorCount,
+                             int targetPlayersHash, int themeCount) {}
+
+    private LayoutKey cachedLayoutKey;
+    private NeoTabConfigScreenLayout.Layout cachedLayout;
+
     private NeoTabConfigScreenLayout.Layout buildLayoutImpl() {
+        LayoutKey key = new LayoutKey(
+            this.width, this.height, this.scrollOffset, this.activeTab,
+            theme.selectedThemeId,
+            theme.customThemeConfig != null ? theme.customThemeConfig.getBorderColors().size() : -1,
+            permissions.targetPlayers.hashCode(),
+            com.poso.neotab.theme.TabThemeRegistry.ids().size());
+        if (key.equals(cachedLayoutKey) && cachedLayout != null) return cachedLayout;
+        NeoTabConfigScreenLayout.Layout layout = buildLayoutUncached();
+        cachedLayoutKey = key;
+        cachedLayout = layout;
+        return layout;
+    }
+
+    private NeoTabConfigScreenLayout.Layout buildLayoutUncached() {
         int minSidePadding = 16;
         int scrollbarAndMargin = SCROLL_TRACK_W + 20;
         int availableWidth = this.width - minSidePadding * 2 - TAB_BAR_WIDTH - TAB_CONTENT_GAP - scrollbarAndMargin;
@@ -2214,7 +2222,8 @@ public class NeoTabConfigScreen extends Screen {
                 pageConfig.footerOnlineEnabled.getValue(),
                 initialConfig.refreshIntervalTicks(),
                 permissions.buildGlobalPolicyFromToggles(),
-                permissions.buildPlayerPoliciesFromToggles()
+                // 写回会话内视图：保留未选中玩家的既有个人策略，并包含本界面"应用"按钮的结果
+                permissions.getPlayerPoliciesView()
             ).sanitized();
             com.poso.neotab.NeoTab.LOGGER.info("NeoTabConfigScreen ADMIN save: ping={}, duration={}, health={}, mode={}, theme={}",
                 config.betterPingEnabled(),
@@ -2224,11 +2233,17 @@ public class NeoTabConfigScreen extends Screen {
                 config.tabTheme());
             com.poso.neotab.network.NeoTabNetwork.INSTANCE.send(PacketDistributor.SERVER.noArg(), new SaveConfigPacket(config));
         }
+        // Done 已确认：保留本会话对自定义主题的编辑，取消 onClose 的回滚
+        theme.markSaved();
         onClose();
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // ESC 必须先交给 super.keyPressed 处理关闭，否则焦点在 HEX 输入框时会被其消费，导致按 ESC 无法退出界面
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
         // 优先处理HEX输入框的键盘事件
         if (activeTab == ConfigTab.THEME && "custom".equals(theme.selectedThemeId)) {
             for (net.minecraft.client.gui.components.EditBox hexBox : theme.customBorderHexInputs) {

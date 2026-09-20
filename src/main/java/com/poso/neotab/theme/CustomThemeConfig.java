@@ -69,15 +69,15 @@ public class CustomThemeConfig {
     }
 
     public int[] getBorderColorsArray() {
-        if (cachedBorderColors != null) {
-            return cachedBorderColors;
+        if (cachedBorderColors == null) {
+            int[] colors = new int[borderColors.size()];
+            for (int i = 0; i < borderColors.size(); i++) {
+                colors[i] = borderColors.get(i);
+            }
+            cachedBorderColors = colors;
         }
-        int[] colors = new int[borderColors.size()];
-        for (int i = 0; i < borderColors.size(); i++) {
-            colors[i] = borderColors.get(i);
-        }
-        cachedBorderColors = colors;
-        return cachedBorderColors;
+        // 返回副本，避免调用方改写内部缓存数组
+        return cachedBorderColors.clone();
     }
     
     public void setBorderColors(List<Integer> borderColors) {

@@ -2,9 +2,9 @@ package com.poso.neotab.text;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
@@ -40,121 +40,83 @@ import net.minecraft.network.chat.TextColor;
  */
 public final class RichTextEngine {
     /**
-     * 缓存键记录类型（性能优化：避免字符串拼接）。
-     * 
-     * <p>使用 record 类型自动实现 equals/hashCode，性能优于字符串拼接。</p>
+     * 缓存键记录类型。
+     *
+     * <p>key 的 text 字段必须是"实际解析的文本"（即占位符替换之后的结果），
+     * 而不是原始模板。若以模板为 key，多个 viewer 用同一模板但替换出不同内容时，
+     * 缓存会把第一个 viewer 的解析结果错误地返回给后续 viewer，导致跨玩家串显。</p>
      */
-    private record CacheKey(String template, boolean singleLine) {}
-    
+    private record CacheKey(String text, boolean singleLine) {}
+
+    /** LRU 上限。TAB 每秒刷新，文本种类有限，此上限足够容纳全服不同解析结果。 */
+    private static final int MAX_CACHE_SIZE = 1024;
+
     /**
-     * 富文本解析结果缓存。
-     * 
-     * <p>性能优化：缓存已解析的富文本，避免重复解析相同的模板。
-     * 使用 CacheKey record 替代字符串拼接，减少临时对象分配。</p>
+     * 富文本解析结果缓存（访问序 LRU）。
+     *
+     * <p>使用 {@code accessOrder=true} 的 LinkedHashMap，命中即前移、超限淘汰最久未用，
+     * 避免旧实现"超限即全清"造成的缓存抖动。</p>
      */
-    private static final Map<CacheKey, Component> PARSE_CACHE = new ConcurrentHashMap<>();
-    
-    /**
-     * 缓存大小限制，防止内存泄漏。
-     * 
-     * <p>当缓存超过此大小时，清空缓存。这是一个简单的策略，
-     * 适用于配置变更不频繁的场景。</p>
-     */
-    private static final int MAX_CACHE_SIZE = 100;
-    
+    private static final Map<CacheKey, Component> PARSE_CACHE = new LinkedHashMap<>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<CacheKey, Component> eldest) {
+            return size() > MAX_CACHE_SIZE;
+        }
+    };
+
     private RichTextEngine() {
     }
-    
+
     /**
      * 清空解析缓存。
-     * 
+     *
      * <p>在配置变更时应该调用此方法，确保使用最新的模板。</p>
      */
     public static void clearCache() {
-        PARSE_CACHE.clear();
+        synchronized (PARSE_CACHE) {
+            PARSE_CACHE.clear();
+        }
     }
 
     /**
      * 解析多行富文本。
      *
-     * <p>性能优化：以原始模板（替换占位符之前）作为缓存 key，
-     * 模板不变则缓存命中率接近 100%，彻底解决每次刷新都重新解析的问题。</p>
-     *
-     * @param cacheKey 缓存键，应传入替换占位符之前的原始模板
-     * @param rawText  实际要解析的文本（已替换占位符）
-     */
-    public static Component parseMultiline(String cacheKey, String rawText) {
-        if (rawText == null || rawText.isEmpty()) {
-            return Component.empty();
-        }
-
-        CacheKey key = new CacheKey(cacheKey, false);
-        Component cached = PARSE_CACHE.get(key);
-        if (cached != null) {
-            // 缓存命中：直接返回上一次的解析结果
-            // 注意：缓存值是上一次刷新的 Component，对于每秒刷新的 TAB 来说误差可忽略
-            return cached;
-        }
-
-        Component result = parseInternal(rawText, false);
-
-        if (PARSE_CACHE.size() >= MAX_CACHE_SIZE) {
-            PARSE_CACHE.clear();
-        }
-        PARSE_CACHE.put(key, result);
-        return result;
-    }
-
-    /**
-     * 解析多行富文本（无缓存键版本，向后兼容）。
-     *
-     * <p>直接以 rawText 本身作为缓存键，适用于不经过占位符替换的场景。</p>
+     * <p>缓存键即实际解析的文本本身，因此不同内容必然命中不同条目，
+     * 不存在跨 viewer 复用错误结果的问题。</p>
      */
     public static Component parseMultiline(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
             return Component.empty();
         }
-        return parseMultiline(rawText, rawText);
+        return parseCached(new CacheKey(rawText, false), rawText, false);
     }
 
     /**
      * 解析单行富文本，同时把换行压平成空格。
-     *
-     * <p>性能优化：以原始模板（替换占位符之前）作为缓存 key。</p>
-     *
-     * @param cacheKey 缓存键，应传入替换占位符之前的原始模板
-     * @param rawText  实际要解析的文本（已替换占位符）
-     */
-    public static Component parseSingleLine(String cacheKey, String rawText) {
-        if (rawText == null || rawText.isEmpty()) {
-            return Component.empty();
-        }
-
-        String normalized = rawText.replace('\n', ' ').replace('\r', ' ');
-        CacheKey key = new CacheKey(cacheKey, true);
-
-        Component cached = PARSE_CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
-
-        Component result = parseInternal(normalized, true);
-
-        if (PARSE_CACHE.size() >= MAX_CACHE_SIZE) {
-            PARSE_CACHE.clear();
-        }
-        PARSE_CACHE.put(key, result);
-        return result;
-    }
-
-    /**
-     * 解析单行富文本（无缓存键版本，向后兼容）。
      */
     public static Component parseSingleLine(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
             return Component.empty();
         }
-        return parseSingleLine(rawText, rawText);
+        String normalized = rawText.replace('\n', ' ').replace('\r', ' ');
+        return parseCached(new CacheKey(normalized, true), normalized, true);
+    }
+
+    private static Component parseCached(CacheKey key, String text, boolean singleLine) {
+        synchronized (PARSE_CACHE) {
+            Component cached = PARSE_CACHE.get(key);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        Component result = parseInternal(text, singleLine);
+        synchronized (PARSE_CACHE) {
+            // 双检：并发解析时保留先写入者，二者内容等价。
+            if (!PARSE_CACHE.containsKey(key)) {
+                PARSE_CACHE.put(key, result);
+            }
+            return PARSE_CACHE.get(key);
+        }
     }
 
     /**

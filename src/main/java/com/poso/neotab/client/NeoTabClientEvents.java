@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -62,6 +63,17 @@ public final class NeoTabClientEvents {
     }
     
     /**
+     * 客户端登出事件：断线/切换服务器/退出世界时清理所有客户端状态。
+     *
+     * <p>不清理会导致上一个服务器的配置、策略、血量/时长缓存、翻页与固定状态
+     * 残留并带入单人存档或下一个服务器，表现为脏数据和内存泄漏。</p>
+     */
+    @SubscribeEvent
+    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        NeoTabClientState.cleanup();
+    }
+
+    /**
      * GUI 渲染后事件处理 - 强制显示玩家列表。
      * 
      * <p>修正单人世界里按 Tab 不显示玩家列表的问题。</p>
@@ -95,9 +107,13 @@ public final class NeoTabClientEvents {
             wasRightClickDown = false;
         }
 
-        // 检测左键点击翻页箭头
+        // TAB 可见状态先于点击检测计算：隐藏时禁止"隔空翻页"
+        boolean tabPinned = NeoTabClientState.isTabPinned();
+        boolean shouldShow = tabKeyDown || tabPinned;
+
+        // 检测左键点击翻页箭头（仅 TAB 正在显示时）
         boolean leftDown = minecraft.options.keyAttack.isDown();
-        if (leftDown && !wasLeftClickDown) {
+        if (leftDown && !wasLeftClickDown && shouldShow) {
             int bl = NeoTabClientState.getTabBoundsLeft();
             if (bl != -1 && NeoTabClientState.getTotalPages() > 1) {
                 double mx = minecraft.mouseHandler.xpos()
@@ -110,21 +126,30 @@ public final class NeoTabClientEvents {
             }
         }
         wasLeftClickDown = leftDown;
-        
-        // 判断是否应该显示Tab列表
-        boolean tabPinned = NeoTabClientState.isTabPinned();
-        boolean shouldShow = tabKeyDown || tabPinned;
+
+        // 原版 Gui.render 在按住 Tab 时通常已经渲染过（javap 验证的条件：
+        // !isLocalServer || listedOnlinePlayers>1 || sidebarObjective!=null）。
+        // 只有原版会跳过的场景（本地服单人且无侧栏目标）或固定显示时才接管，避免每帧双渲染。
+        boolean vanillaRendered = false;
+        if (tabKeyDown) {
+            net.minecraft.world.scores.Objective sidebar = minecraft.level.getScoreboard() != null
+                    ? minecraft.level.getScoreboard().getDisplayObjective(0) : null;
+            vanillaRendered = !minecraft.isLocalServer()
+                    || minecraft.player.connection.getListedOnlinePlayers().size() > 1
+                    || sidebar != null;
+        }
 
         // 强制显示玩家列表
-        if (shouldShow) {
+        if (shouldShow && !vanillaRendered) {
             GuiGraphics guiGraphics = event.getGuiGraphics();
             minecraft.gui.getTabList().setVisible(true);
             minecraft.gui.getTabList().render(guiGraphics, 
                 minecraft.getWindow().getGuiScaledWidth(), 
                 minecraft.level.getScoreboard(), 
                 null);
-        } else {
+        } else if (!shouldShow) {
             minecraft.gui.getTabList().setVisible(false);
+            NeoTabClientState.clearTabBounds();
         }
     }
     

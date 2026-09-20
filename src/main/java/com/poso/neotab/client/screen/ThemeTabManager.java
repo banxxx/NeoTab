@@ -59,7 +59,57 @@ public class ThemeTabManager {
         this.screen = screen;
     }
 
+    // ── Cancel rollback ────────────────────────────────────────────────────────
+    // CustomThemeConfig 是跨界面共享的单例；编辑期间只改内存，Done/Cancel 时才写盘。
+    // 若不在打开界面时快照，玩家按取消/ESC 就无法回退内存中的改动。
+    // snapshot 仅在真正打开界面时捕获一次，重建（resize/rebuild）不覆盖。
+    private com.poso.neotab.theme.CustomThemeConfig openSnapshot;
+    private boolean snapshotTaken = false;
+
+    /** 打开界面时捕获自定义主题快照（重复调用只生效一次）。 */
+    void ensureSnapshot() {
+        if (snapshotTaken) return;
+        this.openSnapshot = com.poso.neotab.theme.CustomThemeConfig
+            .fromJson(com.poso.neotab.theme.CustomThemeManager.get().toJson());
+        this.snapshotTaken = true;
+    }
+
+    /** 玩家点击 Done 保存后调用：把编辑期间累积的内存改动一次性写盘，并取消回滚。 */
+    void markSaved() {
+        if (customThemeConfig != null) {
+            com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+        }
+        this.snapshotTaken = false;
+        this.openSnapshot = null;
+    }
+
+    /** 取消/ESC 关闭界面时调用：把自定义主题还原到打开时的状态并写盘一次。 */
+    void restoreSnapshot() {
+        if (!snapshotTaken || openSnapshot == null) return;
+        com.poso.neotab.theme.CustomThemeConfig cur = com.poso.neotab.theme.CustomThemeManager.get();
+        cur.setBackgroundColor(openSnapshot.getBackgroundColor());
+        cur.setBorderColors(openSnapshot.getBorderColors());
+        cur.setBorderOuterColor(openSnapshot.getBorderOuterColor());
+        cur.setAnimationEnabled(openSnapshot.isAnimationEnabled());
+        cur.setAnimationSpeed(openSnapshot.getAnimationSpeed());
+        com.poso.neotab.theme.CustomThemeManager.save(cur);
+        this.snapshotTaken = false;
+        this.openSnapshot = null;
+    }
+
+    /** PLAYER 模式下主题编辑受 allowThemeChange 策略约束；ADMIN 不受限。 */
+    boolean themeEditAllowed() {
+        return screen.getScreenMode() == NeoTabConfigScreen.ScreenMode.ADMIN
+            || screen.getPolicy().allowThemeChange();
+    }
+
+    private void gatePolicy(net.minecraft.client.gui.components.AbstractWidget widget) {
+        PageConfigTabManager.applyPolicyToWidget(
+            widget, themeEditAllowed(), screen.getScreenMode(), screen.getPolicy());
+    }
+
     void initThemeWidgets(NeoTabConfigScreenLayout.Layout layout) {
+        ensureSnapshot();
         this.customThemeConfig = com.poso.neotab.theme.CustomThemeManager.get();
 
         int CARD_PADDING = 10;
@@ -87,6 +137,7 @@ public class ThemeTabManager {
                 .bounds(layout.left(), 0, layout.themeSelectorWidth() - THEME_LIST_INSET * 2, THEME_OPTION_HEIGHT)
                 .build());
             optionButton.visible = false;  // 初始化时隐藏，由syncTabWidgetVisibility控制显示
+            gatePolicy(optionButton);
             this.themeOptionButtons.add(optionButton);
             this.themeOptionIds.add(themeId);
         }
@@ -113,6 +164,7 @@ public class ThemeTabManager {
             .bounds(layout.left(), 0, 24, 24)  // 色块大小�?4x24（缩小）
             .build());
         this.customBackgroundColorButton.visible = false;  // 初始化时隐藏
+        gatePolicy(this.customBackgroundColorButton);
 
         // Background color HEX input
         this.customBackgroundHexInput = new EditBox(
@@ -121,7 +173,8 @@ public class ThemeTabManager {
         this.customBackgroundHexInput.setMaxLength(9);  // #AARRGGBB = 9字符
         this.customBackgroundHexInput.setValue(String.format("#%08X", customThemeConfig.getBackgroundColor()));
         this.customBackgroundHexInput.setBordered(false);
-        this.customBackgroundHexInput.setEditable(true);
+        // 屏幕鼠标路由会直接 setFocused(true)，仅 active=false 挡不住键盘输入，必须同时禁 editable
+        this.customBackgroundHexInput.setEditable(themeEditAllowed());
         this.customBackgroundHexInput.setCanLoseFocus(true);
         this.customBackgroundHexInput.setFocused(false);
         this.customBackgroundHexInput.setResponder(text -> {
@@ -130,7 +183,6 @@ public class ThemeTabManager {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
                     customThemeConfig.setBackgroundColor(0xFFFFFFFF);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "background".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(0xFFFFFFFF);
                     }
@@ -139,14 +191,12 @@ public class ThemeTabManager {
                 if (clean.length() == 6) {
                     int parsed = (int)(0xFF000000L | Long.parseLong(clean, 16));
                     customThemeConfig.setBackgroundColor(parsed);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "background".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(parsed);
                     }
                 } else if (clean.length() == 8) {
                     int parsed = (int) Long.parseLong(clean, 16);
                     customThemeConfig.setBackgroundColor(parsed);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "background".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(parsed);
                     }
@@ -154,6 +204,7 @@ public class ThemeTabManager {
             } catch (NumberFormatException ignored) {}
         });
         this.customBackgroundHexInput.visible = false;  // 初始化时隐藏
+        this.customBackgroundHexInput.active = themeEditAllowed();
         ScreenAccessHelper.addWidget(screen, this.customBackgroundHexInput);
 
         // Outer border color button (色块按钮，用于打开颜色选择器)
@@ -178,6 +229,7 @@ public class ThemeTabManager {
             .bounds(layout.left(), 0, 24, 24)  // 色块大小：24x24（缩小）
             .build());
         this.customBorderOuterFactorButton.visible = false;  // 初始化时隐藏
+        gatePolicy(this.customBorderOuterFactorButton);
 
         // Outer border color HEX input
         this.customBorderOuterHexInput = new EditBox(
@@ -195,7 +247,6 @@ public class ThemeTabManager {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
                     customThemeConfig.setBorderOuterColor(0xFFB7AF9B);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "outer_border".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(0xFFB7AF9B);
                     }
@@ -204,14 +255,12 @@ public class ThemeTabManager {
                 if (clean.length() == 6) {
                     int parsed = (int)(0xFF000000L | Long.parseLong(clean, 16));
                     customThemeConfig.setBorderOuterColor(parsed);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "outer_border".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(parsed);
                     }
                 } else if (clean.length() == 8) {
                     int parsed = (int) Long.parseLong(clean, 16);
                     customThemeConfig.setBorderOuterColor(parsed);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     if (embeddedColorPicker != null && "outer_border".equals(currentSelectedColorType)) {
                         embeddedColorPicker.setColor(parsed);
                     }
@@ -219,6 +268,7 @@ public class ThemeTabManager {
             } catch (NumberFormatException ignored) {}
         });
         this.customBorderOuterHexInput.visible = false;  // 初始化时隐藏
+        this.customBorderOuterHexInput.active = themeEditAllowed();
         ScreenAccessHelper.addWidget(screen, this.customBorderOuterHexInput);
 
         // 动画效果开关（与其他toggle完全一致的创建方式）
@@ -226,9 +276,9 @@ public class ThemeTabManager {
             NeoTabConfigWidgetFactory.newToggle(layout.toggleX(), customThemeConfig.isAnimationEnabled(),
                 (btn, value) -> {
                     customThemeConfig.setAnimationEnabled(value);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                 }));
         this.customAnimationToggle.visible = false;  // 初始化时隐藏
+        gatePolicy(this.customAnimationToggle);
 
         // Animation speed button
         this.customAnimationSpeedButton = ScreenAccessHelper.addWidget(screen, Button.builder(
@@ -237,12 +287,12 @@ public class ThemeTabManager {
                     int current = customThemeConfig.getAnimationSpeed();
                     int next = current >= 3 ? 1 : current + 1;
                     customThemeConfig.setAnimationSpeed(next);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     button.setMessage(Component.literal(String.format("%dx", next)));
                 })
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
         this.customAnimationSpeedButton.visible = false;  // 初始化时隐藏
+        gatePolicy(this.customAnimationSpeedButton);
 
         // Reset to default button (with icon)
         this.resetToDefaultButton = ScreenAccessHelper.addWidget(screen, Button.builder(
@@ -254,13 +304,20 @@ public class ThemeTabManager {
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
         this.resetToDefaultButton.visible = false;  // 初始化时隐藏
+        gatePolicy(this.resetToDefaultButton);
 
         // Reset confirm button (initially hidden)
         this.resetConfirmButton = ScreenAccessHelper.addWidget(screen, Button.builder(
                 Component.translatable("screen.neotab.custom_theme.reset_confirm"),
                 button -> {
-                    this.customThemeConfig = com.poso.neotab.theme.CustomThemeConfig.defaults();
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                    // 就地覆写共享单例字段，而不是替换引用：
+                    // CustomThemeManager/tab 渲染持有的都是同一实例，替换会导致重置不生效且回滚目标错位
+                    CustomThemeConfig def = com.poso.neotab.theme.CustomThemeConfig.defaults();
+                    customThemeConfig.setBackgroundColor(def.getBackgroundColor());
+                    customThemeConfig.setBorderColors(def.getBorderColors());
+                    customThemeConfig.setBorderOuterColor(def.getBorderOuterColor());
+                    customThemeConfig.setAnimationEnabled(def.isAnimationEnabled());
+                    customThemeConfig.setAnimationSpeed(def.getAnimationSpeed());
                     showResetConfirmation = false;
                     // 只重建自定义主题相关控件，不调用 reinit()
                     // reinit() 会从 initialConfig 重读 selectedThemeId，导致主题选择被重置
@@ -289,15 +346,19 @@ public class ThemeTabManager {
                     if (colors.size() < 7) {
                         colors.add(0xFFFFFFFF);
                         customThemeConfig.setBorderColors(colors);
-                        com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                         screen.rebuildCustomThemeWidgets();
                     }
                 })
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
         this.addCustomBorderColorButton.visible = false;  // 初始化时隐藏
+        gatePolicy(this.addCustomBorderColorButton);
 
         // Embedded color picker (positioned inline below selected card by applyLayout)
+        // 屏幕重建时先释放旧实例注册的动态纹理，避免注册条目与 GPU 纹理累积
+        if (embeddedColorPicker != null) {
+            embeddedColorPicker.releaseTexture();
+        }
         int pickerX = layout.left() + CARD_PADDING;
         int pickerY = 0;
         this.embeddedColorPicker = new ColorPickerWidget(pickerX, pickerY, screen.font(),
@@ -305,7 +366,7 @@ public class ThemeTabManager {
             color -> {
                 if ("background".equals(currentSelectedColorType)) {
                     customThemeConfig.setBackgroundColor(color);
-                    // 不在拖动时保存，由 mouseReleased 触发保存
+                    // 拖动期间只更新内存，Done 时由 markSaved 统一写盘
                     if (customBackgroundHexInput != null) {
                         updatingHexFromPicker = true;
                         customBackgroundHexInput.setValue(String.format("#%08X", color));
@@ -335,6 +396,7 @@ public class ThemeTabManager {
                 }
             }, colorPickerScale, false);
         this.embeddedColorPicker.visible = false;  // 初始化时隐藏
+        gatePolicy(this.embeddedColorPicker);
         ScreenAccessHelper.addWidget(screen, this.embeddedColorPicker);
 
         currentSelectedColorType = null;
@@ -392,6 +454,7 @@ public class ThemeTabManager {
                     screen.syncVisibility();
                 }
             ).bounds(layout.left(), 0, 28, 28).build());
+            gatePolicy(colorButton);
             customBorderColorButtons.add(colorButton);
 
             // Hex输入框（支持透明度，格式 #AARRGGBB）�?
@@ -417,7 +480,6 @@ public class ThemeTabManager {
                         if (index < newColors.size()) {
                             newColors.set(index, defaultColor);
                             customThemeConfig.setBorderColors(newColors);
-                            com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                             if (embeddedColorPicker != null && ("border_" + index).equals(currentSelectedColorType)) {
                                 embeddedColorPicker.setColor(defaultColor);
                             }
@@ -431,7 +493,6 @@ public class ThemeTabManager {
                         if (index < newColors.size()) {
                             newColors.set(index, parsed);
                             customThemeConfig.setBorderColors(newColors);
-                            com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                             // 同步更新颜色选择�?
                             if (embeddedColorPicker != null && ("border_" + index).equals(currentSelectedColorType)) {
                                 embeddedColorPicker.setColor(parsed);
@@ -443,7 +504,6 @@ public class ThemeTabManager {
                         if (index < newColors.size()) {
                             newColors.set(index, parsed);
                             customThemeConfig.setBorderColors(newColors);
-                            com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                             // 同步更新颜色选择�?
                             if (embeddedColorPicker != null && ("border_" + index).equals(currentSelectedColorType)) {
                                 embeddedColorPicker.setColor(parsed);
@@ -453,6 +513,7 @@ public class ThemeTabManager {
                 } catch (NumberFormatException ignored) {}
             });
             hexBox.visible = false;
+            hexBox.active = themeEditAllowed();
             screen.addWidgetDirect(hexBox);
             customBorderHexInputs.add(hexBox);
         }
@@ -465,12 +526,12 @@ public class ThemeTabManager {
                     List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
                     newColors.add(0xFFFFFFFF);
                     customThemeConfig.setBorderColors(newColors);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                     rebuildCustomBorderColorButtons();
                     NeoTabConfigScreenLayout.Layout newLayout = screen.buildLayout();
                     screen.applyLayout(newLayout);
                 }
             ).bounds(layout.left(), 0, 120, 20).build());
+            gatePolicy(this.addCustomBorderColorButton);
         }
 
         screen.syncVisibility();
@@ -487,7 +548,7 @@ public class ThemeTabManager {
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) {
         int CARD_PADDING = 10;
         int CARD_GAP = 8;
-        int TITLE_LINE_HEIGHT = 9;  // 约等于font.lineHeight
+        int TITLE_LINE_HEIGHT = screen.font().lineHeight;  // 与 buildLayout 中的 font.lineHeight 保持一致
         int COLOR_ITEM_HEIGHT = THEME_OPTION_HEIGHT;  // 颜色行高�?
         int PICKER_GAP = 6;  // 颜色行与颜色选择器之间的间距
         
@@ -507,8 +568,8 @@ public class ThemeTabManager {
                 int resetBtnW = 80;  // 按钮宽度（包含图标和文字�?
                 int resetBtnH = 18;  // 按钮高度（稍小一点，更精致）
                 int resetCardY = layout.customResetRowY();
-                int titleH = 9;  // 标题行高�?
-                int subtitleH = 9;  // 副标题行高度
+                int titleH = screen.font().lineHeight;  // 标题行高�?
+                int subtitleH = screen.font().lineHeight;  // 副标题行高度
                 int gap = 2;  // 标题与副标题之间的间�?
                 int resetCardHeight = CARD_PADDING * 2 + titleH + gap + subtitleH + 8;  // 增加一些高度以容纳确认/取消按钮
                 
@@ -545,7 +606,7 @@ public class ThemeTabManager {
             int swatchSize = 24;  // 色块大小（缩小）
             int hexInputW = 90;   // HEX输入框宽度（缩小�?
             int gap = 12;  // 色块与输入框之间的间�?
-            int titleH = 9;  // 标题行高度（约等于font.lineHeight�?
+            int titleH = screen.font().lineHeight;  // 标题行高度（约等于font.lineHeight�?
             int contentGap = 8;  // 标题与内容之间的间距
             
             if (customBackgroundColorButton != null) {

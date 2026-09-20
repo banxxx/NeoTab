@@ -226,16 +226,22 @@ public final class NeoTabClientState {
     
     /**
      * 重新计算总页数。
-     * 
-     * <p>根据当前在线玩家数和每页玩家数计算总页数。</p>
-     * 
+     *
+     * <p>唯一写入 playersPerPage/totalPages 的入口，由 TAB 渲染路径（Mixin）每帧调用，
+     * perPage 必须与实际切片用的值一致，否则翻页边界与 subList 越界会不匹配。</p>
+     *
      * @param totalPlayers 总玩家数
+     * @param perPage      每页玩家数（与渲染切片同源）
      */
-    public static void recalculatePages(int totalPlayers) {
+    public static void recalculatePages(int totalPlayers, int perPage) {
+        playersPerPage = Math.max(1, perPage);
         totalPages = Math.max(1, (totalPlayers + playersPerPage - 1) / playersPerPage);
         // 确保当前页码在有效范围内
         if (currentPage >= totalPages) {
             currentPage = totalPages - 1;
+        }
+        if (currentPage < 0) {
+            currentPage = 0;
         }
     }
     
@@ -252,6 +258,14 @@ public final class NeoTabClientState {
         tabBoundsTop = top;
         tabBoundsRight = right;
         tabBoundsBottom = bottom;
+    }
+
+    /** TAB 隐藏/无分页时失效边界，防止陈旧 bounds 被点击检测命中（幽灵翻页）。 */
+    public static void clearTabBounds() {
+        tabBoundsLeft = -1;
+        tabBoundsTop = -1;
+        tabBoundsRight = -1;
+        tabBoundsBottom = -1;
     }
     
     /**
@@ -303,30 +317,36 @@ public final class NeoTabClientState {
         if (tabBoundsLeft == -1 || totalPages <= 1) {
             return false;
         }
-        
-        int arrowW = 10;
-        int arrowH = 16;
-        int centerY = (tabBoundsTop + tabBoundsBottom) / 2;
-        int arrowY = centerY - arrowH / 2;
 
-        // 左箭头（上一页）
+        // 与 TabBorderRenderer.drawPageArrows 共用同一组常量，保证命中区与绘制区对齐
+        final int arrowW = com.poso.neotab.client.tab.TabBorderRenderer.PAGE_ARROW_W;
+        final int arrowH = com.poso.neotab.client.tab.TabBorderRenderer.PAGE_ARROW_H;
+        final int pad    = com.poso.neotab.client.tab.TabBorderRenderer.TAB_CONTENT_PADDING;
+        // 命中区在绘制区基础上外扩 2px，方便点击
+        final int slack  = 2;
+        int centerY = (tabBoundsTop + tabBoundsBottom) / 2;
+        int arrowY  = centerY - arrowH / 2;
+
+        // 左箭头（上一页）：绘制于 left + TAB_CONTENT_PADDING
         if (currentPage > 0) {
-            int ax = tabBoundsLeft + 3;
-            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+            int ax = tabBoundsLeft + pad;
+            if (mouseX >= ax - slack && mouseX < ax + arrowW + slack
+                    && mouseY >= arrowY - slack && mouseY < arrowY + arrowH + slack) {
                 prevPage();
                 return true;
             }
         }
-        
-        // 右箭头（下一页）
+
+        // 右箭头（下一页）：绘制于 right - TAB_CONTENT_PADDING - PAGE_ARROW_W
         if (currentPage < totalPages - 1) {
-            int ax = tabBoundsRight - 3 - arrowW;
-            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+            int ax = tabBoundsRight - pad - arrowW;
+            if (mouseX >= ax - slack && mouseX < ax + arrowW + slack
+                    && mouseY >= arrowY - slack && mouseY < arrowY + arrowH + slack) {
                 nextPage();
                 return true;
             }
         }
-        
+
         return false;
     }
     
@@ -425,22 +445,17 @@ public final class NeoTabClientState {
     
     /**
      * 重新计算布局。
-     * 
-     * <p>根据当前GUI缩放和屏幕尺寸重新计算每页玩家数等布局参数。</p>
-     * 
+     *
+     * <p>注意：每页玩家数 {@code playersPerPage} 的唯一权威来源是 {@code TabLayoutConfig}，
+     * 由 TAB 渲染 Mixin 每帧通过 {@link #recalculatePages(int, int)} 写入。
+     * 此处不得再用屏幕高度推算并覆写 playersPerPage，否则会与切片用的 perPage 不一致，
+     * 导致翻页边界错位甚至 subList 越界。这里只根据既有 playersPerPage 做一次安全钳制。</p>
+     *
      * @param minecraft Minecraft实例
      */
     private static void recalculateLayout(Minecraft minecraft) {
-        // 根据屏幕高度和GUI缩放计算每页可显示的玩家数
-        int screenHeight = minecraft.getWindow().getGuiScaledHeight();
-        int availableHeight = screenHeight - 100; // 预留头部和底部空间
-        int playerEntryHeight = 12; // 每个玩家条目的高度
-        
-        playersPerPage = Math.max(10, Math.min(80, availableHeight / playerEntryHeight));
-        
-        // 重新计算页数
         if (minecraft.level != null && minecraft.level.players() != null) {
-            recalculatePages(minecraft.level.players().size());
+            recalculatePages(minecraft.level.players().size(), playersPerPage);
         }
     }
     

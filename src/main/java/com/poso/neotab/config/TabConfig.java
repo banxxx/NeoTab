@@ -286,6 +286,24 @@ public record TabConfig(
         return RichTextEngine.trimToVisibleLength(normalized, maxVisibleLength, true);
     }
 
+    // ── 个人自定义文本清洗 ────────────────────────────────────────────────────
+    // null 表示"跟随服务器"，原样保留；非 null 走与服务器配置相同的限制。
+
+    public static String sanitizePlayerTopTitle(String value) {
+        return value == null ? null
+            : sanitizeText(value, MAX_TOP_TITLE_LENGTH, NETWORK_TOP_TITLE_LENGTH, true);
+    }
+
+    public static String sanitizePlayerTopContent(String value) {
+        return value == null ? null
+            : sanitizeText(value, MAX_TOP_CONTENT_LENGTH, NETWORK_TOP_CONTENT_LENGTH, false);
+    }
+
+    public static String sanitizePlayerFooterCustom(String value) {
+        return value == null ? null
+            : sanitizeText(value, MAX_FOOTER_CUSTOM_LENGTH, NETWORK_FOOTER_CUSTOM_LENGTH, false);
+    }
+
     /**
      * 多行输入清洗：统一换行符并截断（按可见文本长度）。
      */

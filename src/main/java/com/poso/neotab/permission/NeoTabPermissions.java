@@ -10,8 +10,6 @@ import net.minecraftforge.server.permission.PermissionAPI;
 import net.minecraftforge.server.permission.nodes.PermissionNode;
 import net.minecraftforge.server.permission.nodes.PermissionTypes;
 
-import java.util.UUID;
-
 /**
  * 权限定义与权限检查。
  *
@@ -157,12 +155,13 @@ public final class NeoTabPermissions {
             return PlayerCustomizePolicy.unlocked();
         }
 
-        UUID uuid = player.getUUID();
+        // 2. 个人专属策略优先，直接使用，不再叠加权限节点
+        PlayerCustomizePolicy personal = serverConfig.playerPolicies().get(player.getUUID());
+        if (personal != null) {
+            return personal;
+        }
 
-        // 2. 个人专属策略优先
-        PlayerCustomizePolicy personal = serverConfig.playerPolicies().get(uuid);
         // 3. 全局策略 AND 权限节点
-        PlayerCustomizePolicy global = personal != null ? personal : serverConfig.globalPolicy();
         PlayerCustomizePolicy fromNodes = new PlayerCustomizePolicy(
             perm(player, CUSTOMIZE_TOP_TITLE_TOGGLE),
             perm(player, CUSTOMIZE_TOP_TITLE_EDIT),
@@ -181,7 +180,7 @@ public final class NeoTabPermissions {
             false // refreshInterval 不开放给玩家
         );
 
-        return global.and(fromNodes);
+        return serverConfig.globalPolicy().and(fromNodes);
     }
 
     // ── 私有辅助方法 ──────────────────────────────────────────────────────────
@@ -199,12 +198,16 @@ public final class NeoTabPermissions {
     }
 
     /**
-     * 创建一个默认值为 false 的玩家自定义权限节点。
+     * 创建一个玩家自定义权限节点。
+     *
+     * <p>默认 resolver 返回 true：未安装外部权限模组时，走 Forge 默认处理器，
+     * 是否开放完全由管理员配置的全局/个人策略决定；安装了权限模组时，
+     * 可通过节点显式收紧（节点未授予 → false，与策略做 AND）。</p>
      */
     private static PermissionNode<Boolean> customizeNode(String path) {
         return new PermissionNode<>(
             NeoTab.MODID, path, PermissionTypes.BOOLEAN,
-            (player, uuid, contexts) -> false
+            (player, uuid, contexts) -> true
         );
     }
 }

@@ -151,15 +151,11 @@ public final class TabBorderRenderer {
 
         int outerColor = applyBreathe(themeConfig.getBorderOuterColor(), breathe);
 
-        // 外层边框（上下左右各一像素）
-        for (int x = left - 1; x < right + 1; x++) {
-            guiGraphics.fill(x, top - 1,  x + 1, top,      outerColor);
-            guiGraphics.fill(x, bottom,   x + 1, bottom + 1, outerColor);
-        }
-        for (int y = top - 1; y < bottom + 1; y++) {
-            guiGraphics.fill(left - 1, y, left,    y + 1, outerColor);
-            guiGraphics.fill(right,    y, right + 1, y + 1, outerColor);
-        }
+        // 外层边框（纯色1像素，直接四个矩形，避免逐像素 fill 的上百次绘制调用）
+        guiGraphics.fill(left - 1, top - 1, right + 1, top,       outerColor);  // 上
+        guiGraphics.fill(left - 1, bottom,   right + 1, bottom + 1, outerColor);  // 下
+        guiGraphics.fill(left - 1, top,      left,      bottom,    outerColor);  // 左（上下角已由横边覆盖）
+        guiGraphics.fill(right,    top,      right + 1, bottom,    outerColor);  // 右
 
         // 内层彩虹边框（上下边）
         for (int x = left; x < right; x++) {

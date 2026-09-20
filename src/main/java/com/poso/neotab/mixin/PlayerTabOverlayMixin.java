@@ -136,14 +136,15 @@ public abstract class PlayerTabOverlayMixin {
 
         if (!layout.isEnabled()) {
             neotab$totalPlayerCount = all.size();
-            NeoTabClientState.recalculatePages(all.size());
+            NeoTabClientState.recalculatePages(all.size(), Math.max(1, all.size()));
             neotab$needsPagination = false;
             return all;
         }
 
-        int perPage = layout.playersPerPage();
+        // perPage 是切片与页数计算的唯一来源，二者必须一致，否则翻页边界错位、subList 越界
+        int perPage = Math.max(1, layout.playersPerPage());
         neotab$totalPlayerCount = all.size();
-        NeoTabClientState.recalculatePages(all.size());
+        NeoTabClientState.recalculatePages(all.size(), perPage);
         int totalPages = NeoTabClientState.getTotalPages();
         neotab$needsPagination = totalPages > 1;
 
