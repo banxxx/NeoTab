@@ -1,9 +1,12 @@
 package com.poso.neotab.client.tab;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.poso.neotab.client.NeoTabClientState;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix4f;
 
 /**
  * TAB 列表边框与翻页箭头渲染辅助类。
@@ -15,9 +18,14 @@ import net.minecraft.resources.ResourceLocation;
  *   <li>颜色插值工具方法</li>
  * </ul>
  *
- * <p>所有方法均为静态，不持有任何状态。</p>
+ * <p>除边框调色板缓存（仅渲染线程访问、只增不改）外，所有方法均为静态无副作用。</p>
  */
 public final class TabBorderRenderer {
+
+    // 每帧边框调色板缓存：上下边共用 hPalette、左右边共用 vPalette，
+    // 颜色计算量直接减半；数组跨帧复用，只在尺寸不够时扩容，避免逐帧分配。
+    private static int[] borderHPalette = new int[0];
+    private static int[] borderVPalette = new int[0];
 
     // ── 翻页箭头纹理 ──────────────────────────────────────────────────────────
     private static final ResourceLocation CHEVRON_LEFT  =
@@ -157,19 +165,52 @@ public final class TabBorderRenderer {
         guiGraphics.fill(left - 1, top,      left,      bottom,    outerColor);  // 左（上下角已由横边覆盖）
         guiGraphics.fill(right,    top,      right + 1, bottom,    outerColor);  // 右
 
-        // 内层彩虹边框（上下边）
-        for (int x = left; x < right; x++) {
-            int color = applyBreathe(getAnimatedRainbowColor(x - left, width, rainbowColors, flowOffset), breathe);
-            guiGraphics.fill(x, top,      x + 1, top + 1,    color);
-            guiGraphics.fill(x, bottom - 1, x + 1, bottom,   color);
+        // ── 内层彩虹边框（方案A：调色板预计算 + 单批顶点提交） ──────────────────
+        // 原版 GuiGraphics.fill 在非托管状态下每次调用都是：
+        //   getBuffer(RenderType.gui()) → 写 4 个顶点 → flush()（立即上传绘制）。
+        // 逐像素调用 2×(宽+高) 次意味着每帧上千次"提交+flush"，开销全在 CPU 侧。
+        // 这里改为向同一个 gui 顶点缓冲一次性写入所有边框方块，最后统一 flush 一次，
+        // 顶点写入顺序与 fill 完全一致，因此绘制顺序和视觉效果不变。
+        if (borderHPalette.length < width)  borderHPalette = new int[width];
+        if (borderVPalette.length < height) borderVPalette = new int[height];
+        for (int i = 0; i < width; i++) {
+            borderHPalette[i] = applyBreathe(getAnimatedRainbowColor(i, width, rainbowColors, flowOffset), breathe);
+        }
+        for (int i = 0; i < height; i++) {
+            borderVPalette[i] = applyBreathe(getAnimatedRainbowColor(i, height, rainbowColors, flowOffset), breathe);
         }
 
-        // 内层彩虹边框（左右边）
-        for (int y = top; y < bottom; y++) {
-            int color = applyBreathe(getAnimatedRainbowColor(y - top, height, rainbowColors, flowOffset), breathe);
-            guiGraphics.fill(left,      y, left + 1,  y + 1, color);
-            guiGraphics.fill(right - 1, y, right,     y + 1, color);
+        Matrix4f pose = guiGraphics.pose().last().pose();
+        VertexConsumer buffer = guiGraphics.bufferSource().getBuffer(RenderType.gui());
+        for (int i = 0; i < width; i++) {
+            int color = borderHPalette[i];
+            // 上边与下边共用同一调色板（同列颜色相同，原来要算两遍）
+            fillPixelQuad(buffer, pose, left + i, top, color);
+            fillPixelQuad(buffer, pose, left + i, bottom - 1, color);
         }
+        for (int i = 0; i < height; i++) {
+            int color = borderVPalette[i];
+            // 左边与右边共用同一调色板
+            fillPixelQuad(buffer, pose, left, top + i, color);
+            fillPixelQuad(buffer, pose, right - 1, top + i, color);
+        }
+        // 等价于原版 fill 结尾的 flushIfUnmanaged()（本调用路径下 GuiGraphics 恒为非托管）
+        guiGraphics.flush();
+    }
+
+    /**
+     * 向顶点缓冲写入一个 1×1 像素四边形。顶点顺序必须与 GuiGraphics.fill 反编译结果一致
+     * （(x,y)→(x,y+1)→(x+1,y+1)→(x+1,y)，z=0）：gui 渲染类型开启背面剔除，绕向写反会被整面剔除。
+     */
+    private static void fillPixelQuad(VertexConsumer buffer, Matrix4f pose, int x, int y, int color) {
+        float a = ((color >> 24) & 0xFF) / 255.0F;
+        float r = ((color >> 16) & 0xFF) / 255.0F;
+        float g = ((color >>  8) & 0xFF) / 255.0F;
+        float b =  (color        & 0xFF) / 255.0F;
+        buffer.vertex(pose, x,     y,     0.0F).color(r, g, b, a).endVertex();
+        buffer.vertex(pose, x,     y + 1, 0.0F).color(r, g, b, a).endVertex();
+        buffer.vertex(pose, x + 1, y + 1, 0.0F).color(r, g, b, a).endVertex();
+        buffer.vertex(pose, x + 1, y,     0.0F).color(r, g, b, a).endVertex();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
