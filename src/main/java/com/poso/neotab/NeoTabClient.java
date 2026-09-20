@@ -1,6 +1,5 @@
 package com.poso.neotab;
 
-import com.poso.neotab.client.LayoutConfigMonitor;
 import com.poso.neotab.client.NeoTabClientState;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -9,7 +8,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import org.lwjgl.glfw.GLFW;
 
@@ -40,20 +38,6 @@ public class NeoTabClient {
     static void onClientSetup(FMLClientSetupEvent event) {
         // 这里只做最小初始化输出，便于确认客户端侧模组已加载。
         NeoTab.LOGGER.info("NeoTab client bootstrap for {}", Minecraft.getInstance().getUser().getName());
-        
-        // 初始化布局配置监听器
-        LayoutConfigMonitor.forceAdjust();
-    }
-
-    /**
-     * 客户端tick事件 - 每秒20次。
-     * 
-     * <p>用于监听GUI缩放和血量显示模式的变化，自动调整布局配置。</p>
-     */
-    @SubscribeEvent
-    static void onClientTick(ClientTickEvent.Post event) {
-        // 检查并调整布局配置（有缓存机制，只在变化时调整）
-        LayoutConfigMonitor.checkAndAdjust();
     }
 
     /**
@@ -63,7 +47,6 @@ public class NeoTabClient {
     @SubscribeEvent
     static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         NeoTabClientState.reset();
-        LayoutConfigMonitor.reset();
     }
 
     /**

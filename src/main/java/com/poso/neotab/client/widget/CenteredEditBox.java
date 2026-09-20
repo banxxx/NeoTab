@@ -83,45 +83,58 @@ public class CenteredEditBox extends EditBox {
         
         // 绘制文字或提示
         if (!displayText.isEmpty()) {
-            // 检查是否有选中的文字
-            String highlighted = this.getHighlighted();
-            
-            if (!highlighted.isEmpty() && this.isFocused()) {
-                // 有选中文字时，需要特殊处理
-                int cursorPos = this.getCursorPosition();
-                int highlightLen = highlighted.length();
-                int highlightStart = Math.min(cursorPos, cursorPos - highlightLen);
-                int highlightEnd = Math.max(cursorPos, cursorPos - highlightLen);
-                
-                // 绘制选中前的文字
-                if (highlightStart > 0) {
-                    String before = displayText.substring(0, highlightStart);
-                    guiGraphics.drawString(this.fontRenderer, before, textX, textY, 0xFF000000, false);
+            int len = displayText.length();
+            int cursor = Math.min(this.getCursorPosition(), len);
+
+            // 选区定位：getHighlighted() 只给出选中文本，选择方向决定它在光标左侧还是右侧
+            String selected = this.getHighlighted();
+            int selStart = cursor;
+            int selEnd = cursor;
+            if (!selected.isEmpty()) {
+                int hl = selected.length();
+                if (cursor >= hl && displayText.startsWith(selected, cursor - hl)) {
+                    selStart = cursor - hl;
+                    selEnd = cursor;
+                } else if (displayText.startsWith(selected, cursor)) {
+                    selStart = cursor;
+                    selEnd = cursor + hl;
                 }
-                
-                // 绘制选中的文字（蓝色背景 + 白色文字）
-                String selectedText = displayText.substring(highlightStart, highlightEnd);
-                int selectedX = textX + this.fontRenderer.width(displayText.substring(0, highlightStart));
-                int selectedWidth = this.fontRenderer.width(selectedText);
-                guiGraphics.fill(selectedX, textY - 1, selectedX + selectedWidth, textY + 9, 0xFF3399FF);
-                guiGraphics.drawString(this.fontRenderer, selectedText, selectedX, textY, 0xFFFFFFFF, false);
-                
-                // 绘制选中后的文字
-                if (highlightEnd < displayText.length()) {
-                    String after = displayText.substring(highlightEnd);
-                    int afterX = selectedX + selectedWidth;
-                    guiGraphics.drawString(this.fontRenderer, after, afterX, textY, 0xFF000000, false);
-                }
-            } else {
-                // 没有选中文字，正常绘制
-                guiGraphics.drawString(this.fontRenderer, displayText, textX, textY, 0xFF000000, false);
             }
-            
-            // 绘制光标
-            if (this.isFocused() && (System.currentTimeMillis() / 500) % 2 == 0) {
-                int cursorPos = Math.min(this.getCursorPosition(), displayText.length());
-                int cursorX = textX + this.fontRenderer.width(displayText.substring(0, cursorPos));
-                guiGraphics.fill(cursorX, textY - 1, cursorX + 1, textY + 9, 0xFF000000);
+
+            // 水平滚动：聚焦时回溯起点，保证光标（或选区末端）落在可视宽度内
+            int anchor = this.isFocused() ? Math.min(Math.max(cursor, selEnd), len) : 0;
+            int startIdx = anchor;
+            int accW = 0;
+            int scrollBudget = Math.max(4, textMaxWidth - 2);
+            while (startIdx > 0) {
+                int charW = this.fontRenderer.width(String.valueOf(displayText.charAt(startIdx - 1)));
+                if (accW + charW > scrollBudget) break;
+                accW += charW;
+                startIdx--;
+            }
+
+            // 可视片段：从 startIdx 起、按像素宽裁剪，防止溢出边框/压住清除按钮
+            String view = this.fontRenderer.plainSubstrByWidth(displayText.substring(startIdx), textMaxWidth);
+            int viewEnd = startIdx + view.length();
+
+            // 先整体绘制，再叠加选区高亮（白字蓝底）
+            guiGraphics.drawString(this.fontRenderer, view, textX, textY, 0xFF000000, false);
+            if (this.isFocused()) {
+                int a = Math.min(Math.max(selStart - startIdx, 0), view.length());
+                int b = Math.min(Math.max(selEnd - startIdx, 0), view.length());
+                if (b > a) {
+                    String selView = view.substring(a, b);
+                    int selX = textX + this.fontRenderer.width(view.substring(0, a));
+                    guiGraphics.fill(selX, textY - 1, selX + this.fontRenderer.width(selView), textY + 9, 0xFF3399FF);
+                    guiGraphics.drawString(this.fontRenderer, selView, selX, textY, 0xFFFFFFFF, false);
+                }
+
+                // 光标：按可视片段换算 X，保证不出界
+                if ((System.currentTimeMillis() / 500) % 2 == 0 && cursor <= viewEnd) {
+                    int c = Math.max(cursor - startIdx, 0);
+                    int cursorX = textX + this.fontRenderer.width(view.substring(0, Math.min(c, view.length())));
+                    guiGraphics.fill(cursorX, textY - 1, cursorX + 1, textY + 9, 0xFF000000);
+                }
             }
             
             // 绘制清除按钮（"×"符号）

@@ -141,6 +141,11 @@ public final class NeoTabPermissions {
         }
     }
 
+    /** 总开关之外还要求生效策略里至少开放了一项自定义（避免打开空界面）。 */
+    public static boolean canCustomize(ServerPlayer player, TabConfig serverConfig) {
+        return canCustomize(player) && resolvePolicy(player, serverConfig).allowsAnyCustomization();
+    }
+
     /**
      * 获取玩家实际生效的自定义策略。
      *
@@ -195,25 +200,29 @@ public final class NeoTabPermissions {
     // ── 私有辅助方法 ──────────────────────────────────────────────────────────
 
     /**
-     * 查询单个权限节点，没有权限管理模组时回退为 false。
+     * 查询单个权限节点，没有权限管理模组时回退为 true。
      * 玩家自定义权限在没有权限管理模组时，完全由服务器策略控制。
      */
     private static boolean perm(ServerPlayer player, PermissionNode<Boolean> node) {
         try {
             return PermissionAPI.getPermission(player, node);
         } catch (Exception e) {
-            return false;
+            return true; // 没有权限管理模组时默认允许，由服务器配置控制
         }
     }
 
     /**
-     * 创建一个默认值为 false 的玩家自定义权限节点。
+     * 创建一个玩家自定义权限节点。
+     *
+     * <p>默认 resolver 返回 true：未安装外部权限模组时，走 NeoForge 默认处理器，
+     * 是否开放完全由管理员配置的全局/个人策略决定；安装了权限模组时，
+     * 可通过节点显式收紧（节点未授予 → false，与策略做 AND）。</p>
      */
     private static PermissionNode<Boolean> customizeNode(String path, String description) {
         return new PermissionNode<>(
             ResourceLocation.fromNamespaceAndPath(NeoTab.MODID, path),
             PermissionTypes.BOOLEAN,
-            (player, uuid, contexts) -> false
+            (player, uuid, contexts) -> true
         ).setInformation(
             Component.literal("NeoTab: " + path),
             Component.literal(description)

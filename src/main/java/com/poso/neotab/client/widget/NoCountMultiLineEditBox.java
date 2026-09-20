@@ -1,7 +1,6 @@
 package com.poso.neotab.client.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.poso.neotab.client.gui.AEStyleRenderer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -139,7 +138,19 @@ public class NoCountMultiLineEditBox extends MultiLineEditBox {
             RenderSystem.enableBlend();
             // 滚动条位置：使用fullWidth计算，距离右边框2px
             int scrollbarX = this.getX() + this.fullWidth - SCROLLBAR_WIDTH - SCROLLBAR_PADDING;
-            guiGraphics.blitSprite(SCROLLER_SPRITE, scrollbarX, scrollbarY, SCROLLBAR_WIDTH, scrollbarHeight);
+
+            // 使用简单的矩形填充代替sprite渲染
+            // 绘制滚动条背景（轨道）
+            guiGraphics.fill(scrollbarX - 1, this.getY() + verticalPadding, 
+                           scrollbarX + SCROLLBAR_WIDTH + 1, this.getY() + this.getHeight() - verticalPadding, 
+                           0xFFC8C0AD); // 边框色
+            guiGraphics.fill(scrollbarX, this.getY() + verticalPadding + 1, 
+                           scrollbarX + SCROLLBAR_WIDTH, this.getY() + this.getHeight() - verticalPadding - 1, 
+                           0xFFF3EFE4); // 轨道背景色
+            
+            // 绘制滚动条滑块
+            guiGraphics.fill(scrollbarX, scrollbarY, scrollbarX + SCROLLBAR_WIDTH, scrollbarY + scrollbarHeight, 
+                           0xFF8CAE5C); // 滑块颜色（绿色）
             RenderSystem.disableBlend();
         }
     }

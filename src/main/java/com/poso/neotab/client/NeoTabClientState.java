@@ -43,6 +43,8 @@ public final class NeoTabClientState {
     private static int currentPage = 0;
     /** 当前渲染帧的总页数（由 mixin 每帧更新）。 */
     private static int totalPages  = 1;
+    /** 每页最大玩家数（由 recalculatePages 与渲染切片同源写入）。 */
+    private static int playersPerPage = 20;
 
     /** 上一帧渲染的 TAB 背景边界（含 padding），用于翻页箭头点击检测。 */
     private static int tabBoundsLeft   = -1;
@@ -61,10 +63,6 @@ public final class NeoTabClientState {
         currentConfig = config == null ? TabConfig.defaults() : config.sanitized();
     }
 
-    public static Map<UUID, String> getOnlineDurations() {
-        return onlineDurations;
-    }
-
     public static void setOnlineDurations(Map<UUID, String> durations) {
         // P2 优化：复用已有 Map，避免每次收包都 new HashMap
         onlineDurations.clear();
@@ -73,8 +71,9 @@ public final class NeoTabClientState {
         }
     }
 
+    /** 获取指定玩家的在线时长文本。未同步到时返回空串（与 Forge 端一致，不显示占位时长）。 */
     public static String getOnlineDuration(UUID playerId) {
-        return onlineDurations.getOrDefault(playerId, "1h");
+        return onlineDurations.getOrDefault(playerId, "");
     }
 
     public static void setPlayerHealths(Map<UUID, Float> healths, Map<UUID, Float> maxHealths) {
@@ -89,9 +88,9 @@ public final class NeoTabClientState {
         }
     }
 
-    /** 获取指定玩家的当前血量（半颗心 = 1.0f）。未收到数据时返回 20.0f。 */
+    /** 获取指定玩家的当前血量（半颗心 = 1.0f）。未收到数据时返回 0.0f（不画假满心）。 */
     public static float getPlayerHealth(UUID playerId) {
-        return playerHealths.getOrDefault(playerId, 20.0f);
+        return playerHealths.getOrDefault(playerId, 0.0F);
     }
 
     /** 获取指定玩家的最大血量（半颗心 = 1.0f）。未收到数据时返回 20.0f。 */
@@ -109,6 +108,9 @@ public final class NeoTabClientState {
         tabPinned   = false;
         currentPage = 0;
         totalPages  = 1;
+        playersPerPage = 20;
+        // 重置箭头命中区，避免断线/换服后残留旧 TAB 区域导致误点。
+        clearTabBounds();
     }
 
     public static boolean isTabPinned() { return tabPinned; }
@@ -134,24 +136,69 @@ public final class NeoTabClientState {
 
     public static int getCurrentPage()  { return currentPage; }
     public static int getTotalPages()   { return totalPages; }
+    public static int getPlayersPerPage() { return playersPerPage; }
 
-    public static void setCurrentPage(int page) {
-        currentPage = Math.max(0, Math.min(page, totalPages - 1));
+    /**
+     * 重新计算总页数。
+     *
+     * <p>唯一写入 playersPerPage/totalPages 的入口，由 TAB 渲染路径（Mixin）每帧调用，
+     * perPage 必须与实际切片用的值一致，否则翻页边界与 subList 越界会不匹配。</p>
+     *
+     * @param totalPlayers 总玩家数
+     * @param perPage      每页玩家数（与渲染切片同源）
+     */
+    public static void recalculatePages(int totalPlayers, int perPage) {
+        playersPerPage = Math.max(1, perPage);
+        totalPages = Math.max(1, (totalPlayers + playersPerPage - 1) / playersPerPage);
+        // 确保当前页码在有效范围内
+        if (currentPage >= totalPages) {
+            currentPage = totalPages - 1;
+        }
+        if (currentPage < 0) {
+            currentPage = 0;
+        }
     }
 
-    public static void setTotalPages(int pages) {
-        totalPages  = Math.max(1, pages);
-        currentPage = Math.max(0, Math.min(currentPage, totalPages - 1));
+    /** 翻到下一页，成功返回 true。 */
+    public static boolean nextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            return true;
+        }
+        return false;
     }
 
-    public static void nextPage() { setCurrentPage(currentPage + 1); }
-    public static void prevPage() { setCurrentPage(currentPage - 1); }
+    /** 翻到上一页，成功返回 true。 */
+    public static boolean prevPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            return true;
+        }
+        return false;
+    }
+
+    /** 跳转到指定页（0-based），成功返回 true。 */
+    public static boolean goToPage(int page) {
+        if (page >= 0 && page < totalPages) {
+            currentPage = page;
+            return true;
+        }
+        return false;
+    }
 
     public static void setTabBounds(int left, int top, int right, int bottom) {
         tabBoundsLeft   = left;
         tabBoundsTop    = top;
         tabBoundsRight  = right;
         tabBoundsBottom = bottom;
+    }
+
+    /** TAB 隐藏/无分页时失效边界，防止陈旧 bounds 被点击检测命中（幽灵翻页）。 */
+    public static void clearTabBounds() {
+        tabBoundsLeft   = -1;
+        tabBoundsTop    = -1;
+        tabBoundsRight  = -1;
+        tabBoundsBottom = -1;
     }
 
     public static int getTabBoundsLeft()   { return tabBoundsLeft; }
@@ -161,27 +208,34 @@ public final class NeoTabClientState {
 
     /**
      * 检测鼠标点击是否在翻页箭头区域内，如果是则翻页并返回 true。
-     * 箭头区域：左侧 [left, centerY±8]，右侧 [right-10, centerY±8]
+     * 命中区与 TabBorderRenderer.drawPageArrows 的绘制区共用同一组常量。
      */
     public static boolean handlePageArrowClick(double mouseX, double mouseY) {
         if (tabBoundsLeft == -1 || totalPages <= 1) return false;
-        int arrowW = 10;
-        int arrowH = 16;
+
+        // 与 TabBorderRenderer.drawPageArrows 共用同一组常量，保证命中区与绘制区对齐
+        final int arrowW = com.poso.neotab.client.tab.TabBorderRenderer.PAGE_ARROW_W;
+        final int arrowH = com.poso.neotab.client.tab.TabBorderRenderer.PAGE_ARROW_H;
+        final int pad    = com.poso.neotab.client.tab.TabBorderRenderer.TAB_CONTENT_PADDING;
+        // 命中区在绘制区基础上外扩 2px，方便点击
+        final int slack  = 2;
         int centerY = (tabBoundsTop + tabBoundsBottom) / 2;
         int arrowY  = centerY - arrowH / 2;
 
-        // 左箭头
+        // 左箭头（上一页）：绘制于 left + TAB_CONTENT_PADDING
         if (currentPage > 0) {
-            int ax = tabBoundsLeft + 3;
-            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+            int ax = tabBoundsLeft + pad;
+            if (mouseX >= ax - slack && mouseX < ax + arrowW + slack
+                    && mouseY >= arrowY - slack && mouseY < arrowY + arrowH + slack) {
                 prevPage();
                 return true;
             }
         }
-        // 右箭头
+        // 右箭头（下一页）：绘制于 right - TAB_CONTENT_PADDING - PAGE_ARROW_W
         if (currentPage < totalPages - 1) {
-            int ax = tabBoundsRight - 3 - arrowW;
-            if (mouseX >= ax && mouseX < ax + arrowW && mouseY >= arrowY && mouseY < arrowY + arrowH) {
+            int ax = tabBoundsRight - pad - arrowW;
+            if (mouseX >= ax - slack && mouseX < ax + arrowW + slack
+                    && mouseY >= arrowY - slack && mouseY < arrowY + arrowH + slack) {
                 nextPage();
                 return true;
             }

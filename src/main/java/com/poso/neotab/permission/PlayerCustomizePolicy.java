@@ -57,6 +57,7 @@ public record PlayerCustomizePolicy(
 
     /**
      * 全部开放，管理员（OP ≥ 2）使用此值。
+     * refreshInterval 不开放给玩家（与 Forge 端一致，仅管理员配置界面可改）。
      */
     public static PlayerCustomizePolicy unlocked() {
         return new PlayerCustomizePolicy(
@@ -64,8 +65,26 @@ public record PlayerCustomizePolicy(
             true, true, true, true, true,
             true, true, true, true,
             true,
-            true
+            false
         );
+    }
+
+    /** 是否存在任何一项被开放的自定义权限（用于总开关判断）。 */
+    public boolean allowsAnyCustomization() {
+        return allowTopTitleToggle
+            || allowTopTitleEdit
+            || allowTopContentToggle
+            || allowTopContentEdit
+            || allowPingDisplayToggle
+            || allowDurationToggle
+            || allowTitleToggle
+            || allowHealthDisplayToggle
+            || allowHealthModeChange
+            || allowFooterCustomEdit
+            || allowFooterTpsToggle
+            || allowFooterMsptToggle
+            || allowFooterOnlineToggle
+            || allowThemeChange;
     }
 
     /**

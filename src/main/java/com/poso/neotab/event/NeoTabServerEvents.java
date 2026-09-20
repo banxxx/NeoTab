@@ -86,6 +86,17 @@ public final class NeoTabServerEvents {
         }
     }
 
+    /** OP 等级跨越 2 级线时重同步该玩家的策略与有效配置（op/deop 即时生效）。 */
+    @SubscribeEvent
+    public static void onPermissionsChanged(net.neoforged.neoforge.event.entity.player.PermissionsChangedEvent event) {
+        if (event.getOldLevel() >= 2 == event.getNewLevel() >= 2) {
+            return; // 未跨越 2 级线，生效策略不可能变化
+        }
+        if (event.getEntity() instanceof ServerPlayer player) {
+            NeoTab.service().onPlayerPermissionsChanged(player);
+        }
+    }
+
     /**
      * 自定义 TAB 玩家名显示。
      *
@@ -106,10 +117,8 @@ public final class NeoTabServerEvents {
             // 获取称号文本（支持富文本标签）
             String titleText = getTitleForPlayer(player);
             if (titleText != null && !titleText.isEmpty()) {
-                // P1 优化：用原始 titleText 作为 cacheKey，保证缓存命中率
-                // 称号通常是静态富文本（如 <color #FF0000>[管理员]</color>），
-                // 不含动态占位符，因此 rawText 本身就是最佳缓存键
-                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText, titleText);
+                // 缓存键即解析后的实际文本（RichTextEngine 内部 LRU），无需额外指定。
+                Component titleComponent = com.poso.neotab.text.RichTextEngine.parseSingleLine(titleText);
                 // 称号 + 空格 + 玩家名称，保持玩家名称原有颜色
                 playerName = Component.empty().append(titleComponent).append(" ").append(playerName);
             }

@@ -75,9 +75,10 @@ public class ColorPickerWidget extends AbstractWidget {
     // 防止循环更新的标志
     private boolean updatingFromMouse = false;
     
-    // 纹理缓存
+    // 纹理缓存（每个实例注册一次，更新时原地写像素并 upload，不再重复注册）
     private DynamicTexture svPanelTexture;
     private ResourceLocation svPanelLocation;
+    private NativeImage svPanelImage;
     private float cachedHue = -1.0f;  // 缓存的色相值
     
     // 色相条纹理缓存（永久，只初始化一次）
@@ -91,6 +92,13 @@ public class ColorPickerWidget extends AbstractWidget {
     // Alpha条纹理缓存
     private DynamicTexture alphaBarTexture;
     private ResourceLocation alphaBarLocation;
+    private NativeImage alphaBarImage;
+    private final int alphaBarHeight;
+
+    // 多个选择器实例（重建时）不能共用同名注册条目，用实例序号隔离
+    private static final java.util.concurrent.atomic.AtomicInteger TEXTURE_INSTANCE_ID =
+        new java.util.concurrent.atomic.AtomicInteger();
+    private final int textureInstanceId = TEXTURE_INSTANCE_ID.incrementAndGet();
     
     // 拖拽时的优化
     private long lastTextureUpdateTime = 0;
@@ -135,6 +143,7 @@ public class ColorPickerWidget extends AbstractWidget {
         // 设置实际的宽高
         this.width = TOTAL_WIDTH;
         this.height = TOTAL_HEIGHT;
+        this.alphaBarHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP;
         
         // 从 ARGB 转换为 HSV
         rgbToHsv(initialColor);
@@ -205,7 +214,7 @@ public class ColorPickerWidget extends AbstractWidget {
         
         hueBarTexture = new DynamicTexture(image);
         hueBarLocation = Minecraft.getInstance().getTextureManager()
-            .register("neotab_color_picker_hue", hueBarTexture);
+            .register("neotab_color_picker_hue_" + textureInstanceId, hueBarTexture);
     }
     
     /**
@@ -231,68 +240,55 @@ public class ColorPickerWidget extends AbstractWidget {
         
         checkerboardTexture = new DynamicTexture(image);
         checkerboardLocation = Minecraft.getInstance().getTextureManager()
-            .register("neotab_color_picker_checker", checkerboardTexture);
+            .register("neotab_color_picker_checker_" + textureInstanceId, checkerboardTexture);
     }
     
     /**
      * 初始化透明度条纹理（垂直）
      */
     private void initAlphaBarTexture() {
-        int barHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP; // 透明度条高度 = 色相条高度 - 预览框高度 - 间距
-        NativeImage image = new NativeImage(1, barHeight, false);
-        
-        // 创建从不透明到透明的线性渐变（从上到下：255→0）
-        for (int y = 0; y < barHeight; y++) {
-            float ratio = (float) y / (barHeight - 1);  // 线性，0.0→1.0
-            int alpha = Math.round((1.0f - ratio) * 255);  // 255→0
-            int rgb = currentColor & 0x00FFFFFF;
-            int color = (alpha << 24) | rgb;
-            
-            int a = (color >> 24) & 0xFF;
-            int r = (color >> 16) & 0xFF;
-            int g = (color >> 8) & 0xFF;
-            int b = color & 0xFF;
-            image.setPixelRGBA(0, y, (a << 24) | (b << 16) | (g << 8) | r);
-        }
-        
-        alphaBarTexture = new DynamicTexture(image);
-        alphaBarLocation = Minecraft.getInstance().getTextureManager()
-            .register("neotab_color_picker_alpha", alphaBarTexture);
+        updateAlphaBarTexture();
     }
     
     /**
-     * 更新透明度条纹理（当颜色改变时调用）
+     * 更新透明度条纹理（当颜色改变时调用）。
+     *
+     * <p>只创建并注册一次，之后原地写像素 + upload，避免每次拖动都重新注册动态纹理。</p>
      */
     private void updateAlphaBarTexture() {
-        if (alphaBarTexture != null) {
-            alphaBarTexture.close();
+        if (alphaBarImage == null) {
+            alphaBarImage = new NativeImage(1, alphaBarHeight, false);
         }
-        
-        int barHeight = SV_PANEL_SIZE - PREVIEW_SIZE - COMPONENT_GAP;
-        NativeImage image = new NativeImage(1, barHeight, false);
         
         // 使用当前颜色的RGB值（不含alpha）
         int rgb = currentColor & 0x00FFFFFF;
         
-        for (int y = 0; y < barHeight; y++) {
-            float ratio = (float) y / (barHeight - 1);  // 线性，0.0→1.0
-            int alpha = Math.round((1.0f - ratio) * 255);  // 255→0
+        for (int y = 0; y < alphaBarHeight; y++) {
+            float ratio = (float) y / (alphaBarHeight - 1);  // 线性，0.0→1.0
+            int alpha = Math.round((1.0f - ratio) * 255);    // 255→0
             int color = (alpha << 24) | rgb;
             
             int a = (color >> 24) & 0xFF;
             int r = (color >> 16) & 0xFF;
             int g = (color >> 8) & 0xFF;
             int b = color & 0xFF;
-            image.setPixelRGBA(0, y, (a << 24) | (b << 16) | (g << 8) | r);
+            alphaBarImage.setPixelRGBA(0, y, (a << 24) | (b << 16) | (g << 8) | r);
         }
         
-        alphaBarTexture = new DynamicTexture(image);
-        alphaBarLocation = Minecraft.getInstance().getTextureManager()
-            .register("neotab_color_picker_alpha", alphaBarTexture);
+        if (alphaBarTexture == null) {
+            alphaBarTexture = new DynamicTexture(alphaBarImage);
+            alphaBarLocation = Minecraft.getInstance().getTextureManager()
+                .register("neotab_color_picker_alpha_" + textureInstanceId, alphaBarTexture);
+        } else {
+            // DynamicTexture 构造时已持有 alphaBarImage（同一引用），原地写像素后 upload() 即可
+            alphaBarTexture.upload();
+        }
     }
     
     /**
-     * 更新 SV 面板纹理（只在色相改变时调用）
+     * 更新 SV 面板纹理（只在色相改变时调用）。
+     *
+     * <p>只创建并注册一次，之后原地写像素 + upload。</p>
      */
     private void updateSVPanelTexture() {
         // 如果色相没有改变，不需要重新生成纹理
@@ -302,13 +298,9 @@ public class ColorPickerWidget extends AbstractWidget {
         
         cachedHue = hue;
         
-        // 释放旧纹理
-        if (svPanelTexture != null) {
-            svPanelTexture.close();
+        if (svPanelImage == null) {
+            svPanelImage = new NativeImage(SV_PANEL_SIZE, SV_PANEL_SIZE, false);
         }
-        
-        // 创建新纹理
-        NativeImage image = new NativeImage(SV_PANEL_SIZE, SV_PANEL_SIZE, false);
         
         for (int y = 0; y < SV_PANEL_SIZE; y++) {
             for (int x = 0; x < SV_PANEL_SIZE; x++) {
@@ -320,34 +312,56 @@ public class ColorPickerWidget extends AbstractWidget {
                 int r = (color >> 16) & 0xFF;
                 int g = (color >> 8) & 0xFF;
                 int b = color & 0xFF;
-                image.setPixelRGBA(x, y, (a << 24) | (b << 16) | (g << 8) | r);
+                svPanelImage.setPixelRGBA(x, y, (a << 24) | (b << 16) | (g << 8) | r);
             }
         }
         
-        svPanelTexture = new DynamicTexture(image);
-        svPanelLocation = Minecraft.getInstance().getTextureManager()
-            .register("neotab_color_picker_sv", svPanelTexture);
+        if (svPanelTexture == null) {
+            svPanelTexture = new DynamicTexture(svPanelImage);
+            svPanelLocation = Minecraft.getInstance().getTextureManager()
+                .register("neotab_color_picker_sv_" + textureInstanceId, svPanelTexture);
+        } else {
+            // 构造时 DynamicTexture 已持有 svPanelImage 引用，原地写像素后 upload() 即可。
+            // 不可调用 setPixels(同一实例)：其实现会 close 旧引用等于关闭自身。
+            svPanelTexture.upload();
+        }
     }
     
     /**
-     * 释放纹理资源
+     * 释放纹理资源并注销注册条目。
+     *
+     * <p>屏幕重建（resize / rebuild）会创建新的选择器实例，旧实例必须走这里，
+     * 否则纹理注册表条目与 GPU 纹理会一直累积。</p>
      */
     public void releaseTexture() {
-        if (svPanelTexture != null) {
-            svPanelTexture.close();
-            svPanelTexture = null;
+        var textureManager = Minecraft.getInstance().getTextureManager();
+        releaseTextureEntry(textureManager, svPanelTexture, svPanelLocation, svPanelImage);
+        svPanelTexture = null;
+        svPanelLocation = null;
+        svPanelImage = null;
+        releaseTextureEntry(textureManager, alphaBarTexture, alphaBarLocation, alphaBarImage);
+        alphaBarTexture = null;
+        alphaBarLocation = null;
+        alphaBarImage = null;
+        releaseTextureEntry(textureManager, hueBarTexture, hueBarLocation, null);
+        hueBarTexture = null;
+        hueBarLocation = null;
+        releaseTextureEntry(textureManager, checkerboardTexture, checkerboardLocation, null);
+        checkerboardTexture = null;
+        checkerboardLocation = null;
+    }
+    
+    private static void releaseTextureEntry(net.minecraft.client.renderer.texture.TextureManager manager,
+                                            DynamicTexture texture, ResourceLocation location,
+                                            NativeImage image) {
+        if (location != null) {
+            manager.release(location);
         }
-        if (hueBarTexture != null) {
-            hueBarTexture.close();
-            hueBarTexture = null;
+        if (texture != null) {
+            texture.close();
         }
-        if (checkerboardTexture != null) {
-            checkerboardTexture.close();
-            checkerboardTexture = null;
-        }
-        if (alphaBarTexture != null) {
-            alphaBarTexture.close();
-            alphaBarTexture = null;
+        if (image != null) {
+            image.close();
         }
     }
     
@@ -600,8 +614,8 @@ public class ColorPickerWidget extends AbstractWidget {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return false;
         
-        // 检查组件是否可见
-        if (!this.visible) return false;
+        // 检查组件是否可见且启用（策略禁用时 active=false，屏幕可能直接调用本方法，需自行拦截）
+        if (!this.visible || !this.active) return false;
         
         // 检查是否点击了十六进制输入框
         if (hasInternalHexInput && hexInput.mouseClicked(mouseX, mouseY, button)) {

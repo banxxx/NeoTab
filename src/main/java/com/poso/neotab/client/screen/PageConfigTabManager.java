@@ -193,9 +193,7 @@ public class PageConfigTabManager {
                                     NeoTabConfigScreen.ScreenMode screenMode,
                                     PlayerCustomizePolicy policy) {
         if (screenMode == NeoTabConfigScreen.ScreenMode.ADMIN) return;
-        if (!allowed) {
-            widget.active = false;
-        }
+        widget.active = allowed;
     }
 
     /**
@@ -268,7 +266,9 @@ public class PageConfigTabManager {
         int cardH_withSub_inputH = CARD_PADDING + Math.max(INPUT_HEIGHT, titleH + 2 + subtitleH) + CARD_PADDING;
         int healthModeX = layout.right() - 6 - healthModeButtonW;
         p(healthDisplayMode, healthModeX, layout.toScreenY(layout.healthModeRowY() + (cardH_withSub_inputH - INPUT_HEIGHT) / 2));
-        healthDisplayMode.setWidth(healthModeButtonW);
+        if (healthDisplayMode != null) {
+            healthDisplayMode.setWidth(healthModeButtonW);
+        }
         if (layoutEnabledToggle != null) p(layoutEnabledToggle, layout.toggleX(), layout.toScreenY(layout.layoutEnabledRowY()  + (cardH_withSub - TOGGLE_HEIGHT) / 2));
         if (layoutColumnsButton != null) {
             layoutColumnsButton.setWidth(60);
@@ -280,6 +280,11 @@ public class PageConfigTabManager {
         }
     }
 
-    private void p(net.minecraft.client.gui.components.AbstractWidget w, int x, int y) { w.setX(x); w.setY(y); }
+    private void p(net.minecraft.client.gui.components.AbstractWidget w, int x, int y) {
+        if (w != null) {
+            w.setX(x);
+            w.setY(y);
+        }
+    }
 
 }

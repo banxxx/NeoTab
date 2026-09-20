@@ -45,9 +45,10 @@ public abstract class GuiMixin {
         Objective objective = scoreboard.getDisplayObjective(DisplaySlot.LIST);
 
         boolean forcedVisibleByNeoTab = neotab$hasNeoTabContent();
-        
+        boolean tabKeyDown = this.minecraft.options.keyPlayerList.isDown();
+
         // 检测 Tab+右键 切换固定状态
-        if (this.minecraft.options.keyPlayerList.isDown() && this.minecraft.options.keyUse.isDown()) {
+        if (tabKeyDown && this.minecraft.options.keyUse.isDown()) {
             // 右键刚按下时切换固定状态（防止连续触发）
             if (!neotab$wasRightClickDown) {
                 boolean pinned = com.poso.neotab.client.NeoTabClientState.toggleTabPinned();
@@ -64,9 +65,13 @@ public abstract class GuiMixin {
             neotab$wasRightClickDown = false;
         }
 
-        // 检测左键点击翻页箭头
+        // TAB 可见状态先于点击检测计算：隐藏时禁止"隔空翻页"
+        boolean tabPinned = com.poso.neotab.client.NeoTabClientState.isTabPinned();
+        boolean shouldShow = tabKeyDown || tabPinned;
+
+        // 检测左键点击翻页箭头（仅 TAB 正在显示时）
         boolean leftDown = this.minecraft.options.keyAttack.isDown();
-        if (leftDown && !neotab$wasLeftClickDown) {
+        if (leftDown && !neotab$wasLeftClickDown && shouldShow) {
             int bl = com.poso.neotab.client.NeoTabClientState.getTabBoundsLeft();
             if (bl != -1 && com.poso.neotab.client.NeoTabClientState.getTotalPages() > 1) {
                 double mx = this.minecraft.mouseHandler.xpos()
@@ -79,17 +84,18 @@ public abstract class GuiMixin {
             }
         }
         neotab$wasLeftClickDown = leftDown;
-        
-        boolean shouldHide = !this.minecraft.options.keyPlayerList.isDown()
-            && !com.poso.neotab.client.NeoTabClientState.isTabPinned()
+
+        boolean shouldHide = !shouldShow
             || this.minecraft.isLocalServer()
             && this.minecraft.player.connection.getListedOnlinePlayers().size() <= 1
             && objective == null
             && !forcedVisibleByNeoTab
-            && !com.poso.neotab.client.NeoTabClientState.isTabPinned();
+            && !tabPinned;
 
         if (shouldHide) {
             this.tabList.setVisible(false);
+            // 隐藏时失效箭头命中区，防止陈旧 bounds 被点击检测命中（幽灵翻页）
+            com.poso.neotab.client.NeoTabClientState.clearTabBounds();
         } else {
             this.tabList.setVisible(true);
             this.tabList.render(guiGraphics, guiGraphics.guiWidth(), scoreboard, objective);

@@ -155,20 +155,20 @@ public final class NeoTabService {
         // 服务端二次校验：只保留策略允许的字段，其余字段强制为 null（跟随服务器）
         PlayerTabConfig sanitized = new PlayerTabConfig(
             player.getUUID(),
-            policy.allowTopTitleToggle()      ? incoming.topTitleEnabled()      : null,
-            policy.allowTopTitleEdit()        ? incoming.topTitleText()         : null,
-            policy.allowTopContentToggle()    ? incoming.topContentEnabled()    : null,
-            policy.allowTopContentEdit()      ? incoming.topContentText()       : null,
-            policy.allowPingDisplayToggle()   ? incoming.betterPingEnabled()    : null,
+            policy.allowTopTitleToggle()      ? incoming.topTitleEnabled()       : null,
+            policy.allowTopTitleEdit()        ? TabConfig.sanitizePlayerTopTitle(incoming.topTitleText()) : null,
+            policy.allowTopContentToggle()    ? incoming.topContentEnabled()     : null,
+            policy.allowTopContentEdit()      ? TabConfig.sanitizePlayerTopContent(incoming.topContentText()) : null,
+            policy.allowPingDisplayToggle()   ? incoming.betterPingEnabled()     : null,
             policy.allowDurationToggle()      ? incoming.onlineDurationEnabled() : null,
-            policy.allowTitleToggle()         ? incoming.titleEnabled()         : null,
-            policy.allowHealthDisplayToggle() ? incoming.healthDisplayEnabled() : null,
-            policy.allowHealthModeChange()    ? incoming.healthDisplayMode()    : null,
-            policy.allowFooterCustomEdit()    ? incoming.footerCustomText()     : null,
-            policy.allowFooterTpsToggle()     ? incoming.footerTpsEnabled()     : null,
-            policy.allowFooterMsptToggle()    ? incoming.footerMsptEnabled()    : null,
-            policy.allowFooterOnlineToggle()  ? incoming.footerOnlineEnabled()  : null,
-            policy.allowThemeChange()         ? incoming.tabTheme()             : null
+            policy.allowTitleToggle()         ? incoming.titleEnabled()          : null,
+            policy.allowHealthDisplayToggle() ? incoming.healthDisplayEnabled()  : null,
+            policy.allowHealthModeChange()    ? incoming.healthDisplayMode()     : null,
+            policy.allowFooterCustomEdit()    ? TabConfig.sanitizePlayerFooterCustom(incoming.footerCustomText()) : null,
+            policy.allowFooterTpsToggle()     ? incoming.footerTpsEnabled()      : null,
+            policy.allowFooterMsptToggle()    ? incoming.footerMsptEnabled()     : null,
+            policy.allowFooterOnlineToggle()  ? incoming.footerOnlineEnabled()   : null,
+            policy.allowThemeChange()         ? incoming.tabTheme()              : null
         );
 
         // 更新内存缓存
@@ -260,16 +260,28 @@ public final class NeoTabService {
         refreshAllNames(player.server);
 
         // 如果启用了在线时长显示，同步在线时长数据
-        if (config.onlineDurationEnabled()) {
+        if (anyDurationSyncNeeded()) {
             syncOnlineDurationsTo(player);
             syncOnlineDurationsToAllOptimized(player.server);
         }
 
         // 如果启用了血量显示，同步血量数据
-        if (config.healthDisplayEnabled()) {
+        if (anyHealthSyncNeeded()) {
             syncPlayerHealthsTo(player);
             syncPlayerHealthsToAllOptimized(player.server);
         }
+    }
+
+    /**
+     * OP 等级跨越 2 级（op/deop）时，立即重算并下发该玩家的策略与有效配置。
+     *
+     * <p>resolvePolicy 对 OP≥2 短路返回完全开放，等级变化若不重同步，
+     * 玩家会继续沿用旧策略直到重登或下次配置保存。</p>
+     */
+    public void onPlayerPermissionsChanged(ServerPlayer player) {
+        syncEffectiveConfigTo(player);
+        syncPolicyTo(player);
+        applyPlayer(player);
     }
 
     /**
@@ -310,7 +322,7 @@ public final class NeoTabService {
         refreshAllNames(server);
 
         // 在线时长每秒同步一次即可（不需要每个刷新间隔都同步）
-        if (config.onlineDurationEnabled()) {
+        if (anyDurationSyncNeeded()) {
             onlineDurationSyncCounter++;
             if (onlineDurationSyncCounter >= ONLINE_DURATION_SYNC_INTERVAL) {
                 onlineDurationSyncCounter = 0;
@@ -321,7 +333,7 @@ public final class NeoTabService {
         }
 
         // 血量需要实时同步（每个刷新间隔）
-        if (config.healthDisplayEnabled()) {
+        if (anyHealthSyncNeeded()) {
             syncPlayerHealthsToAllOptimized(server);
         }
     }
@@ -337,6 +349,13 @@ public final class NeoTabService {
             actor.sendSystemMessage(Component.translatable("message.neotab.no_permission"));
             return;
         }
+
+        com.poso.neotab.NeoTab.LOGGER.debug("NeoTabService.updateConfig from player {}: ping={}, duration={}, health={}, mode={}",
+            actor.getName().getString(),
+            requestedConfig.betterPingEnabled(),
+            requestedConfig.onlineDurationEnabled(),
+            requestedConfig.healthDisplayEnabled(),
+            requestedConfig.healthDisplayMode());
 
         this.config = requestedConfig.sanitized();
         repository.save(actor.server, this.config);
@@ -354,11 +373,11 @@ public final class NeoTabService {
         applyAll(actor.server);
         refreshAllNames(actor.server);
 
-        if (config.onlineDurationEnabled()) {
+        if (anyDurationSyncNeeded()) {
             syncOnlineDurationsToAll(actor.server);
         }
 
-        if (config.healthDisplayEnabled()) {
+        if (anyHealthSyncNeeded()) {
             syncPlayerHealthsToAll(actor.server);
         }
 
@@ -467,6 +486,32 @@ public final class NeoTabService {
     @Deprecated
     private void syncConfigToAll(MinecraftServer server) {
         PacketDistributor.sendToAllPlayers(new SyncTabConfigPayload(this.config));
+    }
+
+    // ── 同步门槛 ──────────────────────────────────────────────────────────────
+
+    /**
+     * 是否需要同步在线时长数据。
+     *
+     * <p>全局开启，或任一玩家的个人覆盖开启了策略允许的时长显示，
+     * 都需要下发——否则"全局关闭 + 策略开放个人开关"的组合下玩家开关无效。
+     * 客户端会按每位查看者的有效配置自行决定渲染，多发的数据被忽略，无副作用。</p>
+     */
+    private boolean anyDurationSyncNeeded() {
+        if (config.onlineDurationEnabled()) return true;
+        for (PlayerTabConfig personal : playerConfigs.values()) {
+            if (Boolean.TRUE.equals(personal.onlineDurationEnabled())) return true;
+        }
+        return false;
+    }
+
+    /** 是否需要同步血量数据，理由同 {@link #anyDurationSyncNeeded()}。 */
+    private boolean anyHealthSyncNeeded() {
+        if (config.healthDisplayEnabled()) return true;
+        for (PlayerTabConfig personal : playerConfigs.values()) {
+            if (Boolean.TRUE.equals(personal.healthDisplayEnabled())) return true;
+        }
+        return false;
     }
 
     // ── 在线时长同步 ──────────────────────────────────────────────────────────

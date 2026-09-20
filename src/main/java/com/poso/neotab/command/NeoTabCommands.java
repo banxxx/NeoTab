@@ -42,8 +42,9 @@ public final class NeoTabCommands {
                 .executes(context -> reload(context.getSource())))
             // 玩家自定义命令
             .then(Commands.literal("customize")
-                .requires(src -> src.getEntity() instanceof ServerPlayer p
-                    && NeoTabPermissions.canCustomize(p))
+                // 策略实时变化但命令树只在登录/权限等级变化时重发，
+                // 因此 requires 只判断玩家实体，真正的策略校验放到执行时，避免玩家必须重登。
+                .requires(src -> src.getEntity() instanceof ServerPlayer)
                 .executes(context -> openCustomizeScreen(context.getSource())))
         );
     }
@@ -89,10 +90,16 @@ public final class NeoTabCommands {
             return 0;
         }
 
+        TabConfig serverConfig = NeoTab.service().getConfig();
+
+        // 执行时实时校验策略，策略变化后无需等待命令树重发即可生效
+        if (!NeoTabPermissions.canCustomize(player, serverConfig)) {
+            source.sendFailure(Component.translatable("message.neotab.no_permission"));
+            return 0;
+        }
+
         // 计算该玩家的有效策略
-        PlayerCustomizePolicy policy = NeoTabPermissions.resolvePolicy(
-            player, NeoTab.service().getConfig()
-        );
+        PlayerCustomizePolicy policy = NeoTabPermissions.resolvePolicy(player, serverConfig);
 
         // 获取该玩家的当前个人配置
         PlayerTabConfig personalConfig = NeoTab.service().getPlayerConfig(player.getUUID());

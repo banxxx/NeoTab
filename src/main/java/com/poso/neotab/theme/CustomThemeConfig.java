@@ -24,6 +24,7 @@ public class CustomThemeConfig {
     
     /** 边框颜色数组（最多7种颜色，ARGB格式） */
     private List<Integer> borderColors;
+    private transient int[] cachedBorderColors;
     
     /** 外层边框颜色 (ARGB)，默认深色 */
     private int borderOuterColor;
@@ -65,9 +66,22 @@ public class CustomThemeConfig {
     public List<Integer> getBorderColors() {
         return new ArrayList<>(borderColors);
     }
+
+    public int[] getBorderColorsArray() {
+        if (cachedBorderColors == null) {
+            int[] colors = new int[borderColors.size()];
+            for (int i = 0; i < borderColors.size(); i++) {
+                colors[i] = borderColors.get(i);
+            }
+            cachedBorderColors = colors;
+        }
+        // 返回副本，避免调用方改写内部缓存数组
+        return cachedBorderColors.clone();
+    }
     
     public void setBorderColors(List<Integer> borderColors) {
         this.borderColors = new ArrayList<>(borderColors);
+        this.cachedBorderColors = null;
     }
     
     public int getBorderOuterColor() {
@@ -205,7 +219,7 @@ public class CustomThemeConfig {
             return fromJson(json);
         } catch (com.google.gson.JsonSyntaxException e) {
             // JSON格式错误，返回默认配置
-            System.err.println("Failed to parse custom theme config: " + e.getMessage());
+            com.poso.neotab.NeoTab.LOGGER.warn("Failed to parse custom theme config, using defaults: {}", e.getMessage());
             return defaults();
         } catch (Exception e) {
             // 其他错误，抛出IOException

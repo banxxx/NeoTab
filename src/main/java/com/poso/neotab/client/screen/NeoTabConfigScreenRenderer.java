@@ -212,18 +212,10 @@ public final class NeoTabConfigScreenRenderer {
         int bx = cb.getX(), by = cb.getY(), bw = cb.getWidth(), bh = cb.getHeight();
 
         Component msg = cb.getMessage();
-        String msgStr = msg.getString();
-        
-        // 检查是否是ON/OFF开关（通过检测按钮宽度，ON/OFF按钮固定宽度26）
-        boolean isToggleButton = bw == 26;  // TOGGLE_WIDTH = 26
-        
-        if (isToggleButton) {
-            // 判断是ON还是OFF状态
-            // Minecraft的onOffBuilder使用CommonComponents.OPTION_ON/OFF
-            // 在不同语言下文本不同，但我们可以通过检查消息键来判断
-            boolean isOn = msg.equals(net.minecraft.network.chat.CommonComponents.OPTION_ON) ||
-                          msgStr.equalsIgnoreCase("ON") || msgStr.equals("开") || msgStr.contains("✓");
-            
+
+        // 开关状态直接读 CycleButton 的泛型值：Boolean 类型即 ON/OFF 开关，
+        // 避免按按钮文本猜测状态（不同语言/文本变更会失效）
+        if (cb.getValue() instanceof Boolean isOn) {
             AEStyleRenderer.drawSliderToggle(g, bx, by, bw, bh, isOn, hovered);
             return;
         }

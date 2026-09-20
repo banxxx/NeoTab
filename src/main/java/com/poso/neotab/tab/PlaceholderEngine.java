@@ -53,13 +53,13 @@ public final class PlaceholderEngine {
     /** 渲染多行文本，主要用于 TAB 头部/底部。 */
     public static Component renderMultiline(String template, PlaceholderContext context) {
         String resolved = replacePlaceholders(template, context);
-        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseMultiline(template, resolved);
+        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseMultiline(resolved);
     }
 
     /** 渲染单行文本，主要用于玩家名，顺便把换行压平。 */
     public static Component renderSingleLine(String template, PlaceholderContext context) {
         String resolved = replacePlaceholders(template, context);
-        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseSingleLine(template, resolved);
+        return resolved.isBlank() ? Component.empty() : RichTextEngine.parseSingleLine(resolved);
     }
 
     /**

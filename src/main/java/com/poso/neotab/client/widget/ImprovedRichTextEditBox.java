@@ -62,21 +62,13 @@ public class ImprovedRichTextEditBox extends EditBox {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!this.canConsumeInput()) {
-            return false;
+        // 后校验：输入前用"当前值+新字符"预估会在替换选区时误拦（净长度变短）；
+        // 改为输入成功后按可见长度截断，与多行输入框的 enforceVisibleLimit 同一策略
+        boolean handled = super.charTyped(codePoint, modifiers);
+        if (handled && RichTextEngine.visibleLength(this.getValue()) > maxVisibleLength) {
+            setValue(this.getValue()); // setValue 覆写内部已做 trimToVisibleLength
         }
-
-        // 检查输入后是否会超过可见长度限制
-        String currentValue = this.getValue();
-        String newValue = new StringBuilder(currentValue)
-            .insert(this.getCursorPosition(), codePoint)
-            .toString();
-
-        if (RichTextEngine.visibleLength(newValue) > maxVisibleLength) {
-            return false;
-        }
-
-        return super.charTyped(codePoint, modifiers);
+        return handled;
     }
 
     @Override

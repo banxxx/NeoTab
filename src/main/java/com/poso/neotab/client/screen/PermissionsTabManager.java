@@ -30,37 +30,51 @@ public class PermissionsTabManager {
 
     // ── Permissions tab fields ────────────────────────────────────────────────
     final List<CycleButton<Boolean>> globalPolicyToggles = new ArrayList<>();
-    boolean permTargetIsPlayer = false;
     EditBox playerSearchBox;
     Button permAddButton;
     final List<String> playerSuggestions = new ArrayList<>();
     int dropdownScrollOffset = 0;
     final LinkedHashMap<UUID, String> targetPlayers = new LinkedHashMap<>();
     final List<Button> targetPlayerRemoveButtons = new ArrayList<>();
-    UUID editingPlayerUUID = null;
-    final List<CycleButton<Boolean>> personalPolicyToggles = new ArrayList<>();
     Button applyToAllButton;
     Button applyToAddedButton;
 
+    // Apply 按钮二次确认状态：首次点击武装，CONFIRM_WINDOW_MS 内再次点击才真正下发
+    private static final long APPLY_CONFIRM_WINDOW_MS = 4000L;
+    private long applyAllArmedUntil = 0L;
+    private long applyAddedArmedUntil = 0L;
+
     // 新增：覆盖个人策略勾选框
     CycleButton<Boolean> overridePersonalPolicyToggle;
+
+    /**
+     * 会话内的个人专属策略视图：初始快照 + 本界面"应用"按钮的更新。
+     * 完成保存时写回这个视图，避免用开屏快照抹掉/回退已有的个人策略。
+     */
+    Map<UUID, PlayerCustomizePolicy> playerPoliciesView = new HashMap<>();
 
     PermissionsTabManager(NeoTabConfigScreen screen) {
         this.screen = screen;
     }
 
+    Map<UUID, PlayerCustomizePolicy> getPlayerPoliciesView() {
+        return playerPoliciesView;
+    }
+
     void clear() {
         globalPolicyToggles.clear();
-        personalPolicyToggles.clear();
         playerSuggestions.clear();
         targetPlayerRemoveButtons.clear();
         applyToAllButton = null;
         applyToAddedButton = null;
         overridePersonalPolicyToggle = null;
+        applyAllArmedUntil = 0L;
+        applyAddedArmedUntil = 0L;
     }
 
     void initPermissionsWidgets(NeoTabConfigScreenLayout.Layout layout, TabConfig initialConfig) {
         PlayerCustomizePolicy global = initialConfig.globalPolicy();
+        this.playerPoliciesView = new HashMap<>(initialConfig.playerPolicies());
 
         // Player search box
         this.playerSearchBox = screen.addWidget(
@@ -148,47 +162,75 @@ public class PermissionsTabManager {
                                 (btn, v) -> { /* just toggle state */ }));
         this.overridePersonalPolicyToggle.visible = false;
 
-        // Apply to all players button
+        // Apply to all players button（二次确认，见 onApplyToAllClicked）
         this.applyToAllButton = screen.addWidget(Button.builder(
                         Component.translatable("screen.neotab.permissions.apply_to_all"),
-                        btn -> applyToAllPlayers(initialConfig))
+                        btn -> onApplyToAllClicked(initialConfig, btn))
                 .bounds(layout.left(), 0, 140, INPUT_HEIGHT)
                 .build());
         this.applyToAllButton.visible = false;
         this.applyToAllButton.active = true;
 
-        // Apply to added players button
+        // Apply to added players button（二次确认，见 onApplyToAddedClicked）
         this.applyToAddedButton = screen.addWidget(Button.builder(
                         Component.translatable("screen.neotab.permissions.apply_to_added"),
-                        btn -> applyToAddedPlayers(initialConfig))
+                        btn -> onApplyToAddedClicked(initialConfig, btn))
                 .bounds(layout.left(), 0, 140, INPUT_HEIGHT)
                 .build());
         this.applyToAddedButton.visible = false;
         this.applyToAddedButton.active = true;
     }
 
+    private void onApplyToAllClicked(TabConfig initialConfig, Button btn) {
+        long now = System.currentTimeMillis();
+        if (now < applyAllArmedUntil) {
+            applyAllArmedUntil = 0L;
+            btn.setMessage(Component.translatable("screen.neotab.permissions.apply_to_all"));
+            applyToAllPlayers(initialConfig);
+            return;
+        }
+        applyAllArmedUntil = now + APPLY_CONFIRM_WINDOW_MS;
+        btn.setMessage(Component.translatable("screen.neotab.permissions.confirm_apply"));
+    }
+
+    private void onApplyToAddedClicked(TabConfig initialConfig, Button btn) {
+        long now = System.currentTimeMillis();
+        if (now < applyAddedArmedUntil) {
+            applyAddedArmedUntil = 0L;
+            btn.setMessage(Component.translatable("screen.neotab.permissions.apply_to_added"));
+            applyToAddedPlayers(initialConfig);
+            return;
+        }
+        applyAddedArmedUntil = now + APPLY_CONFIRM_WINDOW_MS;
+        btn.setMessage(Component.translatable("screen.neotab.permissions.confirm_apply"));
+    }
+
+    /** 由 Screen.tick 驱动：确认窗口超时后恢复按钮文案。 */
+    void tickApplyArmed() {
+        long now = System.currentTimeMillis();
+        if (applyAllArmedUntil != 0L && now >= applyAllArmedUntil) {
+            applyAllArmedUntil = 0L;
+            if (applyToAllButton != null) {
+                applyToAllButton.setMessage(Component.translatable("screen.neotab.permissions.apply_to_all"));
+            }
+        }
+        if (applyAddedArmedUntil != 0L && now >= applyAddedArmedUntil) {
+            applyAddedArmedUntil = 0L;
+            if (applyToAddedButton != null) {
+                applyToAddedButton.setMessage(Component.translatable("screen.neotab.permissions.apply_to_added"));
+            }
+        }
+    }
+
     void applyToAllPlayers(TabConfig initialConfig) {
-        TabConfig config = new TabConfig(
-                initialConfig.topTitleEnabled(),
-                initialConfig.topTitleText(),
-                initialConfig.topContentEnabled(),
-                initialConfig.topContentText(),
-                initialConfig.betterPingEnabled(),
-                initialConfig.onlineDurationEnabled(),
-                initialConfig.titleEnabled(),
-                initialConfig.healthDisplayEnabled(),
-                initialConfig.healthDisplayMode(),
-                initialConfig.tabTheme(),
-                initialConfig.footerCustomText(),
-                initialConfig.footerTpsEnabled(),
-                initialConfig.footerMsptEnabled(),
-                initialConfig.footerOnlineEnabled(),
-                initialConfig.refreshIntervalTicks(),
-                buildGlobalPolicyFromToggles(),
-                // 根据勾选框决定是否清空个人策略
-                overridePersonalPolicyToggle.getValue() ? new HashMap<>() : initialConfig.playerPolicies()
-        ).sanitized();
+        PlayerCustomizePolicy policy = buildGlobalPolicyFromToggles();
+        // 勾选覆盖个人策略时同步清空视图，否则保持现状
+        Map<UUID, PlayerCustomizePolicy> policies = overridePersonalPolicyToggle.getValue()
+                ? new HashMap<>()
+                : new HashMap<>(playerPoliciesView);
+        TabConfig config = copyWithPolicy(initialConfig, policy, policies);
         PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        this.playerPoliciesView = policies;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             mc.player.sendSystemMessage(
@@ -205,31 +247,43 @@ public class PermissionsTabManager {
             }
             return;
         }
-        TabConfig config = new TabConfig(
-                initialConfig.topTitleEnabled(),
-                initialConfig.topTitleText(),
-                initialConfig.topContentEnabled(),
-                initialConfig.topContentText(),
-                initialConfig.betterPingEnabled(),
-                initialConfig.onlineDurationEnabled(),
-                initialConfig.titleEnabled(),
-                initialConfig.healthDisplayEnabled(),
-                initialConfig.healthDisplayMode(),
-                initialConfig.tabTheme(),
-                initialConfig.footerCustomText(),
-                initialConfig.footerTpsEnabled(),
-                initialConfig.footerMsptEnabled(),
-                initialConfig.footerOnlineEnabled(),
-                initialConfig.refreshIntervalTicks(),
-                initialConfig.globalPolicy(),  // 保持全局策略不变
-                buildMergedPlayerPoliciesFromToggles(initialConfig)
-        ).sanitized();
+        // 以当前开关值为模板，只写入选中的玩家，其余个人策略保持不动
+        PlayerCustomizePolicy policy = buildGlobalPolicyFromToggles();
+        Map<UUID, PlayerCustomizePolicy> policies = new HashMap<>(playerPoliciesView);
+        for (UUID uuid : targetPlayers.keySet()) {
+            policies.put(uuid, policy);
+        }
+        TabConfig config = copyWithPolicy(initialConfig, initialConfig.globalPolicy(), policies);
         PacketDistributor.sendToServer(new SaveConfigPayload(config));
+        this.playerPoliciesView = policies;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null) {
             mc.player.sendSystemMessage(
-                    Component.literal("§a已应用权限设置到 " + targetPlayers.size() + " 个玩家"));
+                    Component.translatable("message.neotab.permissions.applied_to_players", targetPlayers.size()));
         }
+    }
+
+    private static TabConfig copyWithPolicy(TabConfig base, PlayerCustomizePolicy globalPolicy,
+                                            Map<UUID, PlayerCustomizePolicy> playerPolicies) {
+        return new TabConfig(
+                base.topTitleEnabled(),
+                base.topTitleText(),
+                base.topContentEnabled(),
+                base.topContentText(),
+                base.betterPingEnabled(),
+                base.onlineDurationEnabled(),
+                base.titleEnabled(),
+                base.healthDisplayEnabled(),
+                base.healthDisplayMode(),
+                base.tabTheme(),
+                base.footerCustomText(),
+                base.footerTpsEnabled(),
+                base.footerMsptEnabled(),
+                base.footerOnlineEnabled(),
+                base.refreshIntervalTicks(),
+                globalPolicy,
+                playerPolicies
+        ).sanitized();
     }
 
     void rebuildTargetPlayerButtons(NeoTabConfigScreenLayout.Layout layout) {
@@ -240,11 +294,8 @@ public class PermissionsTabManager {
             Button removeBtn = screen.addWidget(Button.builder(
                             Component.literal("×"),
                             btn -> {
+                                // 只移出目标列表；策略开关是全局/模板状态，不应因删除目标而重置
                                 targetPlayers.remove(uuid);
-                                if (uuid.equals(editingPlayerUUID)) {
-                                    editingPlayerUUID = null;
-                                    loadPolicyToggles(screen.getInitialConfig());
-                                }
                                 rebuildTargetPlayerButtons(screen.buildLayout());
                                 screen.syncVisibility();
                                 screen.applyLayout(screen.buildLayout());
@@ -255,37 +306,6 @@ public class PermissionsTabManager {
             removeBtn.active = true;
             targetPlayerRemoveButtons.add(removeBtn);
         }
-    }
-
-    void loadPolicyToggles(TabConfig initialConfig) {
-        PlayerCustomizePolicy p;
-        if (permTargetIsPlayer && editingPlayerUUID != null) {
-            p = initialConfig.playerPolicies().getOrDefault(editingPlayerUUID,
-                    PlayerCustomizePolicy.locked());
-        } else {
-            p = initialConfig.globalPolicy();
-        }
-        boolean[] values = {
-                p.allowTopTitleToggle(),    p.allowTopTitleEdit(),
-                p.allowTopContentToggle(),  p.allowTopContentEdit(),
-                p.allowPingDisplayToggle(), p.allowDurationToggle(),
-                p.allowTitleToggle(),       p.allowHealthDisplayToggle(),
-                p.allowHealthModeChange(),  p.allowFooterCustomEdit(),
-                p.allowFooterTpsToggle(),   p.allowFooterMsptToggle(),
-                p.allowFooterOnlineToggle(), p.allowThemeChange(),
-                // p.allowRefreshIntervalChange()
-        };
-        for (int i = 0; i < Math.min(values.length, globalPolicyToggles.size()); i++) {
-            CycleButton<Boolean> toggle = globalPolicyToggles.get(i);
-            if (!toggle.getValue().equals(values[i])) toggle.onPress();
-        }
-    }
-
-    void refreshPersonalPolicyToggles(UUID uuid, TabConfig initialConfig) {
-        this.editingPlayerUUID = uuid;
-        loadPolicyToggles(initialConfig);
-        NeoTabConfigScreenLayout.Layout layout = screen.buildLayout();
-        screen.applyLayout(layout);
     }
 
     PlayerCustomizePolicy buildGlobalPolicyFromToggles() {
@@ -303,23 +323,6 @@ public class PermissionsTabManager {
                 globalPolicyToggles.get(12).getValue(), globalPolicyToggles.get(13).getValue(),
                 false
         );
-    }
-
-    Map<UUID, PlayerCustomizePolicy> buildPlayerPoliciesFromToggles() {
-        Map<UUID, PlayerCustomizePolicy> policies = new HashMap<>();
-        if (!targetPlayers.isEmpty()) {
-            PlayerCustomizePolicy policy = buildGlobalPolicyFromToggles();
-            for (UUID uuid : targetPlayers.keySet()) {
-                policies.put(uuid, policy);
-            }
-        }
-        return policies;
-    }
-
-    Map<UUID, PlayerCustomizePolicy> buildMergedPlayerPoliciesFromToggles(TabConfig initialConfig) {
-        Map<UUID, PlayerCustomizePolicy> policies = new HashMap<>(initialConfig.playerPolicies());
-        policies.putAll(buildPlayerPoliciesFromToggles());
-        return policies;
     }
 
     /** Apply layout positions to all permissions tab widgets. */

@@ -1,11 +1,21 @@
 package com.poso.neotab.client.tab;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.poso.neotab.client.NeoTabClientState;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix4f;
 
 import java.util.Collection;
 import java.util.UUID;
@@ -20,7 +30,8 @@ import java.util.UUID;
  *   <li>计算延迟文本颜色</li>
  * </ul>
  *
- * <p>所有方法均为静态，不持有任何状态，由 {@link com.poso.neotab.mixin.client.PlayerTabOverlayMixin}
+ * <p>除心形合批所需的临时矩阵引用（仅渲染线程、begin/end 成对使用）外，
+ * 所有方法均为静态，由 {@link com.poso.neotab.mixin.client.PlayerTabOverlayMixin}
  * 在需要时调用。</p>
  */
 public final class TabHealthRenderer {
@@ -133,9 +144,18 @@ public final class TabHealthRenderer {
                                     float health, float maxHealth, int healthAreaW) {
         var config = NeoTabClientState.getCurrentConfig();
 
+        // 方案C：同一行内的所有心形合并为一次顶点提交。
+        // GuiGraphics.blitSprite 底层（innerBlit，反编译确认）每调用一次就完整执行
+        // setShaderTexture + setShader + Tesselator.begin + 4顶点 + drawWithShader（独立上传+绘制），
+        // 每帧数百颗心形即数百次状态切换与绘制调用；合并后每行只剩 1 次。
+        // 顶点写入顺序、UV 取 sprite.getU0/V0 均严格复刻 innerBlit，覆盖关系与视觉效果不变。
+
         if (config.healthDisplayMode() == com.poso.neotab.config.HealthDisplayMode.COMPACT) {
             // COMPACT 模式：1颗心 + 数字
-            g.blitSprite(HEART_FULL,      startX, y, HEART_SIZE, HEART_SIZE);
+            TextureAtlasSprite full = heartSprite(HEART_FULL);
+            BufferBuilder buf = beginHeartBatch(g, full);
+            addHeartQuad(buf, full, startX, y);
+            endHeartBatch(buf);
             int numX = startX + HEART_SIZE + SECTION_GAP;
             g.drawString(font, "x" + (int) health, numX, y, 0xFFFFFF, false);
             return;
@@ -143,10 +163,13 @@ public final class TabHealthRenderer {
 
         // FULL 模式
         if (maxHealth > 20f || health > 20f) {
+            TextureAtlasSprite full = heartSprite(HEART_FULL);
+            BufferBuilder buf = beginHeartBatch(g, full);
             for (int i = 0; i < MAX_HEARTS; i++) {
                 int hx = startX + i * HEART_STEP;
-                g.blitSprite(HEART_FULL,      hx, y, HEART_SIZE, HEART_SIZE);
+                addHeartQuad(buf, full, hx, y);
             }
+            endHeartBatch(buf);
             int numX = startX + HEARTS_W + SECTION_GAP;
             g.drawString(font, "x" + (int) health, numX, y, 0xFFFFFF, false);
         } else {
@@ -154,16 +177,73 @@ public final class TabHealthRenderer {
             boolean hasHalf = (health % 2.0f) >= 1.0f;
             int total = Math.max(1, Math.min(MAX_HEARTS, fullHearts + (hasHalf ? 1 : 0)));
 
+            TextureAtlasSprite full      = heartSprite(HEART_FULL);
+            TextureAtlasSprite container = heartSprite(HEART_CONTAINER);
+            TextureAtlasSprite half      = heartSprite(HEART_HALF);
+            BufferBuilder buf = beginHeartBatch(g, full);
             for (int i = 0; i < total; i++) {
                 int hx = startX + i * HEART_STEP;
                 if (i < fullHearts) {
-                    g.blitSprite(HEART_FULL, hx, y, HEART_SIZE, HEART_SIZE);
+                    addHeartQuad(buf, full, hx, y);                   // 满心
                 } else if (hasHalf) {
-                    g.blitSprite(HEART_CONTAINER, hx, y, HEART_SIZE, HEART_SIZE);
-                    g.blitSprite(HEART_HALF, hx, y, HEART_SIZE, HEART_SIZE);
+                    addHeartQuad(buf, container, hx, y);              // 空容器
+                    addHeartQuad(buf, half, hx, y);                   // 半心
                 }
             }
+            endHeartBatch(buf);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 心形合批（1.21.1 sprite 版）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 从 gui 统一图集（textures/atlas/gui.png）取心形 sprite。
+     * 三类心形同属一个图集，因此一次纹理绑定即可覆盖整行；资源包替换自动生效。
+     */
+    private static TextureAtlasSprite heartSprite(ResourceLocation key) {
+        return Minecraft.getInstance().getGuiSprites().getSprite(key);
+    }
+
+    /**
+     * 开始一批心形绘制：复刻 GuiGraphics.blitSprite 底层 innerBlit 的状态设置
+     * （绑定 sprite 所属图集纹理、position_tex 着色器、POSITION_TEX 顶点格式，z=0）。
+     * 返回的 BufferBuilder 必须与 {@link #endHeartBatch} 成对使用。
+     */
+    private static BufferBuilder beginHeartBatch(GuiGraphics g, TextureAtlasSprite sprite) {
+        RenderSystem.setShaderTexture(0, sprite.atlasLocation());
+        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        heartPose = g.pose().last().pose();
+        return Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+    }
+
+    private static void endHeartBatch(BufferBuilder buf) {
+        heartPose = null;
+        // 与 innerBlit 相同：buildOrThrow() 生成 MeshData 后立即上传并绘制
+        BufferUploader.drawWithShader(buf.buildOrThrow());
+    }
+
+    /** begin~end 区间内暂存当前 GUI 矩阵，避免每颗心重复穿过 PoseStack 取矩阵。 */
+    private static Matrix4f heartPose;
+
+    /**
+     * 向当前批次写入一颗 HEART_SIZE×HEART_SIZE 心形四边形。
+     * 顶点顺序严格复刻 1.21.1 innerBlit 反编译结果：
+     * (x,y)→(x,y+h)→(x+w,y+h)→(x+w,y)，UV 为 sprite 的 [U0,U1]×[V0,V1]；
+     * gui 渲染开启背面剔除，绕向写反会被剔除。
+     * 注：仅复刻 Stretch（默认）缩放路径，与原版心形 sprite 的元数据一致。
+     */
+    private static void addHeartQuad(BufferBuilder buf, TextureAtlasSprite sprite, int x, int y) {
+        float u0 = sprite.getU0();
+        float u1 = sprite.getU1();
+        float v0 = sprite.getV0();
+        float v1 = sprite.getV1();
+        Matrix4f pose = heartPose;
+        buf.addVertex(pose, x,              y,              0.0F).setUv(u0, v0);
+        buf.addVertex(pose, x,              y + HEART_SIZE, 0.0F).setUv(u0, v1);
+        buf.addVertex(pose, x + HEART_SIZE, y + HEART_SIZE, 0.0F).setUv(u1, v1);
+        buf.addVertex(pose, x + HEART_SIZE, y,              0.0F).setUv(u1, v0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
