@@ -104,7 +104,7 @@ public final class TabHealthRenderer {
         for (var pi : onlinePlayers) {
             float h = NeoTabClientState.getPlayerHealth(pi.getProfile().getId());
             if (h > 20f) {
-                int digits = String.valueOf((int) h).length();
+                int digits = digits((int) h);
                 if (digits > maxDigits) maxDigits = digits;
             }
         }
@@ -135,7 +135,6 @@ public final class TabHealthRenderer {
 
         if (config.healthDisplayMode() == com.poso.neotab.config.HealthDisplayMode.COMPACT) {
             // COMPACT 模式：1颗心 + 数字
-            g.blitSprite(HEART_CONTAINER, startX, y, HEART_SIZE, HEART_SIZE);
             g.blitSprite(HEART_FULL,      startX, y, HEART_SIZE, HEART_SIZE);
             int numX = startX + HEART_SIZE + SECTION_GAP;
             g.drawString(font, "x" + (int) health, numX, y, 0xFFFFFF, false);
@@ -146,7 +145,6 @@ public final class TabHealthRenderer {
         if (maxHealth > 20f || health > 20f) {
             for (int i = 0; i < MAX_HEARTS; i++) {
                 int hx = startX + i * HEART_STEP;
-                g.blitSprite(HEART_CONTAINER, hx, y, HEART_SIZE, HEART_SIZE);
                 g.blitSprite(HEART_FULL,      hx, y, HEART_SIZE, HEART_SIZE);
             }
             int numX = startX + HEARTS_W + SECTION_GAP;
@@ -158,10 +156,10 @@ public final class TabHealthRenderer {
 
             for (int i = 0; i < total; i++) {
                 int hx = startX + i * HEART_STEP;
-                g.blitSprite(HEART_CONTAINER, hx, y, HEART_SIZE, HEART_SIZE);
                 if (i < fullHearts) {
                     g.blitSprite(HEART_FULL, hx, y, HEART_SIZE, HEART_SIZE);
                 } else if (hasHalf) {
+                    g.blitSprite(HEART_CONTAINER, hx, y, HEART_SIZE, HEART_SIZE);
                     g.blitSprite(HEART_HALF, hx, y, HEART_SIZE, HEART_SIZE);
                 }
             }
@@ -183,5 +181,14 @@ public final class TabHealthRenderer {
         else if (latency < 200) return ChatFormatting.YELLOW.getColor() != null ? ChatFormatting.YELLOW.getColor() : 0xFFFF55;
         else if (latency < 350) return ChatFormatting.GOLD.getColor()   != null ? ChatFormatting.GOLD.getColor()   : 0xFFAA00;
         else                    return ChatFormatting.RED.getColor()    != null ? ChatFormatting.RED.getColor()    : 0xFF5555;
+    }
+
+    private static int digits(int value) {
+        int v = Math.abs(value);
+        if (v < 10) return 1;
+        if (v < 100) return 2;
+        if (v < 1000) return 3;
+        if (v < 10000) return 4;
+        return 5;
     }
 }

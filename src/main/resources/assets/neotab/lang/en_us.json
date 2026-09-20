@@ -105,6 +105,7 @@
   "screen.neotab.permissions.apply_subtitle": "Click the buttons below to apply current permission configuration",
   "screen.neotab.permissions.apply_to_all": "Apply to All Players",
   "screen.neotab.permissions.apply_to_added": "Apply to Added Players",
+  "screen.neotab.permissions.override_personal": "Override personal policies",
   "screen.neotab.permissions.save_config": "Save Permission Config",
   "screen.neotab.policy.add": "Add",
   

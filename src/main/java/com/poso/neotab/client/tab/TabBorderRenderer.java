@@ -36,6 +36,14 @@ public final class TabBorderRenderer {
     /** TAB 边框与内容之间的内边距（px） */
     public static final int TAB_CONTENT_PADDING = 3;
 
+    private static final int STATIC_BORDER_SEGMENTS = 24;
+    private static final int ANIMATED_BORDER_SEGMENTS = 48;
+
+    private static int[] cachedRainbowColors = new int[0];
+    private static int cachedRainbowColorHash = 0;
+    private static int cachedRainbowColorCount = -1;
+    private static int cachedRainbowFallbackColor = 0;
+
     private TabBorderRenderer() {}
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -131,19 +139,14 @@ public final class TabBorderRenderer {
     public static void drawRainbowBorder(GuiGraphics guiGraphics, int left, int top, int right, int bottom) {
         com.poso.neotab.theme.CustomThemeConfig themeConfig = com.poso.neotab.theme.CustomThemeManager.get();
 
-        java.util.List<Integer> borderColorsList = themeConfig.getBorderColors();
-        int[] rainbowColors = borderColorsList.stream().mapToInt(Integer::intValue).toArray();
-
-        if (rainbowColors.length == 0) {
-            rainbowColors = new int[]{ themeConfig.getBackgroundColor() };
-        }
+        int[] rainbowColors = getCachedRainbowColors(themeConfig);
 
         long currentTime = System.currentTimeMillis();
         int speed = themeConfig.getAnimationSpeed();
         long cycleDuration = speed == 1 ? 10000L : speed == 3 ? 2500L : 5000L;
-        float flowOffset = themeConfig.isAnimationEnabled()
-                ? (currentTime % cycleDuration) / (float) cycleDuration : 0.0F;
-        float breathe = themeConfig.isAnimationEnabled()
+        boolean animated = themeConfig.isAnimationEnabled();
+        float flowOffset = animated ? (currentTime % cycleDuration) / (float) cycleDuration : 0.0F;
+        float breathe = animated
                 ? (float) (0.85F + 0.15F * Math.sin(currentTime / 1000.0))
                 : 1.0F;
 
@@ -153,28 +156,19 @@ public final class TabBorderRenderer {
         int outerColor = applyBreathe(themeConfig.getBorderOuterColor(), breathe);
 
         // 外层边框（上下左右各一像素）
-        for (int x = left - 1; x < right + 1; x++) {
-            guiGraphics.fill(x, top - 1,  x + 1, top,      outerColor);
-            guiGraphics.fill(x, bottom,   x + 1, bottom + 1, outerColor);
-        }
-        for (int y = top - 1; y < bottom + 1; y++) {
-            guiGraphics.fill(left - 1, y, left,    y + 1, outerColor);
-            guiGraphics.fill(right,    y, right + 1, y + 1, outerColor);
-        }
+        guiGraphics.fill(left - 1, top - 1, right + 1, top, outerColor);
+        guiGraphics.fill(left - 1, bottom, right + 1, bottom + 1, outerColor);
+        guiGraphics.fill(left - 1, top - 1, left, bottom + 1, outerColor);
+        guiGraphics.fill(right, top - 1, right + 1, bottom + 1, outerColor);
 
         // 内层彩虹边框（上下边）
-        for (int x = left; x < right; x++) {
-            int color = applyBreathe(getAnimatedRainbowColor(x - left, width, rainbowColors, flowOffset), breathe);
-            guiGraphics.fill(x, top,      x + 1, top + 1,    color);
-            guiGraphics.fill(x, bottom - 1, x + 1, bottom,   color);
-        }
+        int maxSegments = animated ? ANIMATED_BORDER_SEGMENTS : STATIC_BORDER_SEGMENTS;
+        drawHorizontalGradient(guiGraphics, left, right, top, bottom - 1, width,
+                rainbowColors, flowOffset, breathe, maxSegments);
 
         // 内层彩虹边框（左右边）
-        for (int y = top; y < bottom; y++) {
-            int color = applyBreathe(getAnimatedRainbowColor(y - top, height, rainbowColors, flowOffset), breathe);
-            guiGraphics.fill(left,      y, left + 1,  y + 1, color);
-            guiGraphics.fill(right - 1, y, right,     y + 1, color);
-        }
+        drawVerticalGradient(guiGraphics, left, right - 1, top, bottom, height,
+                rainbowColors, flowOffset, breathe, maxSegments);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -190,6 +184,62 @@ public final class TabBorderRenderer {
      * @param flowOffset 流动偏移量（0.0-1.0）
      * @return 插值后的颜色值
      */
+    private static int[] getCachedRainbowColors(com.poso.neotab.theme.CustomThemeConfig themeConfig) {
+        java.util.List<Integer> borderColors = themeConfig.getBorderColors();
+        int count = borderColors.size();
+        int fallback = themeConfig.getBackgroundColor();
+        int hash = 1;
+        for (int i = 0; i < count; i++) {
+            hash = 31 * hash + borderColors.get(i);
+        }
+
+        if (count != cachedRainbowColorCount
+                || hash != cachedRainbowColorHash
+                || fallback != cachedRainbowFallbackColor) {
+            if (count == 0) {
+                cachedRainbowColors = new int[] { fallback };
+            } else {
+                cachedRainbowColors = new int[count];
+                for (int i = 0; i < count; i++) {
+                    cachedRainbowColors[i] = borderColors.get(i);
+                }
+            }
+            cachedRainbowColorCount = count;
+            cachedRainbowColorHash = hash;
+            cachedRainbowFallbackColor = fallback;
+        }
+
+        return cachedRainbowColors;
+    }
+
+    private static void drawHorizontalGradient(GuiGraphics g, int left, int right, int topY, int bottomY,
+                                               int width, int[] colors, float flowOffset, float breathe,
+                                               int maxSegments) {
+        int segments = Math.max(1, Math.min(width, maxSegments));
+        for (int i = 0; i < segments; i++) {
+            int x1 = left + i * width / segments;
+            int x2 = left + (i + 1) * width / segments;
+            int sample = Math.min(width - 1, (i * width + width / 2) / segments);
+            int color = applyBreathe(getAnimatedRainbowColor(sample, width, colors, flowOffset), breathe);
+            g.fill(x1, topY, x2, topY + 1, color);
+            g.fill(x1, bottomY, x2, bottomY + 1, color);
+        }
+    }
+
+    private static void drawVerticalGradient(GuiGraphics g, int leftX, int rightX, int top, int bottom,
+                                             int height, int[] colors, float flowOffset, float breathe,
+                                             int maxSegments) {
+        int segments = Math.max(1, Math.min(height, maxSegments));
+        for (int i = 0; i < segments; i++) {
+            int y1 = top + i * height / segments;
+            int y2 = top + (i + 1) * height / segments;
+            int sample = Math.min(height - 1, (i * height + height / 2) / segments);
+            int color = applyBreathe(getAnimatedRainbowColor(sample, height, colors, flowOffset), breathe);
+            g.fill(leftX, y1, leftX + 1, y2, color);
+            g.fill(rightX, y1, rightX + 1, y2, color);
+        }
+    }
+
     public static int getAnimatedRainbowColor(int position, int total, int[] colors, float flowOffset) {
         float progress = ((float) position / (float) total + flowOffset) % 1.0F;
         int colorCount = colors.length;

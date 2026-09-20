@@ -5,6 +5,7 @@ import com.poso.neotab.theme.CustomThemeConfig;
 import com.poso.neotab.theme.TabThemeRegistry;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -27,15 +28,11 @@ public class ThemeTabManager {
     final List<String> themeOptionIds = new ArrayList<>();
     String selectedThemeId = "vanilla";
 
-    // Layout buttons (shared with page config tab visually, but belong to theme tab)
-    // These are actually owned by PageConfigTabManager; ThemeTabManager only references them
-    // for visibility control. See NeoTabConfigScreen.syncTabWidgetVisibility().
-
     // Custom theme config widgets
     Button customBackgroundColorButton;
-    net.minecraft.client.gui.components.EditBox customBackgroundHexInput;  // 背景颜色HEX输入框
+    EditBox customBackgroundHexInput;  // 背景颜色HEX输入�?
     Button customBorderOuterFactorButton;
-    net.minecraft.client.gui.components.EditBox customBorderOuterHexInput;  // 外层边框颜色HEX输入框
+    EditBox customBorderOuterHexInput;  // 外层边框颜色HEX输入�?
     CycleButton<Boolean> customAnimationToggle;
     Button customAnimationSpeedButton;
     Button resetToDefaultButton;
@@ -43,7 +40,7 @@ public class ThemeTabManager {
     Button resetCancelButton;
     boolean showResetConfirmation = false;
     final List<Button> customBorderColorButtons = new ArrayList<>();
-    final List<net.minecraft.client.gui.components.EditBox> customBorderHexInputs = new ArrayList<>();
+    final List<EditBox> customBorderHexInputs = new ArrayList<>();
     Button addCustomBorderColorButton;
     CustomThemeConfig customThemeConfig;
     ColorPickerWidget embeddedColorPicker;
@@ -54,6 +51,8 @@ public class ThemeTabManager {
     // 颜色选择器浮动位置（相对于屏幕坐标）
     int colorPickerFloatX = 0;
     int colorPickerFloatY = 0;
+    // 防止颜色选择器→HEX输入框→颜色选择器的循环更新
+    boolean updatingHexFromPicker = false;
 
     ThemeTabManager(NeoTabConfigScreen screen) {
         this.screen = screen;
@@ -64,7 +63,7 @@ public class ThemeTabManager {
 
         int CARD_PADDING = 10;
         int availableWidth = layout.contentWidth() - CARD_PADDING * 2;
-        int customButtonWidth = availableWidth;  // 全宽按钮（无左右分栏）
+        int customButtonWidth = availableWidth;  // 全宽按钮（无左右分栏�?
 
         // 颜色选择器宽度：适配卡片全宽
         int baseColorPickerWidth = 158;
@@ -86,15 +85,16 @@ public class ThemeTabManager {
                     })
                 .bounds(layout.left(), 0, layout.themeSelectorWidth() - THEME_LIST_INSET * 2, THEME_OPTION_HEIGHT)
                 .build());
+            optionButton.visible = false;  // 初始化时隐藏，由syncTabWidgetVisibility控制显示
             this.themeOptionButtons.add(optionButton);
             this.themeOptionIds.add(themeId);
         }
 
-        // Background color button (色块按钮，用于打开颜色选择器)
+        // Background color button (色块按钮，用于打开颜色选择�?
         this.customBackgroundColorButton = screen.addWidget(Button.builder(
                 Component.empty(),  // 空文本，因为我们会自定义渲染
                 button -> {
-                    // 点击色块打开/关闭颜色选择器
+                    // 点击色块打开/关闭颜色选择�?
                     if ("background".equals(currentSelectedColorType)) {
                         currentSelectedColorType = null;
                         currentSelectedBorderIndex = -1;
@@ -109,12 +109,13 @@ public class ThemeTabManager {
                     screen.applyLayout(newLayout);
                     screen.syncVisibility();
                 })
-            .bounds(layout.left(), 0, 24, 24)  // 色块大小：24x24（缩小）
+            .bounds(layout.left(), 0, 24, 24)  // 色块大小�?4x24（缩小）
             .build());
+        this.customBackgroundColorButton.visible = false;  // 初始化时隐藏
 
         // Background color HEX input
-        this.customBackgroundHexInput = new net.minecraft.client.gui.components.EditBox(
-            screen.font(), layout.left(), 0, 90, 24,  // 宽90px，高24px（缩小）
+        this.customBackgroundHexInput = new EditBox(
+            screen.font(), layout.left(), 0, 90, 24,  // �?0px，高24px（缩小）
             Component.empty());
         this.customBackgroundHexInput.setMaxLength(9);  // #AARRGGBB = 9字符
         this.customBackgroundHexInput.setValue(String.format("#%08X", customThemeConfig.getBackgroundColor()));
@@ -123,6 +124,7 @@ public class ThemeTabManager {
         this.customBackgroundHexInput.setCanLoseFocus(true);
         this.customBackgroundHexInput.setFocused(false);
         this.customBackgroundHexInput.setResponder(text -> {
+            if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
             try {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
@@ -150,6 +152,7 @@ public class ThemeTabManager {
                 }
             } catch (NumberFormatException ignored) {}
         });
+        this.customBackgroundHexInput.visible = false;  // 初始化时隐藏
         screen.addWidget(this.customBackgroundHexInput);
 
         // Outer border color button (色块按钮，用于打开颜色选择器)
@@ -173,9 +176,10 @@ public class ThemeTabManager {
                 })
             .bounds(layout.left(), 0, 24, 24)  // 色块大小：24x24（缩小）
             .build());
+        this.customBorderOuterFactorButton.visible = false;  // 初始化时隐藏
 
         // Outer border color HEX input
-        this.customBorderOuterHexInput = new net.minecraft.client.gui.components.EditBox(
+        this.customBorderOuterHexInput = new EditBox(
             screen.font(), layout.left(), 0, 90, 24,  // 宽90px，高24px（缩小）
             Component.empty());
         this.customBorderOuterHexInput.setMaxLength(9);  // #AARRGGBB = 9字符
@@ -185,6 +189,7 @@ public class ThemeTabManager {
         this.customBorderOuterHexInput.setCanLoseFocus(true);
         this.customBorderOuterHexInput.setFocused(false);
         this.customBorderOuterHexInput.setResponder(text -> {
+            if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
             try {
                 String clean = text.startsWith("#") ? text.substring(1) : text;
                 if (clean.isEmpty()) {
@@ -212,6 +217,7 @@ public class ThemeTabManager {
                 }
             } catch (NumberFormatException ignored) {}
         });
+        this.customBorderOuterHexInput.visible = false;  // 初始化时隐藏
         screen.addWidget(this.customBorderOuterHexInput);
 
         // 动画效果开关（与其他toggle完全一致的创建方式）
@@ -221,21 +227,21 @@ public class ThemeTabManager {
                     customThemeConfig.setAnimationEnabled(value);
                     com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
                 }));
+        this.customAnimationToggle.visible = false;  // 初始化时隐藏
 
-        // 动画速率按钮（80×18，与重置按钮一致，右对齐）
+        // Animation speed button
         this.customAnimationSpeedButton = screen.addWidget(Button.builder(
-                Component.translatable("screen.neotab.custom_theme.animation_speed",
-                        customThemeConfig.getAnimationSpeed()),
+                Component.literal(String.format("%dx", customThemeConfig.getAnimationSpeed())),
                 button -> {
-                    int cur = customThemeConfig.getAnimationSpeed();
-                    int next = cur >= 3 ? 1 : cur + 1;
+                    int current = customThemeConfig.getAnimationSpeed();
+                    int next = current >= 3 ? 1 : current + 1;
                     customThemeConfig.setAnimationSpeed(next);
                     com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    button.setMessage(Component.translatable(
-                            "screen.neotab.custom_theme.animation_speed", next));
+                    button.setMessage(Component.literal(String.format("%dx", next)));
                 })
-            .bounds(layout.left(), 0, 80, 18)
+            .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
+        this.customAnimationSpeedButton.visible = false;  // 初始化时隐藏
 
         // Reset to default button (with icon)
         this.resetToDefaultButton = screen.addWidget(Button.builder(
@@ -246,6 +252,7 @@ public class ThemeTabManager {
                 })
             .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
             .build());
+        this.resetToDefaultButton.visible = false;  // 初始化时隐藏
 
         // Reset confirm button (initially hidden)
         this.resetConfirmButton = screen.addWidget(Button.builder(
@@ -260,6 +267,7 @@ public class ThemeTabManager {
                 })
             .bounds(layout.left(), 0, 50, 18)
             .build());
+        this.resetConfirmButton.visible = false;  // 初始化时隐藏
 
         // Reset cancel button (initially hidden)
         this.resetCancelButton = screen.addWidget(Button.builder(
@@ -270,6 +278,23 @@ public class ThemeTabManager {
                 })
             .bounds(layout.left(), 0, 50, 18)
             .build());
+        this.resetCancelButton.visible = false;  // 初始化时隐藏
+
+        // Add custom border color button
+        this.addCustomBorderColorButton = screen.addWidget(Button.builder(
+                Component.literal("+ ").append(Component.translatable("screen.neotab.custom_theme.add_border_color")),
+                button -> {
+                    List<Integer> colors = new ArrayList<>(customThemeConfig.getBorderColors());
+                    if (colors.size() < 7) {
+                        colors.add(0xFFFFFFFF);
+                        customThemeConfig.setBorderColors(colors);
+                        com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
+                        screen.rebuildCustomThemeWidgets();
+                    }
+                })
+            .bounds(layout.left(), 0, customButtonWidth, THEME_OPTION_HEIGHT)
+            .build());
+        this.addCustomBorderColorButton.visible = false;  // 初始化时隐藏
 
         // Embedded color picker (positioned inline below selected card by applyLayout)
         int pickerX = layout.left() + CARD_PADDING;
@@ -279,35 +304,36 @@ public class ThemeTabManager {
             color -> {
                 if ("background".equals(currentSelectedColorType)) {
                     customThemeConfig.setBackgroundColor(color);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    // 同步更新HEX输入框
+                    // 不在拖动时保存，由 mouseReleased 触发保存
                     if (customBackgroundHexInput != null) {
+                        updatingHexFromPicker = true;
                         customBackgroundHexInput.setValue(String.format("#%08X", color));
+                        updatingHexFromPicker = false;
                     }
                 } else if ("outer_border".equals(currentSelectedColorType)) {
                     customThemeConfig.setBorderOuterColor(color);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    // 同步更新HEX输入框
                     if (customBorderOuterHexInput != null) {
+                        updatingHexFromPicker = true;
                         customBorderOuterHexInput.setValue(String.format("#%08X", color));
+                        updatingHexFromPicker = false;
                     }
                 } else if (currentSelectedColorType != null && currentSelectedColorType.startsWith("border_")) {
                     if (currentSelectedBorderIndex >= 0) {
-                        List<Integer> colors = new ArrayList<>(customThemeConfig.getBorderColors());
+                        java.util.List<Integer> colors = new java.util.ArrayList<>(customThemeConfig.getBorderColors());
                         if (currentSelectedBorderIndex < colors.size()) {
                             colors.set(currentSelectedBorderIndex, color);
                             customThemeConfig.setBorderColors(colors);
-                            com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                            
-                            // 同步更新对应的HEX输入框
                             if (currentSelectedBorderIndex < customBorderHexInputs.size()) {
-                                net.minecraft.client.gui.components.EditBox hexBox = customBorderHexInputs.get(currentSelectedBorderIndex);
-                                hexBox.setValue(String.format("#%08X", color));
+                                updatingHexFromPicker = true;
+                                customBorderHexInputs.get(currentSelectedBorderIndex)
+                                    .setValue(String.format("#%08X", color));
+                                updatingHexFromPicker = false;
                             }
                         }
                     }
                 }
-            }, colorPickerScale, false);  // 设置为false，不显示内部HEX输入框
+            }, colorPickerScale, false);
+        this.embeddedColorPicker.visible = false;  // 初始化时隐藏
         screen.addWidget(this.embeddedColorPicker);
 
         currentSelectedColorType = null;
@@ -316,17 +342,17 @@ public class ThemeTabManager {
 
     void rebuildCustomBorderColorButtons() {
         for (Button button : customBorderColorButtons) {
-            screen.removeWidget(button);
+            screen.removeWidgetDirect(button);
         }
         customBorderColorButtons.clear();
 
-        for (net.minecraft.client.gui.components.EditBox box : customBorderHexInputs) {
-            screen.removeWidget(box);
+        for (EditBox box : customBorderHexInputs) {
+            screen.removeWidgetDirect(box);
         }
         customBorderHexInputs.clear();
 
         if (addCustomBorderColorButton != null) {
-            screen.removeWidget(addCustomBorderColorButton);
+            screen.removeWidgetDirect(addCustomBorderColorButton);
             addCustomBorderColorButton = null;
         }
 
@@ -339,14 +365,14 @@ public class ThemeTabManager {
 
         int CARD_PADDING = 10;
         int delBtnW = 20;
-        int hexInputW = 70;  // hex输入框宽度（减小）
+        int hexInputW = 70;  // hex输入框宽度（减小�?
 
         for (int i = 0; i < colors.size(); i++) {
             final int index = i;
             final int color = colors.get(i);
 
             // 颜色选择按钮（色块区域，点击打开颜色选择器）
-            Button colorButton = screen.addWidget(Button.builder(
+            Button colorButton = screen.addWidgetDirect(Button.builder(
                 Component.empty(),
                 button -> {
                     String colorType = "border_" + index;
@@ -367,45 +393,23 @@ public class ThemeTabManager {
             ).bounds(layout.left(), 0, 28, 28).build());
             customBorderColorButtons.add(colorButton);
 
-            // 删除按钮
-            Button deleteButton = screen.addWidget(Button.builder(
-                Component.literal("×"),
-                button -> {
-                    List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
-                    newColors.remove(index);
-                    customThemeConfig.setBorderColors(newColors);
-                    com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                    if (currentSelectedBorderIndex == index) {
-                        currentSelectedColorType = null;
-                        currentSelectedBorderIndex = -1;
-                    } else if (currentSelectedBorderIndex > index) {
-                        currentSelectedBorderIndex--;
-                        currentSelectedColorType = "border_" + currentSelectedBorderIndex;
-                    }
-                    rebuildCustomBorderColorButtons();
-                    NeoTabConfigScreenLayout.Layout newLayout = screen.buildLayout();
-                    screen.applyLayout(newLayout);
-                }
-            ).bounds(layout.left(), 0, delBtnW, 20).build());
-            customBorderColorButtons.add(deleteButton);
-
-            // Hex输入框（支持透明度，格式 #AARRGGBB）
-            final net.minecraft.client.gui.components.EditBox hexBox =
-                new net.minecraft.client.gui.components.EditBox(
+            // Hex输入框（支持透明度，格式 #AARRGGBB）�?
+            final EditBox hexBox = new EditBox(
                     screen.font(), layout.left(), 0, hexInputW, 20,
                     Component.empty());
             hexBox.setMaxLength(9);  // #AARRGGBB = 9字符
             hexBox.setValue(String.format("#%08X", color));
-            hexBox.setBordered(false);  // 禁用默认深色背景，我们自己绘制白色背景
-            hexBox.setEditable(true);   // 确保可编辑
+            hexBox.setBordered(false);  // 禁用默认深色背景，我们自己绘制白色背�?
+            hexBox.setEditable(true);   // 确保可编�?
             hexBox.setCanLoseFocus(true);  // 允许失去焦点
             hexBox.setFocused(false);   // 初始状态不聚焦
             hexBox.visible = false;     // 初始状态不可见，由syncVisibility控制
             hexBox.setResponder(text -> {
+                if (updatingHexFromPicker) return;  // 防止颜色选择器→HEX→颜色选择器的循环
                 try {
                     String clean = text.startsWith("#") ? text.substring(1) : text;
                     
-                    // 如果输入为空或无效，重置为默认白色
+                    // 如果输入为空或无效，重置为默认白�?
                     if (clean.isEmpty()) {
                         int defaultColor = 0xFFFFFFFF;
                         List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
@@ -427,7 +431,7 @@ public class ThemeTabManager {
                             newColors.set(index, parsed);
                             customThemeConfig.setBorderColors(newColors);
                             com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                            // 同步更新颜色选择器
+                            // 同步更新颜色选择�?
                             if (embeddedColorPicker != null && ("border_" + index).equals(currentSelectedColorType)) {
                                 embeddedColorPicker.setColor(parsed);
                             }
@@ -439,7 +443,7 @@ public class ThemeTabManager {
                             newColors.set(index, parsed);
                             customThemeConfig.setBorderColors(newColors);
                             com.poso.neotab.theme.CustomThemeManager.save(customThemeConfig);
-                            // 同步更新颜色选择器
+                            // 同步更新颜色选择�?
                             if (embeddedColorPicker != null && ("border_" + index).equals(currentSelectedColorType)) {
                                 embeddedColorPicker.setColor(parsed);
                             }
@@ -448,13 +452,13 @@ public class ThemeTabManager {
                 } catch (NumberFormatException ignored) {}
             });
             hexBox.visible = false;
-            screen.addWidget(hexBox);
+            screen.addWidgetDirect(hexBox);
             customBorderHexInputs.add(hexBox);
         }
 
         if (colors.size() < 7) {
-            // 添加按钮：紧凑样式，不全宽
-            this.addCustomBorderColorButton = screen.addWidget(Button.builder(
+            // 添加按钮：紧凑样式，不全�?
+            this.addCustomBorderColorButton = screen.addWidgetDirect(Button.builder(
                 Component.translatable("screen.neotab.custom_theme.add_border_color"),
                 button -> {
                     List<Integer> newColors = new ArrayList<>(customThemeConfig.getBorderColors());
@@ -477,12 +481,13 @@ public class ThemeTabManager {
             + rows * THEME_OPTION_HEIGHT
             + Math.max(0, rows - 1) * THEME_OPTION_GAP;
     }
+
     /** Apply layout positions to all theme tab widgets. */
     void applyLayout(NeoTabConfigScreenLayout.Layout layout) {
         int CARD_PADDING = 10;
         int CARD_GAP = 8;
         int TITLE_LINE_HEIGHT = 9;  // 约等于font.lineHeight
-        int COLOR_ITEM_HEIGHT = THEME_OPTION_HEIGHT;  // 颜色行高度
+        int COLOR_ITEM_HEIGHT = THEME_OPTION_HEIGHT;  // 颜色行高�?
         int PICKER_GAP = 6;  // 颜色行与颜色选择器之间的间距
         
         // 主题选择器按钮定位到卡片内（标题+副标题下方）
@@ -494,27 +499,27 @@ public class ThemeTabManager {
             btn.setWidth(layout.contentWidth() - CARD_PADDING * 2);
         }
         
-        // 自定义主题配置控件定位
+        // 自定义主题配置控件定�?
         if ("custom".equals(selectedThemeId)) {
             // 重置为默认按钮（靠右边框，基于卡片高度垂直居中）
             if (resetToDefaultButton != null) {
-                int resetBtnW = 80;  // 按钮宽度（包含图标和文字）
+                int resetBtnW = 80;  // 按钮宽度（包含图标和文字�?
                 int resetBtnH = 18;  // 按钮高度（稍小一点，更精致）
                 int resetCardY = layout.customResetRowY();
-                int titleH = 9;  // 标题行高度
+                int titleH = 9;  // 标题行高�?
                 int subtitleH = 9;  // 副标题行高度
-                int gap = 2;  // 标题与副标题之间的间距
+                int gap = 2;  // 标题与副标题之间的间�?
                 int resetCardHeight = CARD_PADDING * 2 + titleH + gap + subtitleH + 8;  // 增加一些高度以容纳确认/取消按钮
                 
                 // 靠右边框位置：卡片右边界 - padding - 按钮宽度
                 resetToDefaultButton.setX(layout.right() - CARD_PADDING - resetBtnW);
-                // 基于卡片高度垂直居中：卡片顶部 + (卡片高度 - 按钮高度) / 2
+                // 基于卡片高度垂直居中：卡片顶�?+ (卡片高度 - 按钮高度) / 2
                 resetToDefaultButton.setY(layout.toScreenY(resetCardY + (resetCardHeight - resetBtnH) / 2));
                 resetToDefaultButton.setWidth(resetBtnW);
                 resetToDefaultButton.setHeight(resetBtnH);
             }
             
-            // 动画效果卡片：开关右对齐，垂直居中
+            // 动画效果卡片：开关右对齐，垂直居�?
             int animToggleCardH = Math.max(CARD_PADDING + TITLE_LINE_HEIGHT + CARD_PADDING, CARD_PADDING + 14 + CARD_PADDING);
             int animToggleCenterY = layout.customAnimationRowY() + (animToggleCardH - 14) / 2;
             if (customAnimationToggle != null) {
@@ -534,21 +539,12 @@ public class ThemeTabManager {
                 customAnimationSpeedButton.setHeight(18);
             }
             
-            // ── 颜色配置：每个颜色项独立卡片 ──
-            int cardW = layout.contentWidth();
-            int btnW = cardW - CARD_PADDING * 2;
-            
-            // 计算颜色选择器高度
-            int colorPickerH = embeddedColorPicker != null ? embeddedColorPicker.getHeight() : 130;
-            int collapsedCardH = CARD_PADDING + COLOR_ITEM_HEIGHT + CARD_PADDING;
-            int expandedCardH = CARD_PADDING + COLOR_ITEM_HEIGHT + PICKER_GAP + colorPickerH + CARD_PADDING;
-            
             // 背景颜色卡片（色块 + HEX输入框布局，固定高度）
             int bgCardY = layout.customBgColorRowY();
             int swatchSize = 24;  // 色块大小（缩小）
-            int hexInputW = 90;   // HEX输入框宽度（缩小）
-            int gap = 12;  // 色块与输入框之间的间距
-            int titleH = 9;  // 标题行高度（约等于font.lineHeight）
+            int hexInputW = 90;   // HEX输入框宽度（缩小�?
+            int gap = 12;  // 色块与输入框之间的间�?
+            int titleH = 9;  // 标题行高度（约等于font.lineHeight�?
             int contentGap = 8;  // 标题与内容之间的间距
             
             if (customBackgroundColorButton != null) {
@@ -567,24 +563,6 @@ public class ThemeTabManager {
                 customBackgroundHexInput.setHeight(swatchSize);
             }
             
-            // 外层边框颜色卡片（色块 + HEX输入框布局，固定高度）
-            int outerCardY = layout.customOuterBorderRowY();
-            if (customBorderOuterFactorButton != null) {
-                // 色块按钮：标题下方，左侧
-                customBorderOuterFactorButton.setX(layout.left() + CARD_PADDING);
-                customBorderOuterFactorButton.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
-                customBorderOuterFactorButton.setWidth(swatchSize);
-                customBorderOuterFactorButton.setHeight(swatchSize);
-            }
-            
-            if (customBorderOuterHexInput != null) {
-                // HEX输入框：色块右侧
-                customBorderOuterHexInput.setX(layout.left() + CARD_PADDING + swatchSize + gap);
-                customBorderOuterHexInput.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
-                customBorderOuterHexInput.setWidth(hexInputW);
-                customBorderOuterHexInput.setHeight(swatchSize);
-            }
-            
             // 颜色选择器浮动定位（在色块下方）
             if (embeddedColorPicker != null && embeddedColorPicker.visible) {
                 if ("background".equals(currentSelectedColorType) && customBackgroundColorButton != null) {
@@ -595,103 +573,96 @@ public class ThemeTabManager {
                     embeddedColorPicker.setY(customBorderOuterFactorButton.getY() + swatchSize + 4);
                 }
             }
-            
-            // 边框颜色大卡片（一个卡片包含所有边框颜色项 + 添加按钮）
-            java.util.List<Integer> borderColors = customThemeConfig != null ? 
+
+            // 外层边框颜色卡片
+            int outerCardY = layout.customOuterBorderRowY();
+            if (customBorderOuterFactorButton != null) {
+                customBorderOuterFactorButton.setX(layout.left() + CARD_PADDING);
+                customBorderOuterFactorButton.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
+                customBorderOuterFactorButton.setWidth(swatchSize);
+                customBorderOuterFactorButton.setHeight(swatchSize);
+            }
+            if (customBorderOuterHexInput != null) {
+                customBorderOuterHexInput.setX(layout.left() + CARD_PADDING + swatchSize + gap);
+                customBorderOuterHexInput.setY(layout.toScreenY(outerCardY + CARD_PADDING + titleH + contentGap));
+                customBorderOuterHexInput.setWidth(hexInputW);
+                customBorderOuterHexInput.setHeight(swatchSize);
+            }
+
+            // 边框颜色列表（customBorderColorButtons 每个颜色一个色块按钮，索引 i 对应颜色 i）
+            java.util.List<Integer> borderColors = customThemeConfig != null ?
                 customThemeConfig.getBorderColors() : new java.util.ArrayList<>();
-            int borderItemH = THEME_OPTION_HEIGHT + 12;  // 每个颜色行高度（增加4像素）
-            int borderItemGap = 8;  // 行间距
-            int borderCardInnerH = TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + 8;  // 标题+副标题
+            int borderItemH = THEME_OPTION_HEIGHT + 12;
+            int borderItemGap = 8;
+            int borderCardInnerH = TITLE_LINE_HEIGHT + 2 + TITLE_LINE_HEIGHT + 8;
             int rowStartY = layout.customAddBorderColorRowY() + CARD_PADDING + borderCardInnerH;
-            int delBtnW = 20;
-            int borderSwatchSize = 16;  // 边框颜色色块固定大小（小巧，参考HTML原型 color-preview）
-            int hexInputH = 14;   // 输入框固定高度（小巧）
-            int borderHexInputW = 70;  // 边框颜色HEX输入框宽度
-            
+            int borderSwatchSize = 16;
+            int hexInputH = 14;
+            int borderHexInputW = 70;
+
             for (int i = 0; i < borderColors.size(); i++) {
-                int bi = i * 2;
                 int rowY = rowStartY + i * (borderItemH + borderItemGap);
                 int swatchX = layout.left() + CARD_PADDING + 8;
                 int swatchY = rowY + (borderItemH - borderSwatchSize) / 2;
-                
-                if (bi < customBorderColorButtons.size()) {
-                    // 色块按钮（点击打开颜色选择器）
-                    Button colorBtn = customBorderColorButtons.get(bi);
+
+                // 色块按钮（索引 i，一对一）
+                if (i < customBorderColorButtons.size()) {
+                    Button colorBtn = customBorderColorButtons.get(i);
                     colorBtn.setX(swatchX);
                     colorBtn.setY(layout.toScreenY(swatchY));
                     colorBtn.setWidth(borderSwatchSize);
                     colorBtn.setHeight(borderSwatchSize);
-                    
-                    // 删除按钮：右侧，垂直居中
-                    if (bi + 1 < customBorderColorButtons.size()) {
-                        Button delBtn = customBorderColorButtons.get(bi + 1);
-                        delBtn.setX(layout.left() + CARD_PADDING + btnW - delBtnW);
-                        delBtn.setY(layout.toScreenY(rowY + (borderItemH - hexInputH) / 2));
-                        delBtn.setWidth(delBtnW);
-                        delBtn.setHeight(hexInputH);
-                    }
                 }
-                
-                // Hex输入框（色块右侧，垂直居中于行内）
+
+                // HEX 输入框
                 if (i < customBorderHexInputs.size()) {
-                    net.minecraft.client.gui.components.EditBox hexBox = customBorderHexInputs.get(i);
+                    EditBox hexBox = customBorderHexInputs.get(i);
                     hexBox.setX(swatchX + borderSwatchSize + 8);
-                    // 垂直居中：固定高度，居中于borderItemH行内
                     hexBox.setY(layout.toScreenY(rowY + (borderItemH - hexInputH) / 2));
                     hexBox.setWidth(borderHexInputW);
                     hexBox.setHeight(hexInputH);
-                    hexBox.visible = true;  // 确保可见
                 }
-                
-                // 颜色选择器：浮动在色块下方（当此项被选中时）
+
+                // 颜色选择器定位（当此项被选中时）
                 String colorType = "border_" + i;
                 if (colorType.equals(currentSelectedColorType) && embeddedColorPicker != null) {
-                    // 定位在色块正下方
                     embeddedColorPicker.setX(swatchX);
-                    embeddedColorPicker.setY(layout.toScreenY(swatchY) + swatchSize + 4);
+                    embeddedColorPicker.setY(layout.toScreenY(swatchY) + borderSwatchSize + 4);
                     colorPickerFloatX = swatchX;
-                    colorPickerFloatY = layout.toScreenY(swatchY) + swatchSize + 4;
+                    colorPickerFloatY = layout.toScreenY(swatchY) + borderSwatchSize + 4;
                 }
             }
-            
-            // 添加边框颜色按钮（在大卡片右上角，与标题同一行）
+
+            // 添加边框颜色按钮
             if (addCustomBorderColorButton != null) {
-                int addBtnW = 100;  // 按钮宽度
-                int addBtnH = 18;   // 按钮高度（稍小一点，更精致）
+                int addBtnW = 100;
+                int addBtnH = 18;
                 int borderCardY = layout.customAddBorderColorRowY();
-                // 右上角位置：卡片右边界 - padding - 按钮宽度
                 addCustomBorderColorButton.setX(layout.right() - CARD_PADDING - addBtnW);
-                // 与标题同一行：卡片顶部 + padding + (标题高度 - 按钮高度) / 2，实现垂直居中
                 addCustomBorderColorButton.setY(layout.toScreenY(borderCardY + CARD_PADDING + (TITLE_LINE_HEIGHT - addBtnH) / 2));
                 addCustomBorderColorButton.setWidth(addBtnW);
                 addCustomBorderColorButton.setHeight(addBtnH);
             }
-            
-            // 重置确认/取消按钮（弹出式，总宽度与重置按钮一致）
+
+            // 重置确认/取消按钮
             if (showResetConfirmation && resetToDefaultButton != null) {
-                int resetBtnW = 80;  // 重置按钮宽度
-                int confirmCancelBtnW = resetBtnW / 2;  // 每个按钮宽度为重置按钮的一半
-                int confirmCancelBtnH = 18;
-                int btnGap = 2;  // 确认和取消按钮之间的间距
-                
-                // 实际每个按钮宽度需要减去间距
+                int resetBtnW = 80;
+                int btnGap = 2;
                 int actualBtnW = (resetBtnW - btnGap) / 2;
-                
-                // 确认和取消按钮位于重置按钮正下方，总宽度与重置按钮一致
+                int confirmCancelBtnH = 18;
                 int baseX = resetToDefaultButton.getX();
-                int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight() + 4;  // 重置按钮下方4px
-                
-                if (resetCancelButton != null) { 
-                    resetCancelButton.setX(baseX); 
-                    resetCancelButton.setY(baseY); 
-                    resetCancelButton.setWidth(actualBtnW); 
-                    resetCancelButton.setHeight(confirmCancelBtnH); 
+                int baseY = resetToDefaultButton.getY() + resetToDefaultButton.getHeight() + 4;
+                if (resetCancelButton != null) {
+                    resetCancelButton.setX(baseX);
+                    resetCancelButton.setY(baseY);
+                    resetCancelButton.setWidth(actualBtnW);
+                    resetCancelButton.setHeight(confirmCancelBtnH);
                 }
-                if (resetConfirmButton != null) { 
-                    resetConfirmButton.setX(baseX + actualBtnW + btnGap); 
-                    resetConfirmButton.setY(baseY); 
-                    resetConfirmButton.setWidth(actualBtnW); 
-                    resetConfirmButton.setHeight(confirmCancelBtnH); 
+                if (resetConfirmButton != null) {
+                    resetConfirmButton.setX(baseX + actualBtnW + btnGap);
+                    resetConfirmButton.setY(baseY);
+                    resetConfirmButton.setWidth(actualBtnW);
+                    resetConfirmButton.setHeight(confirmCancelBtnH);
                 }
             }
         }

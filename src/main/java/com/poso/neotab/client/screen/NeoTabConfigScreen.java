@@ -33,7 +33,7 @@ public class NeoTabConfigScreen extends Screen {
     }
 
     //  Constants 
-    private static final int MAX_CONTENT_WIDTH      = 600;  // 增加最大内容宽度，适应横向布局
+    private static final int MAX_CONTENT_WIDTH      = 820;  // 增加最大内容宽度，适应横向布局
     private static final int ROW_HEIGHT              = 24;
     private static final int INPUT_HEIGHT            = 20;
     private static final int TITLE_INPUT_HEIGHT      = 60;
@@ -116,7 +116,29 @@ public class NeoTabConfigScreen extends Screen {
 
     //  Manager callback helpers 
     <T extends AbstractWidget> T addWidget(T widget) { return addRenderableWidget(widget); }
-    @Override public void removeWidget(net.minecraft.client.gui.components.events.GuiEventListener widget) { super.removeWidget(widget); }
+    
+    @Override
+    public void removeWidget(net.minecraft.client.gui.components.events.GuiEventListener widget) { 
+        super.removeWidget(widget); 
+    }
+    
+    // 公共包装方法，供 ScreenAccessHelper 调用
+    public <T extends AbstractWidget> T addRenderableWidgetPublic(T widget) {
+        return this.addRenderableWidget(widget);
+    }
+    
+    public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.narration.NarratableEntry> T addWidgetPublic(T widget) {
+        return this.addWidget(widget);
+    }
+    
+    public void removeWidgetPublic(net.minecraft.client.gui.components.events.GuiEventListener widget) {
+        this.removeWidget(widget);
+    }
+
+    // ThemeTabManager 직접 호출용 (NeoForge 버전과 동일한 방식)
+    <T extends AbstractWidget> T addWidgetDirect(T widget) { return this.addRenderableWidget(widget); }
+    void removeWidgetDirect(net.minecraft.client.gui.components.events.GuiEventListener widget) { this.removeWidget(widget); }
+    
     Font font() { return this.font; }
     ConfigTab getActiveTab() { return activeTab; }
     TabConfig getInitialConfig() { return initialConfig; }
@@ -189,9 +211,9 @@ public class NeoTabConfigScreen extends Screen {
         if (permissions.playerSearchBox != null) permissions.playerSearchBox.visible = perms;
         if (permissions.permAddButton != null) permissions.permAddButton.visible = perms;
         for (Button btn : permissions.targetPlayerRemoveButtons) btn.visible = perms;
-        if (permissions.permSaveButton != null) permissions.permSaveButton.visible = false;  // 旧的保存按钮已废弃
         if (permissions.applyToAllButton != null) permissions.applyToAllButton.visible = perms;  // 应用到全部玩家按钮
         if (permissions.applyToAddedButton != null) permissions.applyToAddedButton.visible = perms;  // 应用到已添加玩家按钮
+        if (permissions.overridePersonalPolicyToggle != null) permissions.overridePersonalPolicyToggle.visible = perms;
         // Page config tab widgets
         pageConfig.topTitleEnabled.visible       = page;
         pageConfig.topTitleInput.visible         = page;
@@ -212,11 +234,11 @@ public class NeoTabConfigScreen extends Screen {
         if (pageConfig.layoutRowsButton    != null) pageConfig.layoutRowsButton.visible    = themeTab;
         for (Button button : theme.themeOptionButtons) button.visible = themeTab;
         boolean isCustom = "custom".equals(theme.selectedThemeId);
-        theme.customBackgroundColorButton.visible = themeTab && isCustom;
+        if (theme.customBackgroundColorButton != null) theme.customBackgroundColorButton.visible = themeTab && isCustom;
         if (theme.customBackgroundHexInput != null) theme.customBackgroundHexInput.visible = themeTab && isCustom;
-        theme.customBorderOuterFactorButton.visible = themeTab && isCustom;
+        if (theme.customBorderOuterFactorButton != null) theme.customBorderOuterFactorButton.visible = themeTab && isCustom;
         if (theme.customBorderOuterHexInput != null) theme.customBorderOuterHexInput.visible = themeTab && isCustom;
-        theme.customAnimationToggle.visible = themeTab && isCustom;
+        if (theme.customAnimationToggle != null) theme.customAnimationToggle.visible = themeTab && isCustom;
         if (theme.customAnimationSpeedButton != null) theme.customAnimationSpeedButton.visible = themeTab && isCustom;
         if (theme.resetToDefaultButton != null) theme.resetToDefaultButton.visible = themeTab && isCustom;
         if (theme.resetConfirmButton != null) theme.resetConfirmButton.visible = themeTab && isCustom && theme.showResetConfirmation;
@@ -257,16 +279,14 @@ public class NeoTabConfigScreen extends Screen {
         this.minecraft.setScreen(this.parent);
     }
 
-    @Override
     public void repositionElements() {
-        super.repositionElements();
         NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
         clampScroll(layout);
         applyWidgetLayout(layout);
     }
     // ── mouseScrolled ────────────────────────────────────────────────────────
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollDelta) {
         NeoTabConfigScreenLayout.Layout layout = buildLayoutImpl();
         
         // 检查是否在下拉菜单上滚动
@@ -284,21 +304,21 @@ public class NeoTabConfigScreen extends Screen {
                 // 在下拉菜单上滚动
                 int maxScroll = Math.max(0, (permissions.playerSuggestions.size() - maxVisibleItems) * itemH);
                 permissions.dropdownScrollOffset = Math.max(0, Math.min(maxScroll, 
-                    permissions.dropdownScrollOffset - (int) Math.round(scrollY * itemH)));
+                    permissions.dropdownScrollOffset - (int) Math.round(scrollDelta * itemH)));
                 return true;
             }
         }
         
         if (hoveredScrollableWidget(mouseX, mouseY) instanceof CycleButton<?>) {
             if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
-            setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
+            setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollDelta * SCROLL_STEP), layout);
             return true;
         }
         AbstractWidget hovered = hoveredScrollableWidget(mouseX, mouseY);
         if (hovered instanceof ImprovedRichTextMultiLineEditBox input) {
             boolean onInputScrollbar = mouseX >= input.getX() + input.getWidth()
                     && mouseX <= input.getX() + input.getWidth() + 8;
-            if (onInputScrollbar) return input.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            if (onInputScrollbar) return input.mouseScrolled(mouseX, mouseY, scrollX, scrollDelta);
         }
         if (!isInsideViewport(mouseX, mouseY, layout) || layout.maxScroll() <= 0) return false;
         // 滚动时隐藏颜色选择器（对所有颜色类型）
@@ -317,7 +337,7 @@ public class NeoTabConfigScreen extends Screen {
             }
             syncTabWidgetVisibility();
         }
-        setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollY * SCROLL_STEP), layout);
+        setScrollOffsetInternal(this.scrollOffset - (int) Math.round(scrollDelta * SCROLL_STEP), layout);
         return true;
     }
 
@@ -334,6 +354,18 @@ public class NeoTabConfigScreen extends Screen {
                     permissions.dropdownScrollOffset = 0;
                     return true;
                 }
+            }
+        }
+
+        // 颜色选择器优先拦截：当颜色选择器可见时，其区域内的点击不应穿透到下方组件
+        if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+            int px = theme.embeddedColorPicker.getX(), py = theme.embeddedColorPicker.getY();
+            int pw = theme.embeddedColorPicker.getWidth(), ph = theme.embeddedColorPicker.getHeight();
+            if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
+                boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
+                if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); }
+                // 无论是否命中内部控件，都消费掉这次点击，防止穿透
+                return true;
             }
         }
         
@@ -403,18 +435,51 @@ public class NeoTabConfigScreen extends Screen {
             for (Button btn : theme.customBorderColorButtons) {
                 if (btn.visible && btn.isMouseOver(mouseX, mouseY)) return btn.mouseClicked(mouseX, mouseY, button);
             }
+            // 删除按钮：用与渲染完全相同的坐标判断点击（× 是手动绘制的，不是 Button widget）
+            if (theme.customThemeConfig != null && button == 0) {
+                java.util.List<Integer> borderColors = theme.customThemeConfig.getBorderColors();
+                int CARD_PADDING = 10;
+                int borderItemH = THEME_OPTION_HEIGHT + 12;
+                int borderItemGap = 8;
+                int titleLineHeight = this.font.lineHeight;
+                int subtitleLineHeight = this.font.lineHeight;
+                int borderCardInnerH = titleLineHeight + 2 + subtitleLineHeight + 8;
+                int borderBigCardY = layout.toScreenY(layout.customAddBorderColorRowY());
+                int rowStartY = borderBigCardY + CARD_PADDING + borderCardInnerH;
+                int rowW = layout.contentWidth() - CARD_PADDING * 2;
+                for (int i = 0; i < borderColors.size(); i++) {
+                    int rowY = rowStartY + i * (borderItemH + borderItemGap);
+                    int delX = layout.left() + CARD_PADDING + rowW - 20;
+                    if (mouseX >= delX && mouseX < delX + 20 && mouseY >= rowY && mouseY < rowY + borderItemH) {
+                        final int idx = i;
+                        java.util.List<Integer> newColors = new java.util.ArrayList<>(theme.customThemeConfig.getBorderColors());
+                        newColors.remove(idx);
+                        theme.customThemeConfig.setBorderColors(newColors);
+                        com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
+                        if (theme.currentSelectedBorderIndex == idx) {
+                            theme.currentSelectedColorType = null;
+                            theme.currentSelectedBorderIndex = -1;
+                        } else if (theme.currentSelectedBorderIndex > idx) {
+                            theme.currentSelectedBorderIndex--;
+                            theme.currentSelectedColorType = "border_" + theme.currentSelectedBorderIndex;
+                        }
+                        theme.rebuildCustomBorderColorButtons();
+                        NeoTabConfigScreenLayout.Layout newLayout = buildLayoutImpl();
+                        applyWidgetLayout(newLayout);
+                        return true;
+                    }
+                }
+            }
             if (theme.addCustomBorderColorButton != null && theme.addCustomBorderColorButton.visible && theme.addCustomBorderColorButton.isMouseOver(mouseX, mouseY))
                 return theme.addCustomBorderColorButton.mouseClicked(mouseX, mouseY, button);
         }
-        // Color picker
+        // Color picker - 处理点击颜色选择器外部时关闭（区域内点击已在方法开头处理）
         if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
             int px = theme.embeddedColorPicker.getX(), py = theme.embeddedColorPicker.getY();
             int pw = theme.embeddedColorPicker.getWidth(), ph = theme.embeddedColorPicker.getHeight();
-            if (mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph) {
-                boolean result = theme.embeddedColorPicker.mouseClicked(mouseX, mouseY, button);
-                if (result) { setFocused(theme.embeddedColorPicker); if (button == 0) setDragging(true); return true; }
-            } else if (theme.currentSelectedColorType != null) {
-                // 点击颜色选择器外部时隐藏（对所有颜色类型：background, outer_border, border_*）
+            if (!(mouseX >= px && mouseX < px + pw && mouseY >= py && mouseY < py + ph)
+                    && theme.currentSelectedColorType != null) {
+                // 点击颜色选择器外部
                 boolean clickedSwatch = false;
                 boolean clickedHexInput = false;
                 
@@ -610,7 +675,13 @@ public class NeoTabConfigScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0 && isDraggingScrollbar) { isDraggingScrollbar = false; return true; }
         if (theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
-            if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) return true;
+            if (theme.embeddedColorPicker.mouseReleased(mouseX, mouseY, button)) {
+                // 拖动结束时保存配置
+                if (theme.customThemeConfig != null) {
+                    com.poso.neotab.theme.CustomThemeManager.save(theme.customThemeConfig);
+                }
+                return true;
+            }
         }
         return super.mouseReleased(mouseX, mouseY, button);
     }
@@ -646,11 +717,8 @@ public class NeoTabConfigScreen extends Screen {
         int panelY = 8;
         int panelW = (layout.right() + 8 + scrollTrackW + 4) - panelX;
         
-        // 限制面板高度，使其更符合横向布局（宽度 > 高度）
-        // HTML中的比例是 820:600 ≈ 1.37:1
-        int maxPanelH = (int)(panelW / 1.37);  // 根据宽度计算最大高度
         int availableH = this.height - panelY - 8;
-        int panelH = Math.min(maxPanelH, availableH);
+        int panelH = Math.max(180, availableH);
         
         AEStyleRenderer.drawMainPanel(g, panelX, panelY, panelW, panelH);
 
@@ -667,8 +735,12 @@ public class NeoTabConfigScreen extends Screen {
         int titleBarBottom = panelY + 24;  // 标题栏高度约24px
         AEStyleRenderer.drawTitleBarDivider(g, panelX + 3, titleBarBottom, panelW - 6);
 
+        boolean colorPickerBlocksMouse = isMouseInsideColorPickerOverlay(mouseX, mouseY, layout);
+        int contentMouseX = colorPickerBlocksMouse ? -1 : mouseX;
+        int contentMouseY = colorPickerBlocksMouse ? -1 : mouseY;
+
         NeoTabConfigScreenRenderer.renderTabBar(g, this.font, this.activeTab, layout, panelY, mouseX, mouseY, this.screenMode);
-        renderScrollableContent(g, mouseX, mouseY, partialTick, layout);
+        renderScrollableContent(g, contentMouseX, contentMouseY, partialTick, layout);
         NeoTabConfigScreenRenderer.renderButtonBar(g, layout, this.height);
         // Fixed widgets (done/cancel buttons) - 完成用主要样式（绿色），取消用次要样式（米色）
         NeoTabConfigScreenRenderer.renderPrimaryButton(g, this.font, this.doneButton, mouseX, mouseY);
@@ -775,6 +847,23 @@ public class NeoTabConfigScreen extends Screen {
         // 铺不透明背景，阻断下层文字/控件渗透
         g.fill(cpX, renderY, cpX + pw, renderY + ph, 0xFFFAF7EF);
         theme.embeddedColorPicker.render(g, mouseX, mouseY, partialTick);
+    }
+
+    private boolean isMouseInsideColorPickerOverlay(int mouseX, int mouseY, NeoTabConfigScreenLayout.Layout layout) {
+        if (activeTab != ConfigTab.THEME) return false;
+        if (theme.embeddedColorPicker == null || !theme.embeddedColorPicker.visible) return false;
+
+        int px = theme.embeddedColorPicker.getX();
+        int py = theme.embeddedColorPicker.getY();
+        int pw = theme.embeddedColorPicker.getWidth();
+        int ph = theme.embeddedColorPicker.getHeight();
+        int renderY = py;
+        if (py + ph > layout.buttonBarTop()) {
+            renderY = Math.max(layout.viewportTop(), py - ph - 28);
+        }
+
+        return mouseX >= px && mouseX < px + pw
+            && mouseY >= renderY && mouseY < renderY + ph;
     }
 
     private void renderScrollableContent(GuiGraphics g, int mouseX, int mouseY, float partialTick, NeoTabConfigScreenLayout.Layout layout) {
@@ -1123,6 +1212,14 @@ public class NeoTabConfigScreen extends Screen {
                     int rowY = rowStartY + i * (borderItemH + borderItemGap);
                     boolean borderHov = mouseX >= layout.left() + CARD_PADDING && mouseX < layout.left() + CARD_PADDING + rowW
                                      && mouseY >= rowY && mouseY < rowY + borderItemH;
+                    // 如果颜色选择器可见且鼠标在其区域内，不显示悬浮效果（防止渲染穿透）
+                    if (borderHov && theme.embeddedColorPicker != null && theme.embeddedColorPicker.visible) {
+                        int cpx = theme.embeddedColorPicker.getX(), cpy = theme.embeddedColorPicker.getY();
+                        int cpw = theme.embeddedColorPicker.getWidth(), cph = theme.embeddedColorPicker.getHeight();
+                        if (mouseX >= cpx && mouseX < cpx + cpw && mouseY >= cpy && mouseY < cpy + cph) {
+                            borderHov = false;
+                        }
+                    }
                     // 白色行背景
                     AEStyleRenderer.drawOutline(g, layout.left() + CARD_PADDING, rowY, rowW, borderItemH, AEStyleRenderer.COLOR_PANEL_BORDER, 1);
                     g.fill(layout.left() + CARD_PADDING + 1, rowY + 1, layout.left() + CARD_PADDING + rowW - 1, rowY + borderItemH - 1,
@@ -1448,7 +1545,7 @@ public class NeoTabConfigScreen extends Screen {
         
         // 应用权限设置卡片
         int applySettingsCardY = layout.toScreenY(y);
-        int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + INPUT_HEIGHT + CARD_PADDING;
+        int applySettingsCardHeight = CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8 + TOGGLE_HEIGHT + 4 + INPUT_HEIGHT + CARD_PADDING;
         AEStyleRenderer.drawConfigModuleCard(g, layout.left(), applySettingsCardY, layout.contentWidth(), applySettingsCardHeight);
         
         g.drawString(this.font, Component.translatable("screen.neotab.permissions.apply_title"),
@@ -1457,6 +1554,16 @@ public class NeoTabConfigScreen extends Screen {
         drawScaledText(g, Component.translatable("screen.neotab.permissions.apply_subtitle"),
                 layout.left() + CARD_PADDING, applySettingsCardY + CARD_PADDING + titleLineHeight + 2,
                 AEStyleRenderer.COLOR_MODULE_SUBTITLE, 0.82f);
+
+        // 绘制覆盖个人策略标签（开关在文字左侧）
+        if (permissions.overridePersonalPolicyToggle != null && permissions.overridePersonalPolicyToggle.visible) {
+            Component label = Component.translatable("screen.neotab.permissions.override_personal");
+            int labelX = layout.left() + CARD_PADDING + TOGGLE_WIDTH + 4;  // 开关宽度26 + 间距4
+            int labelY = layout.toScreenY(y) + CARD_PADDING + titleLineHeight + 2 + subtitleLineHeight + 8
+                    + (TOGGLE_HEIGHT - this.font.lineHeight) / 2;  // 垂直居中
+            g.drawString(this.font, label, labelX, labelY, 0xFF000000, false); // 黑色文字
+        }
+
         // 两个应用按钮由widget系统绘制
         
         y += applySettingsCardHeight + 16;
@@ -1665,13 +1772,8 @@ public class NeoTabConfigScreen extends Screen {
         int toggleX = right - 6 - TOGGLE_WIDTH;
         int buttonWidth = Math.min(150, (contentWidth - 10) / 2);
         
-        // 计算面板高度（横向布局：宽度 > 高度）
-        // 先计算面板宽度
-        int tempPanelX = tabBarX - 2;
-        int tempPanelW = (right + 8 + SCROLL_TRACK_W + 4) - tempPanelX;
-        int maxPanelH = (int)(tempPanelW / 1.37);  // HTML比例 820:600 ≈ 1.37:1
         int availablePanelH = this.height - 8 - 8;  // 上下各留8px边距
-        int panelH = Math.min(maxPanelH, availablePanelH);
+        int panelH = Math.max(180, availablePanelH);
         
         int buttonY = 8 + panelH - 10 - INPUT_HEIGHT;  // 按钮位于面板底部
         int buttonBarTop = buttonY - 6;
@@ -1925,7 +2027,7 @@ public class NeoTabConfigScreen extends Screen {
         permY += permHintCardHeight + 16;
         
         // 应用权限设置卡片
-        int applySettingsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + INPUT_HEIGHT + CARD_PADDING;
+        int applySettingsCardHeight = CARD_PADDING + TITLE_LINE_HEIGHT + 2 + SUBTITLE_LINE_HEIGHT + 8 + TOGGLE_HEIGHT + 4 + INPUT_HEIGHT + CARD_PADDING;
         permY += applySettingsCardHeight + 16;
         
         // 保存按钮（已废弃）
@@ -2109,9 +2211,15 @@ public class NeoTabConfigScreen extends Screen {
                 pageConfig.footerMsptEnabled.getValue(),
                 pageConfig.footerOnlineEnabled.getValue(),
                 initialConfig.refreshIntervalTicks(),
-                permissions.buildGlobalPolicyFromToggles(initialConfig),
-                permissions.buildPlayerPoliciesFromToggles(initialConfig)
+                permissions.buildGlobalPolicyFromToggles(),
+                permissions.buildPlayerPoliciesFromToggles()
             ).sanitized();
+            com.poso.neotab.NeoTab.LOGGER.info("NeoTabConfigScreen ADMIN save: ping={}, duration={}, health={}, mode={}, theme={}",
+                config.betterPingEnabled(),
+                config.onlineDurationEnabled(),
+                config.healthDisplayEnabled(),
+                config.healthDisplayMode(),
+                config.tabTheme());
             PacketDistributor.sendToServer(new SaveConfigPayload(config));
         }
         onClose();
@@ -2143,4 +2251,3 @@ public class NeoTabConfigScreen extends Screen {
         return super.charTyped(codePoint, modifiers);
     }
 }
-
